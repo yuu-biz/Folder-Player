@@ -87,11 +87,16 @@ class SyncTagsUiTest : UiTestBase() {
         until(30_000, "replaced") { runCatching { FavoritesCodec.decode(fs.readText(syncPath)).items.size == 2 }.getOrDefault(false) }
         onUi { browser.clearMessage() }
 
-        // 4) Read-only account: remote not writable, local merge still happens.
+        // 4) Read-only account with a new local entry to upload: remote not writable, local list kept.
+        // (A sync with nothing new locally does not write at all, so it would not hit the read-only error.)
+        onUi { browser.toggleFavorite(MusicFile("Album-A", "/Music/fixture/Album-A", true, 0, 0, local)) }
+        until(5_000, "3 local favourites") { browser.uiState.value.favorites.size == 3 }
         val ro = SourceConfig(name = "dav-sync-ro", type = SourceType.WEBDAV, url = u, username = "bob", syncPath = syncPath).also { SourceRegistry.upsert(it, "bobpass") }
         SourceRegistry.remove(dav.id)
         onUi { browser.syncFavorites() }
         until(30_000, "read-only reported") { browser.uiState.value.message?.contains("read-only") == true }
+        assertEquals(3, browser.uiState.value.favorites.size)
+        assertEquals(2, FavoritesCodec.decode(SourceRegistry.fileSystem(ro.id).readText(syncPath)).items.size)
         SourceRegistry.remove(ro.id)
         // Clean the dedicated remote file with the writable account.
         SourceRegistry.upsert(dav, "pa:ss/1")
