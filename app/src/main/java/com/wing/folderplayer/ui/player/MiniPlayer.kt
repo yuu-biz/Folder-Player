@@ -21,14 +21,12 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.wing.folderplayer.R
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 
 /** Height of the mini player row (without the system navigation bar below it). */
 val MiniPlayerHeight = 66.dp
 
 /** What the mini player shows; the position is left out so it does not recompose every second while playing. */
-private data class MiniState(
+data class MiniPlayerState(
     val title: String,
     val artist: String,
     val coverUri: Any?,
@@ -38,7 +36,7 @@ private data class MiniState(
     val error: String?,
 )
 
-private fun PlayerUiState.mini() = MiniState(currentTitle, currentArtist, coverUri, coverFallback, isPlaying, isBuffering, playbackError)
+fun PlayerUiState.mini() = MiniPlayerState(currentTitle, currentArtist, coverUri, coverFallback, isPlaying, isBuffering, playbackError)
 
 /**
  * Bottom bar for the current track. Tapping it opens the full player; the buttons only control playback.
@@ -46,8 +44,7 @@ private fun PlayerUiState.mini() = MiniState(currentTitle, currentArtist, coverU
  */
 @Composable
 fun MiniPlayer(viewModel: PlayerViewModel, onOpen: () -> Unit, modifier: Modifier = Modifier) {
-    val state by remember(viewModel) { viewModel.uiState.map { it.mini() }.distinctUntilChanged() }
-        .collectAsState(viewModel.uiState.value.mini())
+    val state by viewModel.miniState.collectAsState()
 
     Surface(color = MaterialTheme.colorScheme.surfaceVariant, tonalElevation = 3.dp, modifier = modifier.fillMaxWidth()) {
         // The bar is the bottom-most element: its background runs under the navigation bar, its content stays above it
@@ -117,9 +114,7 @@ fun MiniPlayer(viewModel: PlayerViewModel, onOpen: () -> Unit, modifier: Modifie
 /** Thin progress line; only this part follows the playback position (and it only redraws). */
 @Composable
 private fun MiniProgress(viewModel: PlayerViewModel) {
-    val fraction by remember(viewModel) {
-        viewModel.uiState.map { if (it.duration > 1) (it.currentPosition.toFloat() / it.duration).coerceIn(0f, 1f) else 0f }.distinctUntilChanged()
-    }.collectAsState(0f)
+    val fraction by viewModel.progressFraction.collectAsState()
     val color = MaterialTheme.colorScheme.primary
     Box(Modifier.fillMaxWidth().height(2.dp).drawBehind { drawRect(color, size = Size(size.width * fraction, size.height)) })
 }

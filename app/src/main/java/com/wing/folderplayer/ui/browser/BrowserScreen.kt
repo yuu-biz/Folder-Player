@@ -197,7 +197,7 @@ fun BrowserScreen(
                                     Icon(if (uiState.viewMode == "GRID") Icons.Default.ViewList else Icons.Default.GridView,
                                         contentDescription = stringResource(R.string.browser_toggle_view))
                                 }
-                                IconButton(onClick = { viewModel.shufflePlay(onFolderPlay, onCustomPlay) }) {
+                                IconButton(onClick = { viewModel.shufflePlay(onFolderPlay, onCustomPlay) }, modifier = Modifier.testTag("btn_shuffle")) {
                                     Icon(Icons.Default.Shuffle, contentDescription = stringResource(R.string.browser_shuffle))
                                 }
                                 if (uiState.currentFolder != null) {

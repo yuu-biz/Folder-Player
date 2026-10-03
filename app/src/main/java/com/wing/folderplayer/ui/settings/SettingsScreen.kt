@@ -41,8 +41,6 @@ import com.wing.folderplayer.ui.theme.FontManager
 import com.wing.folderplayer.ui.theme.FontState
 import com.wing.folderplayer.utils.AppLocale
 import com.wing.folderplayer.utils.PermissionDiagnostics
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 @Composable
@@ -85,10 +83,8 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     // Only the two display choices: the full player state changes about once a second while playing, and collecting it
     // here would recompose the whole (non-lazy) settings column with it.
-    val coverDisplaySize by remember(playerViewModel) { playerViewModel.uiState.map { it.coverDisplaySize }.distinctUntilChanged() }
-        .collectAsState(playerViewModel.uiState.value.coverDisplaySize)
-    val backgroundStyle by remember(playerViewModel) { playerViewModel.uiState.map { it.backgroundStyle }.distinctUntilChanged() }
-        .collectAsState(playerViewModel.uiState.value.backgroundStyle)
+    val coverDisplaySize by playerViewModel.coverDisplaySize.collectAsState()
+    val backgroundStyle by playerViewModel.backgroundStyle.collectAsState()
     val browserState by browserViewModel.uiState.collectAsState()
     val lyricPrefs = remember { LyricPreferences(context) }
     val playbackPrefs = remember { PlaybackPreferences(context) }
