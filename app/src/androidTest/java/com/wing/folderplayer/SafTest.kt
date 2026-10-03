@@ -54,7 +54,9 @@ class SafTest : ServiceTestBase() {
 
     private fun toBrowser() {
         compose.waitForIdle()
-        // The browser is the start page (no page swipe any more); this suite works on its source list.
+        // The browser is the start page (no page swipe any more) and opens the last browsed folder; this suite works on
+        // the source list.
+        compose.runOnUiThread { androidx.lifecycle.ViewModelProvider(compose.activity)[com.wing.folderplayer.ui.browser.BrowserViewModel::class.java].exitSource() }
         compose.waitUntil(10_000) { exists("source_list") }
     }
 
