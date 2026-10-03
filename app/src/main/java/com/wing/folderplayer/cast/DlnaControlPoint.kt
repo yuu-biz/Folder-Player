@@ -111,14 +111,32 @@ class ControlPointConfiguration : DefaultUpnpServiceConfiguration(0, 0, false) {
 
 data class Renderer(val udn: String, val name: String, val model: String, val address: String)
 
+/** Discovery and AVTransport control as used by [CastController]; an interface so the session ordering can be tested on the JVM. */
+interface RendererControl {
+    var onChange: (() -> Unit)?
+    fun start()
+    fun search()
+    fun renderers(): List<Renderer>
+    fun setUri(udn: String, url: String, didl: String)
+    fun play(udn: String)
+    fun pause(udn: String)
+    fun stop(udn: String)
+    fun seek(udn: String, positionMs: Long)
+    /** CurrentTransportState (PLAYING / PAUSED_PLAYBACK / STOPPED / TRANSITIONING …) or null. */
+    fun transportState(udn: String): String?
+    /** Position and track duration in ms, -1 when not reported. */
+    fun progress(udn: String): Pair<Long, Long>
+    fun shutdown()
+}
+
 /**
  * DLNA/UPnP MediaRenderer discovery and AVTransport control on jUPnP. Pure JVM; the Android wrapper adds Wi-Fi
  * multicast/wake locks and the UI state.
  */
-class DlnaControlPoint {
+class DlnaControlPoint : RendererControl {
     private var service: UpnpService? = null
     private val renderers = java.util.concurrent.ConcurrentHashMap<String, RemoteDevice>()
-    @Volatile var onChange: (() -> Unit)? = null
+    @Volatile override var onChange: (() -> Unit)? = null
 
     private val listener = object : DefaultRegistryListener() {
         override fun remoteDeviceAdded(registry: Registry, device: RemoteDevice) {
@@ -133,7 +151,7 @@ class DlnaControlPoint {
     }
 
     @Synchronized
-    fun start() {
+    override fun start() {
         if (service != null) return
         val s = UpnpServiceImpl(ControlPointConfiguration())
         s.startup()
@@ -142,11 +160,11 @@ class DlnaControlPoint {
         search()
     }
 
-    fun search() {
+    override fun search() {
         service?.controlPoint?.search(UDADeviceTypeHeader(UDADeviceType("MediaRenderer", 1)))
     }
 
-    fun renderers(): List<Renderer> = renderers.values.map {
+    override fun renderers(): List<Renderer> = renderers.values.map {
         Renderer(it.identity.udn.identifierString, it.details.friendlyName ?: it.displayString,
             it.details.modelDetails?.modelName ?: "", it.identity.descriptorURL.host)
     }.sortedBy { it.name }
@@ -165,35 +183,35 @@ class DlnaControlPoint {
         f.completeExceptionally(IllegalStateException("UPnP action ${invocation?.action?.name}: $msg"))
     }
 
-    fun setUri(udn: String, url: String, didl: String) = run<Unit>({ f ->
+    override fun setUri(udn: String, url: String, didl: String) = run<Unit>({ f ->
         object : SetAVTransportURI(avt(udn), url, didl) {
             override fun success(invocation: ActionInvocation<*>?) { f.complete(Unit) }
             override fun failure(invocation: ActionInvocation<*>?, op: UpnpResponse?, msg: String?) = fail(f, invocation, msg)
         }
     })
 
-    fun play(udn: String) = run<Unit>({ f ->
+    override fun play(udn: String) = run<Unit>({ f ->
         object : Play(avt(udn)) {
             override fun success(invocation: ActionInvocation<*>?) { f.complete(Unit) }
             override fun failure(invocation: ActionInvocation<*>?, op: UpnpResponse?, msg: String?) = fail(f, invocation, msg)
         }
     })
 
-    fun pause(udn: String) = run<Unit>({ f ->
+    override fun pause(udn: String) = run<Unit>({ f ->
         object : Pause(avt(udn)) {
             override fun success(invocation: ActionInvocation<*>?) { f.complete(Unit) }
             override fun failure(invocation: ActionInvocation<*>?, op: UpnpResponse?, msg: String?) = fail(f, invocation, msg)
         }
     })
 
-    fun stop(udn: String) = run<Unit>({ f ->
+    override fun stop(udn: String) = run<Unit>({ f ->
         object : Stop(avt(udn)) {
             override fun success(invocation: ActionInvocation<*>?) { f.complete(Unit) }
             override fun failure(invocation: ActionInvocation<*>?, op: UpnpResponse?, msg: String?) = fail(f, invocation, msg)
         }
     })
 
-    fun seek(udn: String, positionMs: Long) = run<Unit>({ f ->
+    override fun seek(udn: String, positionMs: Long) = run<Unit>({ f ->
         object : Seek(avt(udn), formatTime(positionMs)) {
             override fun success(invocation: ActionInvocation<*>?) { f.complete(Unit) }
             override fun failure(invocation: ActionInvocation<*>?, op: UpnpResponse?, msg: String?) = fail(f, invocation, msg)
@@ -214,8 +232,13 @@ class DlnaControlPoint {
         }
     })
 
+    override fun transportState(udn: String): String? = transport(udn).currentTransportState?.value
+
+    override fun progress(udn: String): Pair<Long, Long> =
+        position(udn).let { parseTime(it.relTime) to parseTime(it.trackDuration) }
+
     @Synchronized
-    fun shutdown() {
+    override fun shutdown() {
         service?.shutdown()
         service = null
         renderers.clear()
