@@ -4,6 +4,7 @@ This is an unofficial personal fork of [Folder Player](https://github.com/wyvern
 public `main` (`069fd1b`, versionName 0.4). It installs next to the original app (`com.wing.folderplayer.fork`,
 label "Folder Player Fork") and adds the features below. Paths are relative to
 `app/src/main/java/com/wing/folderplayer/`. How everything was tested: [VERIFICATION.md](VERIFICATION.md).
+Releases (APK downloads): [RELEASE.md](RELEASE.md).
 
 | Area | Upstream (public main) | This fork | Tests |
 |---|---|---|---|
