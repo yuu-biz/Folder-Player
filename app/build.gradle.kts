@@ -33,8 +33,9 @@ android {
         applicationId = "com.wing.folderplayer.fork"
         minSdk = 26
         targetSdk = 34
-        versionCode = 501
-        versionName = "0.5.0-fork.1"
+        // CI passes the tag as version (-PfpVersionName=0.5.1 -PfpVersionCode=...); local builds use the defaults.
+        versionCode = (project.findProperty("fpVersionCode") as String?)?.toInt() ?: 501
+        versionName = (project.findProperty("fpVersionName") as String?) ?: "0.5.0-fork.1"
         resValue("string", "app_name", "Folder Player Fork")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -49,9 +50,12 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
+            // No R8 shrinking: SMBJ, jUPnP, Ktor and Gson rely on reflection/ServiceLoader, and the release must run
+            // exactly the code the tests ran.
+            isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("release")
+            // Signed only when keystore.properties exists (local file or written by CI from secrets).
+            signingConfig = if (keystoreProperties.isNotEmpty()) signingConfigs.getByName("release") else null
         }
     }
     compileOptions {
