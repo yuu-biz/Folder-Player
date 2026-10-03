@@ -99,9 +99,22 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 
 ### 5.3 Still to check on devices
 
-- The release workflow itself has not run yet (no tag pushed): build-tools 35.0.0 install on the runner, the
-  keystore secrets, and the draft (pre-release for `-rcN` tags). Check the first draft before publishing it.
-- The release APK on a real phone: install, and later an update over it signed with the same key.
+- The release APK on a real phone: install, and later an update over it signed with the same key. Builds handed
+  out before the release key existed (0.5.0-fork.1 debug-signed, versionCode 501; 0.5.1 test-key-signed, 50199)
+  cannot be updated in place: uninstall them once.
+
+### 5.4 First release candidate `v0.5.2-rc1` (tag at `771fd13`, docs-only after `bf18888`)
+
+Release workflow run 37152063226: every step passed (build-tools 35.0.0 on the runner, FFmpeg, `testDebugUnitTest
+lintDebug`, license notices, build and sign, verify APK). `FP_PUBLISH_RELEASES` is not set, so it stopped at a draft,
+marked as pre-release. Checked on the downloaded draft:
+
+| Check | Result |
+|---|---|
+| APK `FolderPlayerFork-0.5.2-rc1.apk` | versionCode 50201, versionName 0.5.2-rc1; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; APK signature v2; not debuggable; arm64-v8a + x86_64; `zipalign -c -P 16` and `check-16k.sh` PASS |
+| `SHA256SUMS.txt` | `523a0793…7d5d8e` matches the APK and the checksum in the notes |
+| `ffmpeg-7.1.5.tar.xz` | SHA-256 `de668509…5d558f`, the pinned official tarball |
+| Notes | no placeholders left; certificate digest, links to FEATURES / KNOWN_ISSUES / DEPENDENCIES at the tag |
 - Casting on a real network: discovery of a real renderer (emulators sit behind NAT) and switching / stopping while
   a renderer is slow; the ordering is covered by `CastSessionOrderTest` with a fake renderer only.
 - Japanese UI on a real phone with Japanese system language (emulators only so far), and how the longer Japanese
