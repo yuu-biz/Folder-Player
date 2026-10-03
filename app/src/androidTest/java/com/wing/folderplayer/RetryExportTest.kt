@@ -179,4 +179,49 @@ class RetryExportTest : ServiceTestBase() {
         assertTrue(exportedRows().keys.none { it.contains("045") })
         clearExports()
     }
+
+    /** A user file with the same name and size is not "our" export, is never overwritten, and two sources never collide. */
+    @Test fun sameNameFilesAreNeitherDuplicatesNorOverwritten() {
+        org.junit.Assume.assumeTrue(Fx.sdk >= 29)
+        Fx.require("smb_host", "webdav_url")
+        val smb = ids["smb"]!!; val dav = ids["dav"]!!
+        clearExports()
+        val srcPath = "/fixture/Many/Folder 048/track 048.flac"
+        val size = SourceRegistry.fileSystem(smb).stat(srcPath)!!.size
+        // The user already has an unrelated file at the destination: same name, same size, other content.
+        val r = Fx.ctx.contentResolver
+        val userUri = r.insert(MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), android.content.ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, "track 048.flac")
+            put(MediaStore.MediaColumns.MIME_TYPE, "audio/flac")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, "Music/FolderPlayer/Folder 048/")
+        })!!
+        val userBytes = ByteArray(size.toInt()) { 0x55 }
+        r.openOutputStream(userUri)!!.use { it.write(userBytes) }
+        Fx.log("pre-existing user file: ${exportedRows()}")
+
+        ExportSettings(Fx.ctx).enabled = true
+        main { vm.playFolder(SourceRef(smb, "/fixture/Many/Folder 048"), null) }
+        awaitExport("track 048.flac", ExportStatus.State.SAVED)
+        // The same path on another source is another track: saved separately, not a duplicate.
+        main { vm.playFolder(SourceRef(dav, "/fixture/Many/Folder 048"), null) }
+        waitFor(40_000, "WebDAV export") {
+            PlaybackExportManager.status.value?.let { it.ref.startsWith("fpsrc://$dav/") && it.state == ExportStatus.State.SAVED } == true
+        }
+        val rows = exportedRows().filterKeys { it.startsWith("Music/FolderPlayer/Folder 048/") }
+        Fx.log("rows after export: $rows")
+        assertEquals("user file + two exports", 3, rows.size)
+        val userNow = r.openInputStream(userUri)!!.use { it.readBytes() }
+        assertArrayEquals("user file untouched", userBytes, userNow)
+        val source = SourceRegistry.fileSystem(smb).readBytes(srcPath, 1 shl 24)
+        val ours = rows.filterKeys { !it.endsWith("/track 048.flac") }.values
+        assertEquals(2, ours.size)
+        for ((id, _) in ours) {
+            val bytes = r.openInputStream(ContentUris.withAppendedId(MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), id))!!.use { it.readBytes() }
+            assertArrayEquals("byte-exact export", source, bytes)
+        }
+        // Played again: now a real duplicate of the first export.
+        main { vm.playFolder(SourceRef(smb, "/fixture/Many/Folder 048"), null) }
+        awaitExport("track 048.flac", ExportStatus.State.SKIPPED_DUPLICATE)
+        clearExports()
+    }
 }
