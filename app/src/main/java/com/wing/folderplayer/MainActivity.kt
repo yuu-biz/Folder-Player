@@ -1,6 +1,7 @@
 package com.wing.folderplayer
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -9,16 +10,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.wing.folderplayer.ui.theme.FolderPlayerTheme
 
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.runtime.rememberCoroutineScope
-import com.wing.folderplayer.ui.player.MainPlayerScreen
+import com.wing.folderplayer.ui.AppRoot
 import com.wing.folderplayer.ui.player.PlayerViewModel
-import com.wing.folderplayer.ui.browser.BrowserScreen
+import com.wing.folderplayer.ui.browser.BrowserViewModel
 import com.wing.folderplayer.ui.settings.SettingsScreen
-import kotlinx.coroutines.launch
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.lifecycle.ViewModelProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -35,12 +31,22 @@ import androidx.compose.runtime.LaunchedEffect
 import com.wing.folderplayer.ui.theme.FontManager
 import com.wing.folderplayer.utils.AppLocale
 import com.wing.folderplayer.utils.PermissionDiagnostics
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        /** Notification tap: bring the app forward with the full player showing the current track. */
+        const val ACTION_OPEN_PLAYER = "com.wing.folderplayer.action.OPEN_PLAYER"
+    }
+
     /** Incremented whenever runtime permissions may have changed (grant dialog, return from settings). */
     private val permissionEpoch = MutableStateFlow(0)
+
+    /** Requests to show the full player, buffered until the UI collects them. */
+    private val openPlayerRequests = Channel<Unit>(Channel.CONFLATED)
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLocale.wrap(newBase))
@@ -73,7 +79,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    @OptIn(ExperimentalFoundationApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -98,6 +103,16 @@ class MainActivity : ComponentActivity() {
         }
         permissionLauncher.launch(PermissionDiagnostics.mediaPermissions())
 
+        // Activity-scoped (they survive recreation). The browser is the start page, so the player connects to the
+        // service here, before any UI exists; a song tapped right after a cold start waits for that connection.
+        // initializeController keeps only the application context and builds the controller once per ViewModel.
+        val playerViewModel = ViewModelProvider(this)[PlayerViewModel::class.java]
+        val browserViewModel = ViewModelProvider(this)[BrowserViewModel::class.java]
+        playerViewModel.initializeController(this)
+
+        // A recreated activity (language change, process restore) already handled the intent it was started with.
+        if (savedInstanceState == null) handleIntent(intent)
+
         val fonts = FontManager.get(this)
 
         setContent {
@@ -120,49 +135,16 @@ class MainActivity : ComponentActivity() {
 
             FolderPlayerTheme(fontFamily = fontFamily) {
                 Surface(modifier = Modifier.fillMaxSize(), color = androidx.compose.ui.graphics.Color.Black) {
-                    val playerViewModel: PlayerViewModel = viewModel()
-                    val browserViewModel: com.wing.folderplayer.ui.browser.BrowserViewModel = viewModel()
-                    val pagerState = rememberPagerState(pageCount = { 3 })
-                    val scope = rememberCoroutineScope()
-
-                    // Bridge State: Update browser's "playing" indicator when player state changes
-                    LaunchedEffect(playerViewModel.uiState) {
-                        playerViewModel.uiState.collect { state ->
-                            browserViewModel.updateCurrentlyPlaying(state.currentMediaId)
-                        }
-                    }
                     val epoch by permissionEpoch.collectAsState()
                     LaunchedEffect(epoch) { if (epoch > 0) browserViewModel.onPermissionsChanged() }
 
-                    HorizontalPager(state = pagerState) { page ->
-                        when (page) {
-                            0 -> MainPlayerScreen(
-                                viewModel = playerViewModel
-                            )
-                            1 -> BrowserScreen(
-                                viewModel = browserViewModel,
-                                onFolderPlay = { folder, startPath ->
-                                    playerViewModel.playFolder(folder, startPath)
-                                    scope.launch { pagerState.animateScrollToPage(0) }
-                                },
-                                onCustomPlay = { files, index ->
-                                    playerViewModel.playCustomList(files, index)
-                                    scope.launch { pagerState.animateScrollToPage(0) }
-                                },
-                                onCuePlay = { cue ->
-                                    playerViewModel.playCueSheet(cue)
-                                    scope.launch { pagerState.animateScrollToPage(0) }
-                                },
-                                allPlaylists = playerViewModel.uiState.collectAsState().value.allPlaylists,
-                                onAddToPlaylist = { targetListId, musicFiles ->
-                                    playerViewModel.addFilesToPlaylist(targetListId, musicFiles)
-                                },
-                                onBack = {
-                                    scope.launch { pagerState.animateScrollToPage(0) }
-                                }
-                            )
-                            2 -> SettingsScreen(
-                                onBack = { scope.launch { pagerState.animateScrollToPage(0) } },
+                    AppRoot(
+                        playerViewModel = playerViewModel,
+                        browserViewModel = browserViewModel,
+                        openPlayerRequests = remember { openPlayerRequests.receiveAsFlow() },
+                        settings = { onBack ->
+                            SettingsScreen(
+                                onBack = onBack,
                                 playerViewModel = playerViewModel,
                                 browserViewModel = browserViewModel,
                                 permissionEpoch = epoch,
@@ -174,11 +156,21 @@ class MainActivity : ComponentActivity() {
                                     recreate()
                                 },
                             )
-                        }
-                    }
+                        },
+                    )
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // singleTop: notification (and launcher) taps reach the running activity instead of stacking a second one.
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.action == ACTION_OPEN_PLAYER) openPlayerRequests.trySend(Unit)
     }
 
     private var lastPermissionReport: PermissionDiagnostics.Report? = null

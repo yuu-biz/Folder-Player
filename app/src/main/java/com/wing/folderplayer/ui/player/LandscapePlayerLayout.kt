@@ -53,7 +53,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 @Composable
 fun LandscapePlayerLayout(
     viewModel: PlayerViewModel,
-    uiState: PlayerUiState
+    uiState: PlayerUiState,
+    onCollapse: () -> Unit = {},
 ) {
     val configuration = LocalConfiguration.current
     val screenRatio = configuration.screenWidthDp.toFloat() / configuration.screenHeightDp.toFloat()
@@ -68,7 +69,8 @@ fun LandscapePlayerLayout(
     
     var showPlaylist by remember { mutableStateOf(false) }
     var showAlbumInfo by remember { mutableStateOf(false) }
-
+    // The playlist overlay is not a window: Back closes it before it folds the player.
+    androidx.activity.compose.BackHandler(enabled = showPlaylist) { showPlaylist = false }
 
     Surface(
         color = Color.Black,
@@ -162,6 +164,10 @@ fun LandscapePlayerLayout(
                 AlbumInfoDialog(uiState, viewModel) { showAlbumInfo = false }
             }
             Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) { CastAction(viewModel) }
+            CollapsePlayerButton(
+                onCollapse,
+                Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Left)).padding(4.dp)
+            )
         }
     }
 }

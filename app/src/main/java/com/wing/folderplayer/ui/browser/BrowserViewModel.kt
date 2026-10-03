@@ -99,6 +99,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private var loadJob: Job? = null
     private var searchJob: Job? = null
 
+    /** Last [BrowserUiState.scrollTrigger] the list has scrolled for (kept here: same lifetime as the counter). */
+    var handledScrollTrigger = 0
+
     // Directory Cache (Expires after 20 minutes), keyed by folder URI
     private val directoryCache = mutableMapOf<String, CacheEntry>()
     private val CACHE_EXPIRY_MS = 20 * 60 * 1000L
