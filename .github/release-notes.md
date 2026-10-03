@@ -6,6 +6,7 @@ with added features (SMB/FTP/SAF sources, local cover fix for Android 13+, and m
 - Android 8.0 or newer; native decoders for arm64-v8a and x86_64.
 - Signed with the fork's release key, certificate SHA-256 `{CERT_SHA256}`. Updates install only over builds signed
   with that certificate.
+- Known issues: [docs/fork/KNOWN_ISSUES.md]({REPO}/blob/{VERSION_TAG}/docs/fork/KNOWN_ISSUES.md).
 
 ## Licenses
 
