@@ -26,6 +26,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.AccessAlarm
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.ui.platform.testTag
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -66,28 +68,45 @@ import androidx.compose.ui.platform.LocalConfiguration
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainPlayerScreen(
-    viewModel: PlayerViewModel = viewModel()
+    viewModel: PlayerViewModel = viewModel(),
+    onCollapse: () -> Unit = {},
 ) {
+    // The controller is connected once by MainActivity; opening or closing this screen never touches it.
     val configuration = LocalConfiguration.current
-    if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-        val uiState by viewModel.uiState.collectAsState()
-        val context = LocalContext.current
-        LaunchedEffect(Unit) {
-            viewModel.initializeController(context)
+    Box(Modifier.fillMaxSize().testTag("player_full")) {
+        if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            val uiState by viewModel.uiState.collectAsState()
+            LandscapePlayerLayout(viewModel = viewModel, uiState = uiState, onCollapse = onCollapse)
+        } else {
+            PortraitPlayerLayout(viewModel, onCollapse)
         }
-        LandscapePlayerLayout(viewModel = viewModel, uiState = uiState)
-    } else {
-        PortraitPlayerLayout(viewModel)
+    }
+}
+
+/** Folds the full player back into the mini player (same as Back). */
+@Composable
+fun CollapsePlayerButton(onCollapse: () -> Unit, modifier: Modifier = Modifier) {
+    // Translucent disc: the button can sit on top of a large cover.
+    IconButton(
+        onClick = onCollapse,
+        modifier = modifier.background(Color.Black.copy(alpha = 0.25f), CircleShape).testTag("btn_collapse_player")
+    ) {
+        Icon(
+            Icons.Default.KeyboardArrowDown,
+            contentDescription = androidx.compose.ui.res.stringResource(R.string.player_collapse),
+            tint = Color.White,
+            modifier = Modifier.size(32.dp)
+        )
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PortraitPlayerLayout(
-    viewModel: PlayerViewModel
+    viewModel: PlayerViewModel,
+    onCollapse: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val context = LocalContext.current
     var showPlaylist by remember { mutableStateOf(false) }
     var lyricsExpanded by remember { mutableStateOf(false) }
     var showAlbumInfo by remember { mutableStateOf(false) }
@@ -120,11 +139,6 @@ private fun PortraitPlayerLayout(
         targetValue = if (lyricsExpanded) 8.dp else 24.dp,
         animationSpec = androidx.compose.animation.core.tween(durationMillis = 500)
     )
-
-    LaunchedEffect(Unit) {
-        viewModel.initializeController(context)
-    }
-
 
     Surface(
         color = Color.Black,
@@ -583,6 +597,7 @@ private fun PortraitPlayerLayout(
                     }
                 }
             }
+            CollapsePlayerButton(onCollapse, Modifier.align(Alignment.TopStart).statusBarsPadding().padding(4.dp))
         }
 
         // Playlist BottomSheet

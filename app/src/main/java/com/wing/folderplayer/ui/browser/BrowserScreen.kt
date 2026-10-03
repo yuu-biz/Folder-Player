@@ -57,7 +57,9 @@ fun BrowserScreen(
     onCuePlay: (SourceRef) -> Unit,
     allPlaylists: List<com.wing.folderplayer.data.playlist.Playlist> = emptyList(),
     onAddToPlaylist: (String, List<MusicFile>) -> Unit = { _, _ -> },
-    onBack: () -> Unit,
+    onOpenSettings: () -> Unit,
+    /** False while something in front of the browser (the full player) owns Back. */
+    backEnabled: Boolean = true,
     viewModel: BrowserViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -68,7 +70,6 @@ fun BrowserScreen(
     var editorType by remember { mutableStateOf<SourceType?>(null) }
     var sourceToEdit by remember { mutableStateOf<SourceConfig?>(null) }
     var showAddMenu by remember { mutableStateOf(false) }
-    var showOverflow by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
 
     val treePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
@@ -78,9 +79,9 @@ fun BrowserScreen(
         }
     }
 
-    // Back: folder up / close search instead of leaving the page
-    androidx.activity.compose.BackHandler(enabled = true) {
-        if (!uiState.isRoot || uiState.search.active) viewModel.navigateUp() else onBack()
+    // Back: close search / folder up / source root → source list. On the source list itself Back is left to the system.
+    androidx.activity.compose.BackHandler(enabled = backEnabled && (!uiState.isRoot || uiState.search.active)) {
+        viewModel.navigateUp()
     }
 
     if (editorType != null || sourceToEdit != null) {
@@ -138,6 +139,7 @@ fun BrowserScreen(
                             query = uiState.search.query,
                             onQuery = { viewModel.search(it) },
                             onClose = { viewModel.closeSearch() },
+                            onOpenSettings = onOpenSettings,
                         )
                     } else TopAppBar(
                         title = {
@@ -157,8 +159,11 @@ fun BrowserScreen(
                             )
                         },
                         navigationIcon = {
-                            IconButton(onClick = { if (!uiState.isRoot) viewModel.exitSource() else onBack() }) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.browser_back_to_sources))
+                            // Same as system Back. The source list is the top level: nothing to go back to there.
+                            if (!uiState.isRoot) {
+                                IconButton(onClick = { viewModel.navigateUp() }, modifier = Modifier.testTag("btn_browser_back")) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.browser_up))
+                                }
                             }
                         },
                         actions = {
@@ -178,12 +183,9 @@ fun BrowserScreen(
                                         )
                                     }
                                 }
-                                Box {
-                                    IconButton(onClick = { showOverflow = true }, modifier = Modifier.testTag("btn_overflow")) { Icon(Icons.Default.MoreVert, contentDescription = null) }
-                                    DropdownMenu(expanded = showOverflow, onDismissRequest = { showOverflow = false }) {
-                                        DropdownMenuItem(text = { Text(stringResource(R.string.browser_sync_favorites)) },
-                                            onClick = { showOverflow = false; viewModel.syncFavorites() })
-                                    }
+                                BrowserOverflow(onOpenSettings) { close ->
+                                    DropdownMenuItem(text = { Text(stringResource(R.string.browser_sync_favorites)) },
+                                        onClick = { close(); viewModel.syncFavorites() })
                                 }
                             } else {
                                 if (uiState.currentFolder != null) {
@@ -199,12 +201,17 @@ fun BrowserScreen(
                                     Icon(Icons.Default.Shuffle, contentDescription = stringResource(R.string.browser_shuffle))
                                 }
                                 if (uiState.currentFolder != null) {
-                                    IconButton(onClick = { viewModel.navigateUp() }) {
-                                        Icon(Icons.Default.ArrowUpward, contentDescription = stringResource(R.string.browser_up))
-                                    }
                                     IconButton(onClick = { viewModel.refresh() }, modifier = Modifier.testTag("btn_refresh")) {
                                         Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.browser_refresh))
                                     }
+                                }
+                                BrowserOverflow(onOpenSettings) { close ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.browser_back_to_sources)) },
+                                        leadingIcon = { Icon(Icons.Default.Home, contentDescription = null) },
+                                        onClick = { close(); viewModel.exitSource() },
+                                        modifier = Modifier.testTag("menu_sources")
+                                    )
                                 }
                             }
                         }
@@ -223,7 +230,10 @@ fun BrowserScreen(
                     }.collect { (i, o) -> viewModel.saveScrollPosition(i, o) }
                 }
                 LaunchedEffect(scrollTrigger) {
-                    if (scrollTrigger > 0) {
+                    // Only a new load scrolls. Coming back to the browser (from Settings) re-runs this effect, and the
+                    // restored list position must win over the position of the last load.
+                    if (scrollTrigger > viewModel.handledScrollTrigger) {
+                        viewModel.handledScrollTrigger = scrollTrigger
                         if (uiState.viewMode == "GRID") gridState.scrollToItem(uiState.scrollToIndex, uiState.scrollToOffset)
                         else listState.scrollToItem(uiState.scrollToIndex, uiState.scrollToOffset)
                     }
@@ -306,9 +316,29 @@ private fun gridColumns(density: Int): Int {
     return if (landscape) (density * 5 + 2) / 3 else density
 }
 
+/** ⋮ of every browser level: the level's own [items] first, Settings last. */
+@Composable
+private fun BrowserOverflow(onOpenSettings: () -> Unit, items: @Composable (close: () -> Unit) -> Unit = {}) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }, modifier = Modifier.testTag("btn_overflow")) {
+            Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.browser_more))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            items { open = false }
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.settings_title)) },
+                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                onClick = { open = false; onOpenSettings() },
+                modifier = Modifier.testTag("menu_settings")
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SearchBarRow(query: String, onQuery: (String) -> Unit, onClose: () -> Unit) {
+private fun SearchBarRow(query: String, onQuery: (String) -> Unit, onClose: () -> Unit, onOpenSettings: () -> Unit) {
     var text by remember { mutableStateOf(query) }
     TopAppBar(
         title = {
@@ -322,7 +352,8 @@ private fun SearchBarRow(query: String, onQuery: (String) -> Unit, onClose: () -
         },
         navigationIcon = {
             IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.common_close)) }
-        }
+        },
+        actions = { BrowserOverflow(onOpenSettings) }
     )
 }
 
