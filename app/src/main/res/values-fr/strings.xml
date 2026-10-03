@@ -27,6 +27,7 @@
     <string name="browser_search_hint">Rechercher dossiers et morceaux sous ce dossier</string>
     <string name="browser_search_truncated">limite de résultats atteinte</string>
     <string name="browser_toggle_view">Grille / liste</string>
+    <string name="browser_more">Plus d\'options</string>
     <string name="browser_shuffle">Lecture aléatoire</string>
     <string name="browser_up">Dossier parent</string>
     <string name="browser_refresh">Actualiser</string>
@@ -188,6 +189,10 @@
     <string name="player_lyrics_ai_regenerate">Régénérer les paroles IA</string>
     <string name="player_previous">Précédent</string>
     <string name="player_play_pause">Lecture / pause</string>
+    <string name="player_play">Lecture</string>
+    <string name="player_pause">Pause</string>
+    <string name="player_open">Ouvrir le lecteur</string>
+    <string name="player_collapse">Réduire le lecteur</string>
     <string name="player_next">Suivant</string>
     <string name="player_playlist_title">PLAYLIST</string>
     <string name="player_new_list">+ NOUVELLE LISTE</string>

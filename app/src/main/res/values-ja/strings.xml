@@ -27,6 +27,7 @@
     <string name="browser_search_hint">このフォルダ以下のフォルダと曲を検索</string>
     <string name="browser_search_truncated">結果の上限に達しました</string>
     <string name="browser_toggle_view">グリッド / リスト</string>
+    <string name="browser_more">その他のオプション</string>
     <string name="browser_shuffle">シャッフル再生</string>
     <string name="browser_up">1つ上の階層へ</string>
     <string name="browser_refresh">更新</string>
@@ -188,6 +189,10 @@
     <string name="player_lyrics_ai_regenerate">AI 歌詞を再生成</string>
     <string name="player_previous">前へ</string>
     <string name="player_play_pause">再生 / 一時停止</string>
+    <string name="player_play">再生</string>
+    <string name="player_pause">一時停止</string>
+    <string name="player_open">プレーヤーを開く</string>
+    <string name="player_collapse">プレーヤーを最小化</string>
     <string name="player_next">次へ</string>
     <string name="player_playlist_title">プレイリスト</string>
     <string name="player_new_list">+ 新しいリスト</string>

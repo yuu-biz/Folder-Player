@@ -27,6 +27,7 @@
     <string name="browser_search_hint">搜尋此資料夾下的資料夾與歌曲</string>
     <string name="browser_search_truncated">已達結果上限</string>
     <string name="browser_toggle_view">格狀 / 清單</string>
+    <string name="browser_more">更多選項</string>
     <string name="browser_shuffle">隨機播放</string>
     <string name="browser_up">上一層</string>
     <string name="browser_refresh">重新整理</string>
@@ -188,6 +189,10 @@
     <string name="player_lyrics_ai_regenerate">重新產生 AI 歌詞</string>
     <string name="player_previous">上一首</string>
     <string name="player_play_pause">播放 / 暫停</string>
+    <string name="player_play">播放</string>
+    <string name="player_pause">暫停</string>
+    <string name="player_open">開啟播放器</string>
+    <string name="player_collapse">收合播放器</string>
     <string name="player_next">下一首</string>
     <string name="player_playlist_title">播放清單</string>
     <string name="player_new_list">+ 新增清單</string>

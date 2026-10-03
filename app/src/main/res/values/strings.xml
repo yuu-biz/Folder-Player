@@ -33,6 +33,7 @@
     <string name="browser_search_hint">Search folders and songs below this folder</string>
     <string name="browser_search_truncated">result limit reached</string>
     <string name="browser_toggle_view">Grid / list</string>
+    <string name="browser_more">More options</string>
     <string name="browser_shuffle">Shuffle play</string>
     <string name="browser_up">Up one level</string>
     <string name="browser_refresh">Refresh</string>
@@ -199,6 +200,10 @@
     <string name="player_lyrics_ai_regenerate">Regenerate AI lyrics</string>
     <string name="player_previous">Previous</string>
     <string name="player_play_pause">Play / pause</string>
+    <string name="player_play">Play</string>
+    <string name="player_pause">Pause</string>
+    <string name="player_open">Open player</string>
+    <string name="player_collapse">Minimize player</string>
     <string name="player_next">Next</string>
     <string name="player_playlist_title">PLAYLIST</string>
     <string name="player_new_list">+ NEW LIST</string>

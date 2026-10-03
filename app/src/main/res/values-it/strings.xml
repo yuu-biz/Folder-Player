@@ -27,6 +27,7 @@
     <string name="browser_search_hint">Cerca cartelle e brani in questa cartella</string>
     <string name="browser_search_truncated">limite di risultati raggiunto</string>
     <string name="browser_toggle_view">Griglia / elenco</string>
+    <string name="browser_more">Altre opzioni</string>
     <string name="browser_shuffle">Riproduzione casuale</string>
     <string name="browser_up">Livello superiore</string>
     <string name="browser_refresh">Aggiorna</string>
@@ -188,6 +189,10 @@
     <string name="player_lyrics_ai_regenerate">Rigenera testo IA</string>
     <string name="player_previous">Precedente</string>
     <string name="player_play_pause">Riproduci / pausa</string>
+    <string name="player_play">Riproduci</string>
+    <string name="player_pause">Pausa</string>
+    <string name="player_open">Apri il lettore</string>
+    <string name="player_collapse">Riduci il lettore</string>
     <string name="player_next">Successivo</string>
     <string name="player_playlist_title">PLAYLIST</string>
     <string name="player_new_list">+ NUOVA LISTA</string>
