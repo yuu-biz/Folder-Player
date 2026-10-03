@@ -99,9 +99,19 @@ class CastController private constructor(private val context: Context) {
                 _state.value = _state.value.copy(lastCommand = "Play")
                 startPolling(renderer)
             } catch (e: Exception) {
+                // A half-started session must not keep the relay, its tokens or the locks alive.
+                endSession(renderer.udn.takeIf { _state.value.active?.udn == it })
                 _state.value = _state.value.copy(error = e.message ?: e.javaClass.simpleName)
             }
         }
+    }
+
+    private fun endSession(stopUdn: String?) {
+        poll?.cancel()
+        try { if (stopUdn != null) cp.stop(stopUdn) } catch (_: Exception) {}
+        relay.stop()
+        releaseSessionLocks()
+        _state.value = _state.value.copy(active = null, rendererState = null, positionMs = -1, durationMs = -1, progressAvailable = false)
     }
 
     private fun command(name: String, block: (String) -> Unit) {
@@ -125,10 +135,8 @@ class CastController private constructor(private val context: Context) {
         val r = _state.value.active
         poll?.cancel()
         scope.launch {
-            try { if (r != null) cp.stop(r.udn) } catch (_: Exception) {}
-            relay.stop()
-            releaseSessionLocks()
-            _state.value = _state.value.copy(active = null, rendererState = null, lastCommand = "Stop", positionMs = -1, durationMs = -1, progressAvailable = false)
+            endSession(r?.udn)
+            _state.value = _state.value.copy(lastCommand = "Stop")
         }
     }
 
