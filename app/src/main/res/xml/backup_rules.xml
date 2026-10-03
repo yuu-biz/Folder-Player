@@ -2,4 +2,6 @@
 <full-backup-content>
     <include domain="sharedpref" path="."/>
     <include domain="database" path="."/>
+    <!-- Keystore-encrypted secrets cannot be restored on another device; never back them up. -->
+    <exclude domain="sharedpref" path="fp_credentials.xml"/>
 </full-backup-content>

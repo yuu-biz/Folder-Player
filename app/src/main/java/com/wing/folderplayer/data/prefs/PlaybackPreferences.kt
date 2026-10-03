@@ -1,7 +1,10 @@
 package com.wing.folderplayer.data.prefs
 
+import androidx.core.content.edit
+
 import android.content.Context
-import com.wing.folderplayer.ui.browser.SourceConfig
+import com.wing.folderplayer.data.source.SourceRef
+import com.wing.folderplayer.data.source.SourceUris
 import com.wing.folderplayer.utils.LyricLine
 import com.google.gson.Gson
 
@@ -29,31 +32,29 @@ data class CachedMetadata(
     }
 }
 
+/**
+ * Playback state restored after restart. The folder and media id are `fpsrc://` refs; no source config (and so no
+ * credential) is stored here any more.
+ */
 class PlaybackPreferences(context: Context) {
     private val prefs = context.getSharedPreferences("playback_prefs", Context.MODE_PRIVATE)
     private val gson = Gson()
 
-    fun savePlaybackState(source: SourceConfig?, folderPath: String?, mediaId: String?, position: Long) {
+    fun savePlaybackState(folder: SourceRef?, mediaId: String?, position: Long) {
         prefs.edit().apply {
-            putString("source_config", gson.toJson(source))
-            putString("folder_path", folderPath)
+            if (folder != null) putString("folder_ref", folder.toUriString()) else remove("folder_ref")
             putString("last_media_id", mediaId)
             putLong("last_position", position)
             apply()
         }
     }
 
-    fun getLastSourceConfig(): SourceConfig? {
-        val json = prefs.getString("source_config", null) ?: return null
-        return try { gson.fromJson(json, SourceConfig::class.java) } catch (e: Exception) { null }
-    }
-
-    fun getLastFolderPath(): String? = prefs.getString("folder_path", null)
+    fun getLastFolder(): SourceRef? = SourceUris.parse(prefs.getString("folder_ref", null))
     fun getLastMediaId(): String? = prefs.getString("last_media_id", null)
     fun getLastPosition(): Long = prefs.getLong("last_position", 0L)
 
     fun saveCachedMetadata(metadata: CachedMetadata) {
-        prefs.edit().putString("cached_metadata", gson.toJson(metadata)).apply()
+        prefs.edit { putString("cached_metadata", gson.toJson(metadata)) }
     }
 
     fun getCachedMetadata(): CachedMetadata? {
@@ -63,24 +64,32 @@ class PlaybackPreferences(context: Context) {
 
     fun getCoverDisplaySize(): String = prefs.getString("cover_display_size", "STANDARD") ?: "STANDARD"
     fun saveCoverDisplaySize(size: String) {
-        prefs.edit().putString("cover_display_size", size).apply()
+        prefs.edit { putString("cover_display_size", size) }
     }
 
     fun getAutoNextFolder(): Boolean = prefs.getBoolean("auto_next_folder", false)
     fun saveAutoNextFolder(enabled: Boolean) {
-        prefs.edit().putBoolean("auto_next_folder", enabled).apply()
+        prefs.edit { putBoolean("auto_next_folder", enabled) }
     }
 
     fun savePosition(position: Long) {
-        prefs.edit().putLong("last_position", position).apply()
+        prefs.edit { putLong("last_position", position) }
     }
 
     fun getActivePlaylistId(): String = prefs.getString("active_playlist_id", "default") ?: "default"
     fun saveActivePlaylistId(id: String) {
-        prefs.edit().putString("active_playlist_id", id).apply()
+        prefs.edit { putString("active_playlist_id", id) }
     }
 
+    /** "FILENAME" (public-main behaviour) or "TAGS". */
+    fun getTitleMode(): String = prefs.getString("title_mode", "FILENAME") ?: "FILENAME"
+    fun saveTitleMode(mode: String) = prefs.edit { putString("title_mode", mode) }
+
+    /** Player background: "GRADIENT" (public-main look, default), "BLUR" (blurred cover) or "BLACK". */
+    fun getBackgroundStyle(): String = prefs.getString("background_style", "GRADIENT") ?: "GRADIENT"
+    fun saveBackgroundStyle(style: String) = prefs.edit { putString("background_style", style) }
+
     fun clearAll() {
-        prefs.edit().clear().apply()
+        prefs.edit { clear() }
     }
 }

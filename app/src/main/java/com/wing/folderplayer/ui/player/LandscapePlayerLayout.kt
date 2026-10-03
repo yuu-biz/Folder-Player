@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.wing.folderplayer.data.source.WebDavAuthManager
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -70,13 +69,6 @@ fun LandscapePlayerLayout(
     var showPlaylist by remember { mutableStateOf(false) }
     var showAlbumInfo by remember { mutableStateOf(false) }
 
-    // Dynamic background
-    val brush = Brush.verticalGradient(
-        colors = listOf(
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f),
-            Color(0xFF0F0F0F)
-        )
-    )
 
     Surface(
         color = Color.Black,
@@ -85,8 +77,8 @@ fun LandscapePlayerLayout(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(brush)
         ) {
+            PlayerBackground(uiState)
             Row(
                 modifier = Modifier
                     .fillMaxSize()
@@ -127,7 +119,8 @@ fun LandscapePlayerLayout(
                         .padding(top = 16.dp, bottom = 16.dp, end = 24.dp)
                 ) {
                     LandscapeLyricsPanel(
-                        uiState = uiState
+                        uiState = uiState,
+                        viewModel = viewModel,
                     )
                 }
             }
@@ -165,90 +158,10 @@ fun LandscapePlayerLayout(
                 }
             }
             
-             // Album Info Overlay (Right Side)
-            AnimatedVisibility(
-                visible = showAlbumInfo,
-                enter = slideInVertically(initialOffsetY = { it / 2 }),
-                exit = slideOutVertically(targetOffsetY = { it }),
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .fillMaxWidth(1f - leftPanelWeight)
-                    .fillMaxHeight()
-                    .padding(16.dp)
-            ) {
-                 var showArtistDetail by remember { mutableStateOf(false) }
-                 
-                 Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = Color(0xFF1A1A1A).copy(alpha = 0.95f),
-                    shape = RoundedCornerShape(16.dp),
-                    shadowElevation = 8.dp
-                ) {
-                     Column(modifier = Modifier.padding(24.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.MusicNote, 
-                                contentDescription = null, 
-                                tint = MaterialTheme.colorScheme.primary, 
-                                modifier = Modifier.padding(end = 8.dp)
-                            )
-                            Text(
-                                if (showArtistDetail) "Artist Discovery" else "Album Discovery", 
-                                style = MaterialTheme.typography.titleLarge, 
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        
-                        Text(
-                            text = if (showArtistDetail) uiState.currentArtist else uiState.currentFolderName,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha=0.8f),
-                            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-                        )
-                        
-                        if (uiState.isFetchingAlbumInfo) {
-                            Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                            }
-                        } else {
-                            LazyColumn(modifier = Modifier.weight(1f)) {
-                                item {
-                                    val displayInfo = if (showArtistDetail) uiState.artistInfo else uiState.albumInfo
-                                    Text(
-                                        displayInfo ?: "No information available.",
-                                        color = Color.White.copy(alpha = 0.9f),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        lineHeight = 24.sp
-                                    )
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            if (!showArtistDetail && !uiState.artistInfo.isNullOrBlank() && !uiState.isFetchingAlbumInfo) {
-                                TextButton(onClick = { showArtistDetail = true }) {
-                                    Text("Learn about Artist")
-                                }
-                            }
-                            if (showArtistDetail) {
-                                TextButton(onClick = { showArtistDetail = false }) {
-                                    Text("Back to Album")
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(
-                                onClick = { 
-                                    showAlbumInfo = false 
-                                    showArtistDetail = false
-                                }
-                            ) {
-                                Text("Close")
-                            }
-                        }
-                    }
-                }
+            if (showAlbumInfo) {
+                AlbumInfoDialog(uiState, viewModel) { showAlbumInfo = false }
             }
+            Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) { CastAction(viewModel) }
         }
     }
 }
@@ -279,30 +192,7 @@ fun LandscapeLeftControlPanel(
                 shape = RoundedCornerShape(12.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
             ) {
-                if (uiState.coverUri != null) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(uiState.coverUri)
-                            .apply {
-                                val auth = WebDavAuthManager.authHeader
-                                if (auth != null && uiState.coverUri.toString().startsWith("http")) {
-                                    addHeader("Authorization", auth)
-                                }
-                            }
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = "Album Cover",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier.fillMaxSize().background(Color(0xFF333333)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.MusicNote, null, modifier = Modifier.size(80.dp), tint = Color.White.copy(alpha = 0.2f))
-                    }
-                }
+                CoverImage(uiState, Modifier.fillMaxSize())
             }
         }
         
@@ -311,7 +201,7 @@ fun LandscapeLeftControlPanel(
         // 2. Info - Compact
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
              TextCompressed(
-                text = uiState.currentTitle,
+                text = displayTitle(uiState.currentTitle),
                 style = MaterialTheme.typography.titleLarge,
                 color = Color.White,
                 fontWeight = FontWeight.Bold
@@ -458,8 +348,11 @@ fun LandscapeLeftControlPanel(
 
 @Composable
 fun LandscapeLyricsPanel(
-    uiState: PlayerUiState
+    uiState: PlayerUiState,
+    viewModel: PlayerViewModel,
 ) {
+    Column(Modifier.fillMaxSize()) {
+    Box(Modifier.weight(1f)) {
     if (uiState.lyrics.isNotEmpty()) {
         val listState = rememberLazyListState()
         
@@ -479,7 +372,7 @@ fun LandscapeLyricsPanel(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                contentPadding = PaddingValues(vertical = viewHeight / 2 - 20.dp)
+                contentPadding = PaddingValues(vertical = (viewHeight / 2 - 20.dp).coerceAtLeast(0.dp))
             ) {
                 itemsIndexed(uiState.lyrics) { index, lyric ->
                     val isCurrentLine = index == uiState.currentLyricIndex
@@ -497,12 +390,13 @@ fun LandscapeLyricsPanel(
                         label = "height"
                     )
 
-                    Box(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .defaultMinSize(minHeight = minLineHeight)
                             .wrapContentHeight(),
-                        contentAlignment = Alignment.Center
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
                         Text(
                             text = lyric.text,
@@ -519,14 +413,21 @@ fun LandscapeLyricsPanel(
                                     scaleY = scale
                                 }
                         )
+                        uiState.translationFor(index)?.let { tr ->
+                            Text(tr, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = colorAlpha * 0.8f),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(horizontal = 16.dp))
+                        }
                     }
                 }
             }
         }
     } else {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No lyrics available", color = Color.White.copy(alpha = 0.3f))
+            Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_no_lyrics), color = Color.White.copy(alpha = 0.3f))
         }
+    }
+    }
+    LyricsFooter(uiState) { regen -> viewModel.requestAiLyrics(regen) }
     }
 }
 

@@ -125,13 +125,6 @@ private fun PortraitPlayerLayout(
         viewModel.initializeController(context)
     }
 
-    // Dynamic background based on cover (Enhanced Gradient)
-    val brush = Brush.verticalGradient(
-        colors = listOf(
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f),
-            Color(0xFF0F0F0F)
-        )
-    )
 
     Surface(
         color = Color.Black,
@@ -140,7 +133,6 @@ private fun PortraitPlayerLayout(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(brush)
                 .pointerInput(Unit) {
                     detectVerticalDragGestures { _, dragAmount ->
                         // Detect upward swipe with a threshold
@@ -150,6 +142,8 @@ private fun PortraitPlayerLayout(
                     }
                 }
         ) {
+            PlayerBackground(uiState)
+            Box(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(4.dp)) { CastAction(viewModel) }
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -228,41 +222,7 @@ private fun PortraitPlayerLayout(
                         elevation = CardDefaults.cardElevation(defaultElevation = animatedElevation),
                         border = if (animatedBorderAlpha > 0.01f) androidx.compose.foundation.BorderStroke(2.dp, Color.White.copy(alpha = animatedBorderAlpha)) else null
                     ) {
-                        if (uiState.coverUri != null) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(context)
-                                    .data(uiState.coverUri)
-                                    .apply {
-                                        val auth = com.wing.folderplayer.data.source.WebDavAuthManager.authHeader
-                                        if (auth != null && uiState.coverUri.toString().startsWith("http")) {
-                                            addHeader("Authorization", auth)
-                                        }
-                                    }
-                                    .crossfade(true)
-                                    .build(),
-                                contentDescription = "Album Cover",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        Brush.linearGradient(
-                                            listOf(Color(0xFF333333), Color(0xFF111111))
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.MusicNote,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(80.dp),
-                                    tint = Color.White.copy(alpha = 0.2f)
-                                )
-                            }
-                        }
+                        CoverImage(uiState, Modifier.fillMaxSize())
                     }
                 }
 
@@ -280,7 +240,7 @@ private fun PortraitPlayerLayout(
                         modifier = Modifier.padding(bottom = 0.dp)
                     ) {
                         TextCompressed(
-                            text = uiState.currentTitle,
+                            text = displayTitle(uiState.currentTitle),
                             style = if (lyricsExpanded) MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineMedium,
                             color = Color.White,
                             fontWeight = FontWeight.ExtraBold,
@@ -346,7 +306,7 @@ private fun PortraitPlayerLayout(
                                 state = listState,
                                 modifier = Modifier.fillMaxSize(),
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                contentPadding = PaddingValues(vertical = (viewHeight / 2 - 16.dp)) 
+                                contentPadding = PaddingValues(vertical = (viewHeight / 2 - 16.dp).coerceAtLeast(0.dp)) 
                             ) {
                                 itemsIndexed(uiState.lyrics) { index, lyric ->
                                     val isCurrentLine = index == uiState.currentLyricIndex
@@ -371,12 +331,13 @@ private fun PortraitPlayerLayout(
                                         label = "lineHeight"
                                     )
 
-                                    Box(
+                                    Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .defaultMinSize(minHeight = minLineHeight)
                                             .wrapContentHeight(),  // Allow height to grow naturally
-                                        contentAlignment = Alignment.Center
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
                                     ) {
                                         Text(
                                             text = lyric.text,
@@ -393,13 +354,22 @@ private fun PortraitPlayerLayout(
                                                     scaleY = scale
                                                 }
                                         )
+                                        uiState.translationFor(index)?.let { tr ->
+                                            Text(
+                                                text = tr,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color.White.copy(alpha = colorAlpha * 0.8f),
+                                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                                modifier = Modifier.padding(horizontal = 16.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
                         } else {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Text(
-                                    "No lyrics available", 
+                                    androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_no_lyrics),
                                     color = Color.White.copy(alpha = 0.3f),
                                     style = MaterialTheme.typography.bodyMedium
                                 )
@@ -408,7 +378,9 @@ private fun PortraitPlayerLayout(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                if (!lyricsExpanded) LyricsFooter(uiState) { regen -> viewModel.requestAiLyrics(regen) }
+                PlaybackErrorBanner(uiState)
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Progress Bar
                 Column(
@@ -578,7 +550,7 @@ private fun PortraitPlayerLayout(
                     IconButton(onClick = { viewModel.previous() }, modifier = Modifier.size(56.dp)) {
                         Icon(
                             imageVector = Icons.Default.SkipPrevious,
-                            contentDescription = "Previous",
+                            contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_previous),
                             tint = Color.White,
                             modifier = Modifier.size(36.dp)
                         )
@@ -594,7 +566,7 @@ private fun PortraitPlayerLayout(
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = if (uiState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = "Play/Pause",
+                                contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_play_pause),
                                 tint = Color.Black,
                                 modifier = Modifier.size(44.dp)
                             )
@@ -604,7 +576,7 @@ private fun PortraitPlayerLayout(
                     IconButton(onClick = { viewModel.next() }, modifier = Modifier.size(56.dp)) {
                         Icon(
                             imageVector = Icons.Default.SkipNext,
-                            contentDescription = "Next",
+                            contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_next),
                             tint = Color.White,
                             modifier = Modifier.size(36.dp)
                         )
@@ -622,7 +594,7 @@ private fun PortraitPlayerLayout(
             ) {
                 Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp).fillMaxHeight(0.6f)) {
                     Text(
-                        "PLAYLIST",
+                        androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_playlist_title),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Black,
                         color = Color.White,
@@ -698,7 +670,7 @@ private fun PortraitPlayerLayout(
                                 if (uiState.allPlaylists.size < 11) {
                                     Divider(color = Color.White.copy(alpha = 0.1f))
                                     DropdownMenuItem(
-                                        text = { Text("+ NEW LIST", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge) },
+                                        text = { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_new_list), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge) },
                                         onClick = {
                                             showCreateDialog = true
                                             expanded = false
@@ -712,12 +684,12 @@ private fun PortraitPlayerLayout(
                         if (showCreateDialog) {
                             AlertDialog(
                                 onDismissRequest = { showCreateDialog = false },
-                                title = { Text("Create Playlist") },
+                                title = { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_create_playlist)) },
                                 text = {
                                     OutlinedTextField(
                                         value = createName,
                                         onValueChange = { createName = it },
-                                        label = { Text("Name") },
+                                        label = { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_playlist_name)) },
                                         singleLine = true
                                     )
                                 },
@@ -728,21 +700,21 @@ private fun PortraitPlayerLayout(
                                             createName = ""
                                             showCreateDialog = false
                                         }
-                                    }) { Text("Create") }
+                                    }) { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_create)) }
                                 },
-                                dismissButton = { TextButton(onClick = { showCreateDialog = false }) { Text("Cancel") } }
+                                dismissButton = { TextButton(onClick = { showCreateDialog = false }) { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.common_cancel)) } }
                             )
                         }
 
                         if (playlistToRename != null) {
                             AlertDialog(
                                 onDismissRequest = { playlistToRename = null },
-                                title = { Text("Rename Playlist") },
+                                title = { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_rename_playlist)) },
                                 text = {
                                     OutlinedTextField(
                                         value = renameName,
                                         onValueChange = { renameName = it },
-                                        label = { Text("New Name") },
+                                        label = { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_new_name)) },
                                         singleLine = true
                                     )
                                 },
@@ -752,9 +724,9 @@ private fun PortraitPlayerLayout(
                                             viewModel.renamePlaylist(playlistToRename!!, renameName)
                                             playlistToRename = null
                                         }
-                                    }) { Text("Rename") }
+                                    }) { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_rename)) }
                                 },
-                                dismissButton = { TextButton(onClick = { playlistToRename = null }) { Text("Cancel") } }
+                                dismissButton = { TextButton(onClick = { playlistToRename = null }) { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.common_cancel)) } }
                             )
                         }
                         
@@ -762,7 +734,7 @@ private fun PortraitPlayerLayout(
                             IconButton(onClick = { showTimerDialog = true }) {
                                 Icon(
                                     imageVector = Icons.Default.AccessAlarm,
-                                    contentDescription = "Sleep Timer",
+                                    contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_sleep_timer),
                                     tint = if (uiState.sleepTimerActive) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -770,7 +742,7 @@ private fun PortraitPlayerLayout(
                             IconButton(onClick = { viewModel.toggleAutoNextFolder() }) {
                                 Icon(
                                     imageVector = Icons.Default.AllInclusive,
-                                    contentDescription = "Sequential Folder Playback",
+                                    contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_next_folder),
                                     tint = if (uiState.autoNextFolder) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -778,7 +750,7 @@ private fun PortraitPlayerLayout(
                             IconButton(onClick = { viewModel.toggleShuffle() }) {
                                 Icon(
                                     imageVector = Icons.Default.Shuffle,
-                                    contentDescription = "Shuffle",
+                                    contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_shuffle),
                                     tint = if (uiState.shuffleModeEnabled) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -789,7 +761,7 @@ private fun PortraitPlayerLayout(
                                         Player.REPEAT_MODE_ONE -> Icons.Default.RepeatOne
                                         else -> Icons.Default.Repeat
                                     },
-                                    contentDescription = "Repeat",
+                                    contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_repeat),
                                     tint = if (uiState.repeatMode != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -803,7 +775,7 @@ private fun PortraitPlayerLayout(
                         verticalArrangement = Arrangement.spacedBy(12.dp) // Increased spacing
                     ) {
                         itemsIndexed(uiState.activePlaylistItems, key = { index, item -> "${uiState.activePlaylistId}_${item.path}_$index" }) { index, item ->
-                            val isCurrent = uiState.currentMediaId == item.path
+                            val isCurrent = item.matchesMediaId(uiState.currentMediaId)
                             val title = item.title
                             val artist = item.artist ?: ""
 
@@ -895,78 +867,9 @@ private fun PortraitPlayerLayout(
         }
     }
 
-    // Gemini Album Info Dialog
+    // Album / artist information (NFO or AI)
     if (showAlbumInfo) {
-        var showArtistDetail by remember { mutableStateOf(false) }
-        
-        AlertDialog(
-            onDismissRequest = { 
-                showAlbumInfo = false
-                showArtistDetail = false
-            },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        if (showArtistDetail) Icons.Default.MusicNote else Icons.Default.MusicNote, 
-                        contentDescription = null, 
-                        tint = MaterialTheme.colorScheme.primary, 
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                    Text(
-                        if (showArtistDetail) "Artist Discovery" else "Album Discovery", 
-                        style = MaterialTheme.typography.headlineSmall, 
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            },
-            text = {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = if (showArtistDetail) uiState.currentArtist else uiState.currentFolderName,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                    
-                    if (uiState.isFetchingAlbumInfo) {
-                        Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(modifier = Modifier.size(32.dp))
-                        }
-                    } else {
-                        val displayInfo = if (showArtistDetail) uiState.artistInfo else uiState.albumInfo
-                        
-                        Text(
-                            text = displayInfo ?: "No information available.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            lineHeight = 22.sp
-                        )
-                    }
-                }
-            },
-            dismissButton = null,
-            confirmButton = {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    if (!showArtistDetail && !uiState.artistInfo.isNullOrBlank() && !uiState.isFetchingAlbumInfo) {
-                        TextButton(onClick = { showArtistDetail = true }) {
-                            Text("Learn about Artist")
-                        }
-                    } else {
-                        // Spacer to keep Close button at the end if the left button is missing
-                        Spacer(modifier = Modifier.width(1.dp))
-                    }
-                    
-                    TextButton(onClick = { 
-                        showAlbumInfo = false
-                        showArtistDetail = false
-                    }) {
-                        Text("Close")
-                    }
-                }
-            },
-            containerColor = Color(0xFF1E1E1E),
-            textContentColor = Color.White,
-            titleContentColor = Color.White
-        )
+        AlbumInfoDialog(uiState, viewModel) { showAlbumInfo = false }
     }
 }
 

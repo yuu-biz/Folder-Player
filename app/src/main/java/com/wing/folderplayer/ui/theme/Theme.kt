@@ -24,6 +24,7 @@ private val DarkColorScheme = darkColorScheme(
 @Composable
 fun FolderPlayerTheme(
     dynamicColor: Boolean = true,
+    fontFamily: androidx.compose.ui.text.font.FontFamily = androidx.compose.ui.text.font.FontFamily.Default,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -44,7 +45,7 @@ fun FolderPlayerTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
+        typography = typographyWith(fontFamily),
         content = content
     )
 }

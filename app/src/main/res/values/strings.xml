@@ -1,3 +1,268 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Folder Player</string>
+    <!-- app_name is provided per build by resValue in app/build.gradle.kts -->
+
+    <!-- common -->
+    <string name="common_save">Save</string>
+    <string name="common_add">Add</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_close">Close</string>
+    <string name="common_edit">Edit</string>
+    <string name="common_duplicate">Duplicate</string>
+    <string name="common_delete">Delete</string>
+    <string name="common_move_up">Move up</string>
+    <string name="common_move_down">Move down</string>
+    <string name="common_ok">OK</string>
+    <string name="common_replace">Replace</string>
+    <string name="common_retry">Retry</string>
+
+    <!-- sort -->
+    <string name="sort_name">Name</string>
+    <string name="sort_date">Date</string>
+    <string name="sort_size">Size</string>
+
+    <!-- browser -->
+    <string name="browser_sources_title">Music Sources</string>
+    <string name="browser_back_to_sources">Back to sources</string>
+    <string name="browser_add_source">Add source</string>
+    <string name="browser_add_saf">Folder on this device (SAF)…</string>
+    <string name="browser_repick_saf">Pick folder again</string>
+    <string name="browser_sync_favorites">Sync favorites</string>
+    <string name="browser_replace_remote_favorites">Replace remote favorites with local</string>
+    <string name="browser_search">Search</string>
+    <string name="browser_search_hint">Search folders and songs below this folder</string>
+    <string name="browser_search_truncated">result limit reached</string>
+    <string name="browser_toggle_view">Grid / list</string>
+    <string name="browser_shuffle">Shuffle play</string>
+    <string name="browser_up">Up one level</string>
+    <string name="browser_refresh">Refresh</string>
+    <string name="browser_favorites">Favorites</string>
+    <string name="browser_add_to_playlist">Add to playlist</string>
+    <string name="browser_add_favorite">Add to favorites</string>
+    <string name="browser_remove_favorite">Remove from favorites</string>
+    <string name="browser_local_no_audio_permission">Music access is not allowed – files may be hidden. Allow it in Settings › Storage &amp; permissions, or add the folder as a SAF folder.</string>
+
+    <!-- source editor -->
+    <string name="source_add_title">Add network source</string>
+    <string name="source_edit_title">Edit source</string>
+    <string name="source_name">Source name</string>
+    <string name="source_server_url">Server URL</string>
+    <string name="source_root_path">Root path (optional)</string>
+    <string name="source_host">Host</string>
+    <string name="source_port_default">Port (default %1$d)</string>
+    <string name="source_share">Share name</string>
+    <string name="source_domain">Domain (optional)</string>
+    <string name="source_username">Username</string>
+    <string name="source_password">Password</string>
+    <string name="source_password_unchanged">(unchanged)</string>
+    <string name="source_guest">Guest / anonymous login</string>
+    <string name="source_anonymous">Anonymous login</string>
+    <string name="source_ftps">Use explicit FTPS (TLS)</string>
+    <string name="source_tls_pin">Trusted certificate SHA-256 (self-signed only)</string>
+    <string name="source_tls_pin_help">Leave empty to require a certificate trusted by Android and matching the host name.</string>
+    <string name="source_sync_path">Favorites sync file (optional)</string>
+    <string name="source_test">Test connection</string>
+    <string name="source_test_auth_failed">Authentication failed (user name or password)</string>
+    <string name="source_test_share_missing">Share name is empty</string>
+    <string name="source_test_share_not_found">Share not found on the server</string>
+    <string name="source_test_root_not_found">Root path does not exist</string>
+    <string name="source_test_permission_denied">No permission to read the root path</string>
+    <string name="source_test_unreachable">Server unreachable</string>
+    <string name="source_test_tls_error">TLS certificate rejected</string>
+    <string name="source_test_invalid">Invalid settings: %1$s</string>
+    <string name="source_test_error">Error: %1$s</string>
+
+    <!-- settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_cover_size">Cover display size</string>
+    <string name="settings_cover_standard">Standard</string>
+    <string name="settings_cover_large">Large</string>
+    <string name="settings_background">Player background</string>
+    <string name="settings_background_blur">Blurred cover</string>
+    <string name="settings_background_solid">Gradient (classic)</string>
+    <string name="settings_background_black">Black</string>
+    <string name="settings_title_mode">Track title</string>
+    <string name="settings_title_filename">File name</string>
+    <string name="settings_title_tags">Tags</string>
+    <string name="settings_orientation">Screen orientation</string>
+    <string name="settings_system">System</string>
+    <string name="settings_portrait">Portrait</string>
+    <string name="settings_landscape">Landscape</string>
+    <string name="settings_notch">Notch display</string>
+    <string name="settings_notch_fullscreen">Fullscreen</string>
+    <string name="settings_notch_black_bar">Black bar</string>
+    <string name="settings_grid_density">Grid columns</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_font">Font</string>
+    <string name="settings_font_ready">Downloaded</string>
+    <string name="settings_font_not_downloaded">Not downloaded</string>
+    <string name="settings_font_downloading">Downloading… %1$d%%</string>
+    <string name="settings_font_failed">Download failed: %1$s</string>
+    <string name="settings_font_download">Download</string>
+    <string name="settings_font_import">Import TTF / OTF…</string>
+    <string name="settings_font_imported">Imported %1$s</string>
+    <string name="settings_font_import_failed">Font not imported: %1$s</string>
+    <string name="settings_font_imported_label">Imported: %1$s</string>
+    <string name="settings_font_license">Downloadable fonts are unmodified SIL Open Font License 1.1 files (Noto Sans SC, LXGW WenKai Lite, Sarasa UI SC).</string>
+    <string name="settings_font_fallback">Using the system font: %1$s</string>
+    <string name="settings_default_sort">Default file sorting</string>
+    <string name="settings_ascending">Ascending</string>
+    <string name="settings_descending">Descending</string>
+    <string name="settings_view_list">List</string>
+    <string name="settings_view_grid">Grid</string>
+    <string name="settings_thumbnails">Folder thumbnails</string>
+    <string name="settings_thumbs_local">Local storage</string>
+    <string name="settings_thumbs_saf">SAF folders</string>
+    <string name="settings_thumbs_wifi_only">Network thumbnails only on Wi-Fi</string>
+    <string name="settings_thumbs_help">Turning thumbnails off does not hide the cover on the player screen.</string>
+    <string name="settings_clear_image_cache">Clear image cache</string>
+    <string name="settings_cache_cleared">Image cache cleared (sources and playlists kept)</string>
+    <string name="settings_permissions">Storage &amp; permissions</string>
+    <string name="perm_android_version">Android API level %1$d</string>
+    <string name="perm_audio">Music files: %1$s</string>
+    <string name="perm_images">Images (covers): %1$s</string>
+    <string name="perm_notifications">Notifications: %1$s</string>
+    <string name="perm_saf">SAF folder "%1$s": %2$s</string>
+    <string name="perm_granted">allowed</string>
+    <string name="perm_partial">selected photos only</string>
+    <string name="perm_denied">denied</string>
+    <string name="perm_revoked">revoked – pick the folder again</string>
+    <string name="perm_na">not needed</string>
+    <string name="perm_images_help">Without full image access, covers next to local songs may be invisible. Allow photos, or add the music folder as a SAF folder (also needed for .lrc / .nfo files and .nomedia folders).</string>
+    <string name="perm_request">Request permissions</string>
+    <string name="perm_open_settings">App settings</string>
+    <string name="settings_lyrics">Lyrics</string>
+    <string name="settings_lyric_api">Lyric API URL</string>
+    <string name="settings_ai_lyrics_auto">Fetch lyrics with AI automatically</string>
+    <string name="settings_lyrics_local_first">Local / LRC first</string>
+    <string name="settings_lyrics_ai_first">AI first</string>
+    <string name="settings_ai_lyrics_language">AI lyrics language (empty = original)</string>
+    <string name="settings_translation_target">Translate lyrics to (empty = off)</string>
+    <string name="settings_ai_lyrics_help">AI requests are only sent when automatic lookup is on or you ask for AI lyrics, and only to the endpoint below.</string>
+    <string name="settings_ai">AI assistant (OpenAI compatible)</string>
+    <string name="settings_ai_base_url">API base URL</string>
+    <string name="settings_ai_key">API key</string>
+    <string name="settings_ai_model">Model name</string>
+    <string name="settings_playback_extras">Casting &amp; saving</string>
+    <string name="settings_dlna">DLNA / UPnP casting</string>
+    <string name="settings_auto_save">Save network songs played to the end</string>
+    <string name="settings_auto_save_help">Complete files are saved to Music/%1$s/ after a full verified download.</string>
+    <string name="settings_native_decoder_ok">Extra decoders (ALAC/WMA/APE/DSF/DFF) active – %1$s</string>
+    <string name="settings_native_decoder_missing">Extra decoders not available on this device (WMA/APE/DSF/DFF cannot be played)</string>
+    <string name="settings_about_version">Folder Player Fork %1$s (%2$d)</string>
+    <string name="settings_about_fork">Unofficial personal fork of Folder Player with added features; not the author\'s release.</string>
+    <string name="settings_debug_on">(DEBUG MODE ACTIVATED – logs in Download/FolderPlayer_Logs)</string>
+    <!-- player -->
+    <string name="player_cover">Album cover</string>
+    <string name="player_no_song">No Song Playing</string>
+    <string name="player_loading">Loading…</string>
+    <string name="player_switching">Switching track…</string>
+    <string name="player_no_lyrics">No lyrics available</string>
+    <string name="err_seek_unsupported">This server cannot seek (no REST support)</string>
+    <string name="err_auth_failed">Authentication failed</string>
+    <string name="err_permission_denied">Permission denied: %1$s</string>
+    <string name="err_not_found">File not found</string>
+    <string name="err_unreachable">Server unreachable</string>
+    <string name="err_tls">TLS certificate rejected</string>
+    <string name="err_unsupported_format_detail">Unsupported format: %1$s</string>
+    <string name="err_decoding_failed">Decoding failed: %1$s</string>
+    <string name="err_permission_or_auth">Permission or authentication failed</string>
+    <string name="err_network">Network connection failed</string>
+    <string name="err_unsupported_format">Unsupported format</string>
+    <string name="err_player_init">Playback system failed to initialize</string>
+    <string name="err_format_not_decodable">This audio format (%1$s) cannot be decoded on this Android version (%2$s)</string>
+    <string name="err_playlist_unavailable">Items in this playlist are not available</string>
+    <string name="err_generic">An error occurred: %1$s</string>
+    <string name="err_load_failed">Load failed: %1$s</string>
+    <string name="sync_no_path">No sync path configured (edit a source and set a favorites sync path)</string>
+    <string name="sync_done">synced (added: %1$d, total: %2$d)</string>
+    <string name="sync_remote_broken">remote fav.json is broken (%1$s); nothing was written. Use \"Replace remote\" to overwrite it.</string>
+    <string name="sync_remote_read_only">remote is read-only (%1$s); merged into local only: %2$d</string>
+    <string name="sync_failed">sync failed: %1$s</string>
+    <string name="ai_not_configured">AI endpoint, key or model not configured</string>
+    <string name="ai_lyrics_not_found">AI did not find these lyrics</string>
+    <string name="ai_key_missing">Please set the AI API key in Settings to enable this feature.</string>
+    <string name="ai_http_429">Too many requests (429).</string>
+    <string name="ai_http_401">API key rejected (401).</string>
+    <string name="ai_http_404">API URL or model not found (404).</string>
+    <string name="ai_http_other">Request failed: HTTP %1$d</string>
+    <string name="thumb_error_network">Folder image could not be loaded (connection problem)</string>
+    <string name="thumb_error_permission">Folder image not accessible (permission)</string>
+    <string name="thumb_error_decode">Folder image is damaged</string>
+    <string name="player_error_local_needs_saf">This file cannot be read from shared storage (Android only lets apps read music and images there). Add the folder as a SAF folder to use .cue / .lrc / .nfo files.</string>
+    <string name="player_lyrics_source">Lyrics: %1$s</string>
+    <string name="player_lyrics_unsynced">not synced</string>
+    <string name="player_lyrics_ai_generated">AI-generated lyrics (%1$s) – may be inaccurate</string>
+    <string name="player_lyrics_ai_get">Get AI lyrics</string>
+    <string name="player_lyrics_ai_regenerate">Regenerate AI lyrics</string>
+    <string name="player_previous">Previous</string>
+    <string name="player_play_pause">Play / pause</string>
+    <string name="player_next">Next</string>
+    <string name="player_playlist_title">PLAYLIST</string>
+    <string name="player_new_list">+ NEW LIST</string>
+    <string name="player_create_playlist">Create playlist</string>
+    <string name="player_playlist_name">Name</string>
+    <string name="player_create">Create</string>
+    <string name="player_rename_playlist">Rename playlist</string>
+    <string name="player_new_name">New name</string>
+    <string name="player_rename">Rename</string>
+    <string name="player_sleep_timer">Sleep timer</string>
+    <string name="player_next_folder">Continue with next folder</string>
+    <string name="player_shuffle">Shuffle</string>
+    <string name="player_repeat">Repeat</string>
+    <string name="player_timer_mins">mins</string>
+    <string name="player_timer_songs">songs</string>
+    <string name="player_timer_reset">RESET</string>
+    <string name="player_album_discovery">Album information</string>
+    <string name="player_artist_discovery">Artist information</string>
+    <string name="player_no_info">No information available.</string>
+    <string name="player_info_from_nfo">From the folder\'s NFO file</string>
+    <string name="player_info_from_ai">AI-generated (%1$s)</string>
+    <string name="player_info_cached">cached</string>
+    <string name="player_learn_artist">About the artist</string>
+    <string name="player_regenerate">Regenerate</string>
+    <string name="player_save_nfo">Save as Info.nfo</string>
+    <string name="player_nfo_saved">Saved to Info.nfo</string>
+    <string name="player_nfo_read_only">This source is read-only – the description is only shown.</string>
+    <string name="player_nfo_failed">Could not save: %1$s</string>
+    <string name="player_nfo_cannot_save">This source is read-only – saving to Info.nfo is not available.</string>
+    <string name="player_nfo_replace_title">Replace Info.nfo?</string>
+    <string name="player_nfo_replace_text">This folder already has an Info.nfo. Replace its description with the AI text? Track list and other fields are kept.</string>
+    <string name="player_cast">Cast (DLNA)</string>
+    <string name="player_cast_to">Casting to %1$s</string>
+    <string name="player_cast_renderer_state">Renderer reports: %1$s</string>
+    <string name="player_cast_unknown">unknown</string>
+    <string name="player_cast_last_command">Last command sent: %1$s</string>
+    <string name="player_cast_no_progress">The renderer does not report the playback position.</string>
+    <string name="player_cast_none">No renderer found on this network.</string>
+
+    <!-- counts -->
+    <plurals name="browser_search_results">
+        <item quantity="one">%d result</item>
+        <item quantity="other">%d results</item>
+    </plurals>
+    <plurals name="browser_search_scanned">
+        <item quantity="one">%d folder scanned</item>
+        <item quantity="other">%d folders scanned</item>
+    </plurals>
+    <plurals name="browser_search_skipped">
+        <item quantity="one">%d unreadable folder skipped</item>
+        <item quantity="other">%d unreadable folders skipped</item>
+    </plurals>
+    <plurals name="browser_favorites_count">
+        <item quantity="one">%d item</item>
+        <item quantity="other">%d items</item>
+    </plurals>
+    <plurals name="source_test_ok">
+        <item quantity="one">Connected – root lists %d entry</item>
+        <item quantity="other">Connected – root lists %d entries</item>
+    </plurals>
+    <plurals name="player_timer_minutes">
+        <item quantity="one">%d min</item>
+        <item quantity="other">%d min</item>
+    </plurals>
+    <plurals name="player_timer_songs_count">
+        <item quantity="one">%d song</item>
+        <item quantity="other">%d songs</item>
+    </plurals>
 </resources>

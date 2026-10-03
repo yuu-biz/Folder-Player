@@ -2,32 +2,38 @@ package com.wing.folderplayer.service
 
 import android.app.PendingIntent
 import android.content.Intent
+import androidx.annotation.OptIn
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSourceBitmapLoader
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
 import com.wing.folderplayer.MainActivity
-import com.wing.folderplayer.data.repo.PlayerRepository
-import com.wing.folderplayer.data.source.LocalSource
-import okhttp3.OkHttpClient
+import com.wing.folderplayer.data.source.SourceRegistry
+import com.wing.folderplayer.playback.NetworkRetryController
+import com.wing.folderplayer.playback.PlaybackExportManager
+import com.wing.folderplayer.playback.RoutingDataSource
+import com.wing.folderplayer.playback.SourceBitmapLoader
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.IntentFilter
 import android.media.AudioManager
-import java.net.CookieManager
-import java.net.CookiePolicy
-import java.net.CookieHandler
-import java.util.concurrent.TimeUnit
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 
+@OptIn(UnstableApi::class)
 class MusicService : MediaLibraryService() {
 
     private lateinit var player: ExoPlayer
     private lateinit var mediaSession: MediaLibrarySession
-    // In a real app, inject this
-    private val repository = PlayerRepository()
-    private val localSource = LocalSource()
-    
-    private val becomingNoisyReceiver = object : BroadcastReceiver() {
+    private lateinit var retry: NetworkRetryController
+    private var exporter: PlaybackExportManager? = null
+
+    internal val becomingNoisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
                 player.pause()
@@ -37,48 +43,15 @@ class MusicService : MediaLibraryService() {
 
     override fun onCreate() {
         super.onCreate()
+        current = this
+        SourceRegistry.init(applicationContext)
 
-        
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
 
-        // For cloud storage that may require cookies (e.g., some redirected links)
-        val cookieManager = CookieManager()
-        cookieManager.setCookiePolicy(CookiePolicy.ACCEPT_ORIGINAL_SERVER)
-        CookieHandler.setDefault(cookieManager)
-
-        // Create a robust OkHttpClient
-        val okHttpClient = OkHttpClient.Builder()
-            .followRedirects(true)
-            .followSslRedirects(true)
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .cookieJar(okhttp3.JavaNetCookieJar(cookieManager))
-            .build()
-
-        // Create OkHttpDataSource.Factory
-        val okHttpDataSourceFactory = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(okHttpClient)
-            .setUserAgent("Mozilla/5.0 (Linux; Android 13; MCloudApp/10.7.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-
-        // Wrap it to dynamically add header on every request
-        val resolvingHttpDataSourceFactory = androidx.media3.datasource.DataSource.Factory {
-            val dataSource = okHttpDataSourceFactory.createDataSource()
-            val auth = com.wing.folderplayer.data.source.WebDavAuthManager.authHeader
-            
-            if (auth != null) {
-                // Alist specific: Basic auth for original server only
-                // Media3/OkHttp will NOT pass this to different domains after redirect
-                dataSource.setRequestProperty("Authorization", auth)
-            }
-            
-            dataSource.setRequestProperty("Accept", "audio/*, */*")
-            dataSource.setRequestProperty("Cache-Control", "no-cache")
-            
-            dataSource
-        }
-        
-        // Use DefaultDataSource.Factory which handles file://, content://, etc., and plays nice with our custom Http factory
-        val defaultDataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(this, resolvingHttpDataSourceFactory)
+        // fpsrc:// is resolved per sourceId (Local/SAF/WebDAV/SMB/FTP); file://, content:// and http(s):// fall back
+        // to Media3's DefaultDataSource. No credentials are attached to requests globally.
+        val dataSourceFactory = RoutingDataSource.Factory(this)
 
         // Configure LoadControl with larger buffers for smoother network streaming
         val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
@@ -103,25 +76,21 @@ class MusicService : MediaLibraryService() {
             .setAudioAttributes(audioAttributes, true)
             .setMediaSourceFactory(
                 androidx.media3.exoplayer.source.DefaultMediaSourceFactory(this)
-                    .setDataSourceFactory(defaultDataSourceFactory)
+                    .setDataSourceFactory(dataSourceFactory)
             )
             .setLoadControl(loadControl)
+            .setWakeMode(androidx.media3.common.C.WAKE_MODE_NETWORK)
             .build()
-        
+
         player.volume = 1.0f
-        
 
         player.addListener(object : androidx.media3.common.Player.Listener {
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                android.util.Log.e("MusicService", "Player Error: ${error.errorCodeName} (${error.errorCode})", error)
-                if (error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
-                    error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS) {
-                    // Try to recover or just log
-                }
+                android.util.Log.e("MusicService", "Player Error: ${error.errorCodeName} (${error.errorCode}) ${error.message}")
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
-                when(playbackState) {
+                when (playbackState) {
                     androidx.media3.common.Player.STATE_BUFFERING -> android.util.Log.d("MusicService", "Buffering...")
                     androidx.media3.common.Player.STATE_READY -> android.util.Log.d("MusicService", "Ready to play")
                     androidx.media3.common.Player.STATE_ENDED -> android.util.Log.d("MusicService", "Playback ended")
@@ -129,14 +98,48 @@ class MusicService : MediaLibraryService() {
                 }
             }
         })
-        
-        mediaSession = MediaLibrarySession.Builder(this, player, object : MediaLibraryService.MediaLibrarySession.Callback {
-            // Implement simple callback if needed, or leave default for now
-        })
+
+        retry = NetworkRetryController(player).also { it.attach() }
+        exporter = PlaybackExportManager(applicationContext, player).also { it.attach() }
+
+        mediaSession = MediaLibrarySession.Builder(this, player, object : MediaLibraryService.MediaLibrarySession.Callback {})
             .setSessionActivity(pendingIntent)
+            .setBitmapLoader(SourceBitmapLoader(DataSourceBitmapLoader(this)))
             .build()
 
+        setMediaNotificationProvider(object : DefaultMediaNotificationProvider(this) {
+            // A MediaItem only has a display title when tag titles are used and the file has no title tag.
+            override fun getNotificationContentTitle(metadata: MediaMetadata): CharSequence? = metadata.title ?: metadata.displayTitle
+        })
+
         registerReceiver(becomingNoisyReceiver, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY))
+    }
+
+    /**
+     * A track change fires several player events within milliseconds and each one re-posts the notification. Android
+     * sheds updates above ~5/s per package ("Package enqueue rate ... Shedding"), which can drop the *last* update and
+     * leave the previous track's title/cover in the notification. Updates are therefore coalesced (trailing edge, so
+     * the final state is always posted). Media3 passes startInForegroundRequired=true on every update while playing;
+     * a delay of at most [MIN_NOTIFICATION_INTERVAL_MS] is far inside the foreground-service start deadline.
+     */
+    private val notificationHandler = Handler(Looper.getMainLooper())
+    private var pendingNotification: Runnable? = null
+    private var lastNotificationAt = 0L
+
+    override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
+        pendingNotification?.let { notificationHandler.removeCallbacks(it) }
+        pendingNotification = null
+        val wait = lastNotificationAt + MIN_NOTIFICATION_INTERVAL_MS - SystemClock.uptimeMillis()
+        if (wait <= 0) {
+            lastNotificationAt = SystemClock.uptimeMillis()
+            super.onUpdateNotification(session, startInForegroundRequired)
+            return
+        }
+        pendingNotification = Runnable {
+            pendingNotification = null
+            lastNotificationAt = SystemClock.uptimeMillis()
+            super.onUpdateNotification(session, startInForegroundRequired)
+        }.also { notificationHandler.postDelayed(it, wait) }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
@@ -144,11 +147,22 @@ class MusicService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        if (current === this) current = null
+        pendingNotification?.let { notificationHandler.removeCallbacks(it) }
         unregisterReceiver(becomingNoisyReceiver)
+        retry.detach()
+        exporter?.detach()
         mediaSession.run {
             player.release()
             release()
         }
         super.onDestroy()
+    }
+
+    internal companion object {
+        const val MIN_NOTIFICATION_INTERVAL_MS = 300L
+
+        /** Running instance, for instrumentation tests only (the shell cannot send AUDIO_BECOMING_NOISY on API 34+). */
+        @Volatile internal var current: MusicService? = null
     }
 }

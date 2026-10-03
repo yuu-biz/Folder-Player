@@ -47,7 +47,7 @@ fun PlaylistSheetContent(
         }
 
         Text(
-            "PLAYLIST",
+            androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_playlist_title),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Black,
             color = Color.White,
@@ -168,12 +168,12 @@ fun PlaylistSheetContent(
             if (showCreateDialog) {
                 AlertDialog(
                     onDismissRequest = { showCreateDialog = false },
-                    title = { Text("Create Playlist") },
+                    title = { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_create_playlist)) },
                     text = {
                         OutlinedTextField(
                             value = createName,
                             onValueChange = { createName = it },
-                            label = { Text("Name") },
+                            label = { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_playlist_name)) },
                             singleLine = true
                         )
                     },
@@ -184,10 +184,10 @@ fun PlaylistSheetContent(
                                 createName = ""
                                 showCreateDialog = false
                             }
-                        }) { Text("Create") }
+                        }) { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_create)) }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showCreateDialog = false }) { Text("Cancel") }
+                        TextButton(onClick = { showCreateDialog = false }) { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.common_cancel)) }
                     }
                 )
             }
@@ -195,12 +195,12 @@ fun PlaylistSheetContent(
             if (playlistToRename != null) {
                 AlertDialog(
                     onDismissRequest = { playlistToRename = null },
-                    title = { Text("Rename Playlist") },
+                    title = { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_rename_playlist)) },
                     text = {
                         OutlinedTextField(
                             value = renameName,
                             onValueChange = { renameName = it },
-                            label = { Text("New Name") },
+                            label = { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_new_name)) },
                             singleLine = true
                         )
                     },
@@ -213,10 +213,10 @@ fun PlaylistSheetContent(
                                 )
                                 playlistToRename = null
                             }
-                        }) { Text("Rename") }
+                        }) { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_rename)) }
                     },
                     dismissButton = {
-                        TextButton(onClick = { playlistToRename = null }) { Text("Cancel") }
+                        TextButton(onClick = { playlistToRename = null }) { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.common_cancel)) }
                     }
                 )
             }
@@ -225,7 +225,7 @@ fun PlaylistSheetContent(
                 IconButton(onClick = { showTimerDialog = true }) {
                     Icon(
                         imageVector = Icons.Default.AccessAlarm,
-                        contentDescription = "Sleep Timer",
+                        contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_sleep_timer),
                         tint = if (uiState.sleepTimerActive) MaterialTheme.colorScheme.primary else Color.White.copy(
                             alpha = 0.5f
                         ),
@@ -235,7 +235,7 @@ fun PlaylistSheetContent(
                 IconButton(onClick = { viewModel.toggleAutoNextFolder() }) {
                     Icon(
                         imageVector = Icons.Default.AllInclusive,
-                        contentDescription = "Sequential Folder Playback",
+                        contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_next_folder),
                         tint = if (uiState.autoNextFolder) MaterialTheme.colorScheme.primary else Color.White.copy(
                             alpha = 0.5f
                         ),
@@ -245,7 +245,7 @@ fun PlaylistSheetContent(
                 IconButton(onClick = { viewModel.toggleShuffle() }) {
                     Icon(
                         imageVector = Icons.Default.Shuffle,
-                        contentDescription = "Shuffle",
+                        contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_shuffle),
                         tint = if (uiState.shuffleModeEnabled) MaterialTheme.colorScheme.primary else Color.White.copy(
                             alpha = 0.5f
                         ),
@@ -258,7 +258,7 @@ fun PlaylistSheetContent(
                             Player.REPEAT_MODE_ONE -> Icons.Default.RepeatOne
                             else -> Icons.Default.Repeat
                         },
-                        contentDescription = "Repeat",
+                        contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_repeat),
                         tint = if (uiState.repeatMode != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else Color.White.copy(
                             alpha = 0.5f
                         ),
@@ -276,7 +276,7 @@ fun PlaylistSheetContent(
             itemsIndexed(
                 uiState.activePlaylistItems,
                 key = { index, item -> "${uiState.activePlaylistId}_${item.path}_$index" }) { index, item ->
-                val isCurrent = uiState.currentMediaId == item.path
+                val isCurrent = item.matchesMediaId(uiState.currentMediaId)
                 val title = item.title
                 val artist = item.artist ?: ""
 
@@ -380,8 +380,8 @@ fun TimerDialog(
     var lastInteractedType by remember { mutableStateOf(uiState.sleepTimerType) }
 
     // If active, show current countdown from uiState. If not, show what sliders represent.
-    val displayLabel = if (uiState.sleepTimerActive) uiState.sleepTimerLabel else {
-        if (lastInteractedType == TimerType.TIME) "${selectedMins.toInt()} min" else "${selectedSongs.toInt()} songs"
+    val displayLabel = if (uiState.sleepTimerActive) timerLabel(uiState.sleepTimerType, uiState.sleepTimerValue) else {
+        timerLabel(lastInteractedType, if (lastInteractedType == TimerType.TIME) selectedMins.toInt() else selectedSongs.toInt())
     }
 
     AlertDialog(
@@ -424,7 +424,7 @@ fun TimerDialog(
                         valueRange = 0f..99f,
                         modifier = Modifier.weight(1f)
                     )
-                    Text("mins", modifier = Modifier.width(44.dp).padding(start = 8.dp), style = MaterialTheme.typography.bodySmall)
+                    Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_timer_mins), modifier = Modifier.width(44.dp).padding(start = 8.dp), style = MaterialTheme.typography.bodySmall)
                 }
                 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -443,7 +443,7 @@ fun TimerDialog(
                         valueRange = 0f..50f,
                         modifier = Modifier.weight(1f)
                     )
-                    Text("songs", modifier = Modifier.width(44.dp).padding(start = 8.dp), style = MaterialTheme.typography.bodySmall)
+                    Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_timer_songs), modifier = Modifier.width(44.dp).padding(start = 8.dp), style = MaterialTheme.typography.bodySmall)
                 }
             }
         },
@@ -456,7 +456,7 @@ fun TimerDialog(
                     onStart(lastInteractedType, value)
                     onDismiss()
                 }
-            }) { Text("OK") }
+            }) { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.common_ok)) }
         },
         dismissButton = {
             TextButton(onClick = { 
@@ -464,7 +464,7 @@ fun TimerDialog(
                 selectedMins = 0f
                 selectedSongs = 0f
                 onDismiss()
-            }) { Text("RESET") }
+            }) { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_timer_reset)) }
         },
         containerColor = Color(0xFF1E1E1E),
         textContentColor = Color.White
