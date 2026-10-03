@@ -32,7 +32,12 @@ class WebDavFileSystem(
     private val base: HttpUrl = normalizeBaseUrl(config.url).toHttpUrlOrNull()
         ?: throw IllegalArgumentException("invalid WebDAV URL")
 
+    /**
+     * Cookies belong to this source only (the registry keeps one instance per source and rebuilds it when the
+     * connection or credentials change): two accounts on the same server never share a session cookie.
+     */
     val client: OkHttpClient = baseClient.newBuilder()
+        .cookieJar(okhttp3.JavaNetCookieJar(java.net.CookieManager(null, java.net.CookiePolicy.ACCEPT_ORIGINAL_SERVER)))
         .authenticator { _, response ->
             val u = response.request.url
             if (u.host != base.host || u.port != base.port || u.scheme != base.scheme) return@authenticator null
@@ -231,17 +236,16 @@ class WebDavFileSystem(
 
     companion object {
         /**
-         * Same transport behaviour as public main's MusicService client: redirects with cookies (Alist → cloud direct
-         * links) and the mobile-cloud User-Agent some providers require for direct links.
+         * Same transport behaviour as public main's MusicService client: redirects (Alist → cloud direct links, with
+         * the per-source cookie jar added in [client]) and the mobile-cloud User-Agent some providers require for
+         * direct links. Holds no cookies itself; only connection pool and dispatcher are shared.
          */
         val sharedClient: OkHttpClient by lazy {
-            val cookies = java.net.CookieManager().apply { setCookiePolicy(java.net.CookiePolicy.ACCEPT_ORIGINAL_SERVER) }
             OkHttpClient.Builder()
                 .followRedirects(true)
                 .followSslRedirects(true)
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
-                .cookieJar(okhttp3.JavaNetCookieJar(cookies))
                 .addInterceptor { chain ->
                     val req = chain.request()
                     val b = req.newBuilder()
