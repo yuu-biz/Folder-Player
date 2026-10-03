@@ -168,6 +168,7 @@
     <string name="sync_done">已同步（新增 %1$d，共 %2$d）</string>
     <string name="sync_remote_broken">遠端 fav.json 已損毀（%1$s）；未寫入任何內容。可使用「取代遠端」覆寫。</string>
     <string name="sync_remote_read_only">遠端為唯讀（%1$s）；僅將 %2$d 項合併到本機</string>
+    <string name="sync_remote_unreadable_entries">遠端檔案含有 %1$d 項此版本無法讀取的項目，未改寫該檔案（已合併到本機：%2$d）。如需覆寫，請使用「取代遠端」。</string>
     <string name="sync_failed">同步失敗：%1$s</string>
     <string name="ai_not_configured">未設定 AI 位址、金鑰或模型</string>
     <string name="ai_lyrics_not_found">AI 找不到這首歌的歌詞</string>

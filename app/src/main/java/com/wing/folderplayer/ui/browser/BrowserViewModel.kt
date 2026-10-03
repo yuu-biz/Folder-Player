@@ -466,6 +466,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         is SyncResult.RemoteCorrupt -> com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.sync_remote_broken, r.reason)
         is SyncResult.RemoteNotWritable -> com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.sync_remote_read_only, r.reason, r.mergedFromRemote)
         is SyncResult.Failed -> com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.sync_failed, r.reason)
+        is SyncResult.RemoteHasUnreadableEntries -> com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.sync_remote_unreadable_entries, r.rejected, r.mergedFromRemote)
     }
 
     // ---------------- search ----------------

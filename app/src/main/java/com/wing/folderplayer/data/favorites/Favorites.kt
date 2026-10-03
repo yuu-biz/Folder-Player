@@ -44,8 +44,11 @@ object FavoritesCodec {
 
     fun encode(data: FavoritesData): String = gson.toJson(data)
 
-    /** Strict decode: rejects anything that is not a {version, items[]} object with valid items. */
-    fun decode(json: String): FavoritesData {
+    /** [rejected] = entries present in the file that this version cannot read (kept out of [data], never silently lost). */
+    data class DecodeReport(val data: FavoritesData, val rejected: Int)
+
+    /** Strict decode: rejects anything that is not a {version, items[]} object; unreadable items are left out but counted. */
+    fun decodeReport(json: String): DecodeReport {
         val root = try { JsonParser.parseString(json) } catch (e: Exception) { throw FavoritesFormatException("not JSON: ${e.message}") }
         if (!root.isJsonObject) throw FavoritesFormatException("root is not an object")
         val o = root.asJsonObject
@@ -54,11 +57,16 @@ object FavoritesCodec {
         val arr = o.get("items")?.takeIf { it.isJsonArray }?.asJsonArray ?: throw FavoritesFormatException("missing items")
         val items = arr.mapNotNull { el ->
             val item = runCatching { gson.fromJson(el, FavoriteItem::class.java) }.getOrNull() ?: return@mapNotNull null
-            if (item.sourceId.isBlank() || !item.path.startsWith("/")) null
+            // Gson bypasses Kotlin null-safety: a missing field arrives as null.
+            val sourceId: String? = item.sourceId
+            val path: String? = item.path
+            if (sourceId.isNullOrBlank() || path == null || !path.startsWith("/")) null
             else item.copy(type = if (item.type == FavoriteItem.TYPE_FOLDER) FavoriteItem.TYPE_FOLDER else FavoriteItem.TYPE_SONG)
         }
-        return FavoritesData(VERSION, items)
+        return DecodeReport(FavoritesData(VERSION, items), arr.size() - items.size)
     }
+
+    fun decode(json: String): FavoritesData = decodeReport(json).data
 
     /**
      * Additive merge: union by (sourceId, path, type); for an entry present on both sides the newer
@@ -80,6 +88,7 @@ sealed class SyncResult {
     data class RemoteCorrupt(val reason: String) : SyncResult()
     data class RemoteNotWritable(val reason: String, val mergedFromRemote: Int) : SyncResult()
     data class Failed(val reason: String) : SyncResult()
+    data class RemoteHasUnreadableEntries(val rejected: Int, val mergedFromRemote: Int) : SyncResult()
 }
 
 /** Local favorites (files/favorites/fav.json) plus explicit sync with a user-chosen remote fav.json. */
@@ -87,8 +96,12 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
     private val _items = MutableStateFlow(load())
     val items: StateFlow<List<FavoriteItem>> = _items.asStateFlow()
 
+    /** Set when the local file holds entries this version cannot read: backed up once before it is rewritten. */
+    private var backupBeforeWrite = false
+
     private fun load(): List<FavoriteItem> = try {
-        if (file.exists()) FavoritesCodec.decode(file.readText()).items else emptyList()
+        if (file.exists()) FavoritesCodec.decodeReport(file.readText()).also { backupBeforeWrite = it.rejected > 0 }.data.items
+        else emptyList()
     } catch (e: Exception) {
         // Keep the unreadable file for diagnosis instead of overwriting it.
         file.renameTo(File(file.path + ".corrupt-" + clock()))
@@ -98,6 +111,10 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
     @Synchronized
     private fun store(items: List<FavoriteItem>) {
         file.parentFile?.mkdirs()
+        if (backupBeforeWrite) {
+            file.copyTo(File(file.path + ".unreadable-" + clock()), overwrite = false)
+            backupBeforeWrite = false
+        }
         val tmp = File(file.path + ".tmp")
         tmp.writeText(FavoritesCodec.encode(FavoritesData(items = items)))
         if (!tmp.renameTo(file)) { file.writeText(tmp.readText()); tmp.delete() }
@@ -131,24 +148,31 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
 
     fun toggle(entry: MusicFile) = if (isFavorite(entry.ref, entry.isDirectory)) remove(entry.ref, entry.isDirectory) else add(entry)
 
-    /** Merge with the remote file at [remotePath] on [fs]. Never writes when the remote JSON is broken. */
+    /**
+     * Merge with the remote file at [remotePath] on [fs]. The remote is written only when the merge changed it, and
+     * never when it is broken or holds entries this version cannot read (those need the explicit [replaceRemote]).
+     */
     @Synchronized
     fun sync(fs: SourceFileSystem, remotePath: String): SyncResult {
-        val remoteItems: List<FavoriteItem> = try {
+        val remote: FavoritesCodec.DecodeReport? = try {
             val st = fs.stat(remotePath)
-            if (st == null) emptyList() else {
+            if (st == null) null else {
                 val bytes = fs.openRead(remotePath).use { it.readBytes() }
-                FavoritesCodec.decode(String(bytes, Charsets.UTF_8)).items
+                FavoritesCodec.decodeReport(String(bytes, Charsets.UTF_8))
             }
         } catch (e: FavoritesFormatException) {
             return SyncResult.RemoteCorrupt(e.message.orEmpty())
         } catch (e: SourceException) {
             return SyncResult.Failed(e.message ?: e.javaClass.simpleName)
         }
+        val remoteItems = remote?.data?.items.orEmpty()
         val before = _items.value
         val merged = FavoritesCodec.merge(before, remoteItems)
         val added = merged.size - before.size
-        store(merged)
+        if (merged != before) store(merged)
+        if (remote != null && remote.rejected > 0) return SyncResult.RemoteHasUnreadableEntries(remote.rejected, added)
+        // Semantically unchanged: leave the remote file (and its formatting) alone.
+        if (remote != null && merged.size == remoteItems.size && merged.toSet() == remoteItems.toSet()) return SyncResult.Synced(added, merged.size)
         return writeRemote(fs, remotePath, merged, added)
     }
 

@@ -113,4 +113,54 @@ class FavoritesTest {
         assertTrue(tmp.root.resolve("fav").listFiles()!!.any { it.name.startsWith("fav.json.corrupt-") })
         assertFalse(f.exists())
     }
+
+    // ---- entries this version cannot read must not be dropped silently ----
+
+    private val remoteWithInvalid = """{
+      "version": 1,
+      "items": [
+        {"id": "1", "type": "SONG", "sourceId": "smb-1", "path": "/ok.flac", "name": "ok", "timestamp": 5},
+        {"id": "2", "type": "SONG", "sourceId": "", "path": "relative/no-source.flac", "name": "future-format", "timestamp": 6}
+      ]
+    }"""
+
+    @Test fun decodeReportsRejectedEntries() {
+        val d = FavoritesCodec.decodeReport(remoteWithInvalid)
+        assertEquals(listOf("/ok.flac"), d.data.items.map { it.path })
+        assertEquals(1, d.rejected)
+    }
+
+    @Test fun normalSyncNeverRewritesARemoteFileWithUnreadableEntries() {
+        val remote = InMemoryFileSystem("nas")
+        remote.put("/fav.json", remoteWithInvalid)
+        val r = repo()
+        r.add(song)
+        val res = r.sync(remote, "/fav.json")
+        assertEquals("remote file untouched", remoteWithInvalid, String(remote.files["/fav.json"]!!))
+        assertEquals(0, remote.writes)
+        assertTrue("reported, not 'synced': $res", res is SyncResult.RemoteHasUnreadableEntries && res.rejected == 1)
+        // The readable remote entry is still merged locally.
+        assertTrue(r.items.value.any { it.path == "/ok.flac" })
+    }
+
+    @Test fun syncDoesNotRewriteAnUnchangedRemote() {
+        val remote = InMemoryFileSystem("nas")
+        val r = repo()
+        r.add(song)
+        assertTrue(r.sync(remote, "/fav.json") is SyncResult.Synced)
+        val writes = remote.writes
+        assertTrue(r.sync(remote, "/fav.json") is SyncResult.Synced)
+        assertEquals("nothing changed, nothing written", writes, remote.writes)
+    }
+
+    @Test fun localFileWithUnreadableEntriesIsBackedUpBeforeRewrite() {
+        val f = java.io.File(tmp.root, "fav/fav.json").apply { parentFile!!.mkdirs(); writeText(remoteWithInvalid) }
+        val r = repo()
+        assertEquals(1, r.items.value.size)
+        r.add(song)
+        val backups = tmp.root.resolve("fav").listFiles()!!.filter { it.name.startsWith("fav.json.unreadable-") }
+        assertEquals(1, backups.size)
+        assertEquals(remoteWithInvalid, backups.single().readText())
+        assertTrue(f.exists())
+    }
 }

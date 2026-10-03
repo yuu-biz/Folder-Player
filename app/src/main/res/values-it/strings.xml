@@ -168,6 +168,7 @@
     <string name="sync_done">sincronizzato (%1$d aggiunti, %2$d in totale)</string>
     <string name="sync_remote_broken">il fav.json remoto è danneggiato (%1$s); non è stato scritto nulla. Usa «Sostituisci remoto» per sovrascriverlo.</string>
     <string name="sync_remote_read_only">il remoto è di sola lettura (%1$s); %2$d uniti solo in locale</string>
+    <string name="sync_remote_unreadable_entries">il file remoto contiene %1$d voci non leggibili da questa versione; non è stato riscritto (%2$d uniti in locale). Usa «Sostituisci remoto» per sovrascriverlo.</string>
     <string name="sync_failed">sincronizzazione non riuscita: %1$s</string>
     <string name="ai_not_configured">Indirizzo, chiave o modello IA non configurati</string>
     <string name="ai_lyrics_not_found">L\'IA non ha trovato questo testo</string>
