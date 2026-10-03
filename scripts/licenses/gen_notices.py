@@ -4,8 +4,17 @@
 The license texts in scripts/licenses/texts/ come from the official sources: apache.org, the SPDX license list,
 the FFmpeg 7.1.5 source tarball (COPYING.LGPLv2.1) and the LICENSE/NOTICE files inside the dependency jars.
 Re-run after changing dependencies: python3 scripts/licenses/gen_notices.py
+
+The component list is written by hand. --check verifies it against the dependencies Gradle actually resolves, so a new
+library cannot ship without a notice:
+  ./gradlew -q :app:dependencies --configuration releaseRuntimeClasspath > deps.txt
+  ./gradlew -q :app:dependencies --configuration coreLibraryDesugaring >> deps.txt
+  python3 scripts/licenses/gen_notices.py --check deps.txt
+--verify fails when the generated asset differs from what this script writes.
 """
 import os
+import re
+import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 TEXTS = os.path.join(ROOT, "scripts", "licenses", "texts")
@@ -21,10 +30,10 @@ def text(name):
 COMPONENTS = {
     "Apache License 2.0": [
         "AndroidX / Jetpack (Compose, Media3, Lifecycle, Navigation, DataStore, Activity, Core, AppCompat, DocumentFile and their dependencies) — https://developer.android.com/jetpack",
-        "Kotlin standard library, kotlinx.coroutines — https://kotlinlang.org",
+        "Kotlin standard library, kotlin-reflect, kotlinx.coroutines — https://kotlinlang.org",
         "Accompanist — https://github.com/google/accompanist",
         "OkHttp, Okio, Retrofit — Square, Inc. — https://square.github.io",
-        "Gson, Guava, JSR-305 annotations — https://github.com/google",
+        "Gson, Guava (with failureaccess, listenablefuture), JSR-305 annotations, Error Prone annotations — https://github.com/google",
         "Coil — https://coil-kt.github.io/coil",
         "SMBJ, ASN-One — Jeroen van Erp — https://github.com/hierynomus/smbj",
         "Apache Commons Net, Apache Commons IO — The Apache Software Foundation (NOTICE files below)",
@@ -47,6 +56,55 @@ COMPONENTS = {
     ],
 }
 
+# Every resolved runtime artifact (group:artifact) must match one of these; the value names the COMPONENTS entry that
+# covers it. Checked by --check.
+COVERAGE = [
+    (r"androidx\..*", "AndroidX / Jetpack"),
+    (r"org\.jetbrains\.kotlin:kotlin-(stdlib|stdlib-common|stdlib-jdk7|stdlib-jdk8|reflect)", "Kotlin standard library"),
+    (r"org\.jetbrains\.kotlinx:kotlinx-coroutines-.*", "kotlinx.coroutines"),
+    (r"com\.google\.accompanist:.*", "Accompanist"),
+    (r"com\.squareup\.(okhttp3|okio|retrofit2):.*", "OkHttp, Okio, Retrofit"),
+    (r"com\.google\.code\.gson:gson", "Gson"),
+    (r"com\.google\.guava:(guava|failureaccess|listenablefuture)", "Guava"),
+    (r"com\.google\.code\.findbugs:jsr305", "JSR-305 annotations"),
+    (r"com\.google\.errorprone:error_prone_annotations", "Error Prone annotations"),
+    (r"io\.coil-kt:.*", "Coil"),
+    (r"com\.hierynomus:(smbj|asn-one)", "SMBJ, ASN-One"),
+    (r"commons-net:commons-net", "Apache Commons Net"),
+    (r"commons-io:commons-io", "Apache Commons IO"),
+    (r"io\.ktor:.*", "Ktor"),
+    (r"com\.typesafe:config", "Typesafe Config"),
+    (r"org\.fusesource\.jansi:jansi", "Jansi"),
+    (r"org\.jetbrains:annotations", "JetBrains Java Annotations"),
+    (r"org\.jupnp:org\.jupnp(\.support)?", "jUPnP"),
+    (r"org\.slf4j:slf4j-(api|nop)", "SLF4J"),
+    (r"net\.engio:mbassador", "MBassador"),
+    (r"org\.checkerframework:checker-qual", "Checker Framework qualifiers"),
+    (r"org\.bouncycastle:bcprov-jdk18on", "Bouncy Castle"),
+    (r"com\.android\.tools:desugar_jdk_libs(_configuration)?", "desugar_jdk_libs"),
+]
+
+
+def check(deps_file):
+    """Lists resolved artifacts without a notice (and coverage entries naming no COMPONENTS item). Exit 1 on gaps."""
+    with open(deps_file, encoding="utf-8") as f:
+        found = sorted(set(m.group(1) for m in re.finditer(r"[-\\+] ([\w.-]+:[\w.-]+):", f.read())))
+    listed = "\n".join(i for items in COMPONENTS.values() for i in items)
+    missing = [ga for ga in found if not any(re.fullmatch(rx, ga) for rx, _ in COVERAGE)]
+    unnamed = sorted(set(name for _, name in COVERAGE if name.split(",")[0] not in listed))
+    for ga in found:
+        name = next((n for rx, n in COVERAGE if re.fullmatch(rx, ga)), None)
+        print(f"{ga:70} {name or 'MISSING'}")
+    if not found:
+        print("no dependencies found in", deps_file)
+        return 1
+    if missing or unnamed:
+        print("artifacts without a notice:", missing, "coverage names not in COMPONENTS:", unnamed)
+        return 1
+    print(f"OK: {len(found)} artifacts, all covered")
+    return 0
+
+
 FFMPEG = f"""This app uses code of FFmpeg (https://ffmpeg.org), licensed under the GNU Lesser General Public License
 version 2.1 or later. FFmpeg 7.1.5 (libavformat, libavcodec, libavutil, libswresample) is built unmodified from
 https://ffmpeg.org/releases/ffmpeg-7.1.5.tar.xz
@@ -58,7 +116,7 @@ release of this app. FFmpeg is a trademark of Fabrice Bellard, originator of the
 SEP = "\n\n" + "=" * 78 + "\n\n"
 
 
-def main():
+def render():
     parts = [f"""Folder Player Fork — open source notices
 
 This app is an unofficial personal fork of Folder Player (https://github.com/wyvern3000/Folder-Player), which is
@@ -84,11 +142,24 @@ from the upstream repository, where their SIL Open Font License texts are publis
     parts.append("GNU Lesser General Public License, version 2.1\n\n" + text("LGPL-2.1.txt"))
     parts.append("Common Development and Distribution License, version 1.0\n\n" + text("CDDL-1.0.txt"))
     parts.append("GNU General Public License, version 2, with the Classpath Exception\n\n" + text("GPL-2.0-with-classpath-exception.txt"))
+    return SEP.join(parts) + "\n"
+
+
+def main(argv):
+    if len(argv) == 2 and argv[0] == "--check":
+        return check(argv[1])
+    content = render()
+    if argv == ["--verify"]:
+        with open(OUT, encoding="utf-8") as f:
+            same = f.read() == content
+        print("notices asset is", "up to date" if same else "OUT OF DATE (run gen_notices.py)")
+        return 0 if same else 1
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8", newline="\n") as f:
-        f.write(SEP.join(parts) + "\n")
+        f.write(content)
     print("wrote", os.path.relpath(OUT, ROOT), os.path.getsize(OUT), "bytes")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main(sys.argv[1:]))
