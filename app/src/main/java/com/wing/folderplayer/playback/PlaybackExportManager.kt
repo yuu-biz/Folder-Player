@@ -87,8 +87,14 @@ object ExportCore {
         }
     }
 
-    /** What makes an exported file "the same track": source + path, plus size and mtime (a replaced file is new). */
-    fun identity(sourceUri: String, size: Long, lastModified: Long) = "$sourceUri|$size|$lastModified"
+    /**
+     * What makes an exported file "the same track": source + path and size. No mtime: FTP servers without MLST report
+     * it through LIST with a precision that changes as the file ages, which would export the same track again.
+     */
+    fun identity(sourceUri: String, size: Long) = "$sourceUri|$size"
+
+    /** Only locations this app wrote (content URI / absolute path) are valid index values. */
+    fun isOwnOutput(location: String) = location.startsWith("content://") || location.startsWith("/")
 
     /** [name], or "name (n).ext" with the smallest n >= 2 not in [taken] (compared case-insensitively). */
     fun uniqueName(name: String, taken: Set<String>): String {
@@ -220,11 +226,11 @@ class PlaybackExportManager(private val context: Context, private val player: Pl
         try {
             val fs = SourceRegistry.fileSystem(ref)
             val st = runInterruptible { fs.stat(ref.path) } ?: throw IOException("source file disappeared")
-            val identity = ExportCore.identity(key, st.size, st.lastModified)
+            val identity = ExportCore.identity(key, st.size)
             val index = loadIndex()
             val folder = ref.parent?.let { SourcePath.name(it.path) }?.ifBlank { null } ?: cfg.name
             val relDir = "${Environment.DIRECTORY_MUSIC}/${sanitize(settings.folderName)}/${sanitize(folder)}"
-            migrateLegacyEntry(index, "$key|${st.size}", identity)
+            dropForeignEntry(index, identity)
             if (ExportCore.alreadyExported(index, identity, st.size, store)) {
                 publish(ExportStatus(key, ExportStatus.State.SKIPPED_DUPLICATE, ref.name))
                 return
@@ -262,13 +268,12 @@ class PlaybackExportManager(private val context: Context, private val player: Pl
         if (Build.VERSION.SDK_INT >= 29) MediaStoreExportStore() else FileExportStore(Environment.getExternalStorageDirectory())
 
     /**
-     * Index entries of earlier versions were keyed "uri|size". Keep only those that point at a file we wrote
-     * ourselves (content URI / absolute path); the ones recorded for a same-named file found in Music/ are dropped.
+     * Earlier versions also recorded a same-named file found in Music/ (stored as a relative path) as "already
+     * exported". Such entries are dropped, so the track is exported once more under a free name.
      */
-    private fun migrateLegacyEntry(index: MutableMap<String, String>, legacyKey: String, identity: String) {
-        val old = index.remove(legacyKey) ?: return
-        if (old.startsWith("content://") || old.startsWith("/")) index.putIfAbsent(identity, old)
-        saveIndex(index)
+    private fun dropForeignEntry(index: MutableMap<String, String>, identity: String) {
+        val v = index[identity] ?: return
+        if (!ExportCore.isOwnOutput(v)) { index.remove(identity); saveIndex(index) }
     }
 
     @androidx.annotation.RequiresApi(29)
