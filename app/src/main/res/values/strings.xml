@@ -179,7 +179,7 @@
     <string name="sync_done">synced (added: %1$d, total: %2$d)</string>
     <string name="sync_remote_broken">remote fav.json is broken (%1$s); nothing was written. Use \"Replace remote\" to overwrite it.</string>
     <string name="sync_remote_read_only">remote is read-only (%1$s); merged into local only: %2$d</string>
-    <string name="sync_remote_unreadable_entries">remote file has %1$d entries this version cannot read; it was not rewritten (merged into local: %2$d). Use \"Replace remote\" to overwrite it.</string>
+    <string name="sync_remote_unreadable_entries">remote file not rewritten: it holds entries this version cannot read (%1$d); merged into local: %2$d. Use \"Replace remote\" to overwrite it.</string>
     <string name="sync_failed">sync failed: %1$s</string>
     <string name="ai_not_configured">AI endpoint, key or model not configured</string>
     <string name="ai_lyrics_not_found">AI did not find these lyrics</string>
