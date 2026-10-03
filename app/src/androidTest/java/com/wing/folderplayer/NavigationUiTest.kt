@@ -4,6 +4,7 @@ import android.content.Intent
 import android.media.AudioManager
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -82,6 +83,12 @@ class NavigationUiTest : UiTestBase() {
         until(5_000, "list") { exists("file_list") }
     }
 
+    /**
+     * On screen, not only in the tree: rows scrolled away can stay in the lazy list's reuse pool (deactivated, not
+     * placed) while the list stays composed — e.g. under the full player.
+     */
+    private fun shown(tag: String) = runCatching { node(tag).assertIsDisplayed(); true }.getOrDefault(false)
+
     private fun scrollList(index: Int) {
         compose.onNodeWithTag("file_list").performScrollToIndex(index)
         compose.waitForIdle()
@@ -117,7 +124,8 @@ class NavigationUiTest : UiTestBase() {
     @Test fun n02_backFromThePlayerKeepsFolderScrollPositionAndPlayback() {
         open("$fx/Many")
         scrollList(150)
-        until(5_000, "row 150") { exists("item_Folder 150") }
+        until(5_000, "row 150") { shown("item_Folder 150") }
+        assertFalse(shown("item_Folder 000"))
         click("btn_shuffle")
         until(5_000, "full player") { playerOpen() }
         until(15_000, "a folder of Many playing") { playing("Many") }
@@ -125,8 +133,8 @@ class NavigationUiTest : UiTestBase() {
         pressBack()
         until(5_000, "browser") { browserShown() }
         assertEquals("$fx/Many", path)
-        assertTrue("same scroll position", exists("item_Folder 150"))
-        assertFalse(exists("item_Folder 000"))
+        assertTrue("same scroll position", shown("item_Folder 150"))
+        assertFalse(shown("item_Folder 000"))
         Thread.sleep(1_000)
         assertTrue("still playing", ps.isPlaying)
         assertEquals(id, ps.currentMediaId)
@@ -279,8 +287,8 @@ class NavigationUiTest : UiTestBase() {
         until(5_000, "row 200") { exists("item_Folder 200") }
         viaSettingsAndBack()
         assertEquals("$fx/Many", path)
-        assertTrue("scroll position kept", exists("item_Folder 200"))
-        assertFalse(exists("item_Folder 000"))
+        assertTrue("scroll position kept", shown("item_Folder 200"))
+        assertFalse(shown("item_Folder 000"))
 
         click("btn_view_mode")
         until(5_000, "grid") { exists("file_grid") }
