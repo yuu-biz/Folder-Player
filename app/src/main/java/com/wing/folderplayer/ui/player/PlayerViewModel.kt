@@ -34,6 +34,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
@@ -120,6 +124,17 @@ class PlayerViewModel : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
+
+    // Parts of uiState for screens that must not recompose with the position updates (about once a second).
+    private fun <R> part(f: (PlayerUiState) -> R): StateFlow<R> =
+        _uiState.map(f).distinctUntilChanged().stateIn(viewModelScope, SharingStarted.Eagerly, f(_uiState.value))
+    val hasTrack: StateFlow<Boolean> = part { it.hasTrack }
+    val currentMediaId: StateFlow<String?> = part { it.currentMediaId }
+    val allPlaylists: StateFlow<List<Playlist>> = part { it.allPlaylists }
+    val coverDisplaySize: StateFlow<String> = part { it.coverDisplaySize }
+    val backgroundStyle: StateFlow<String> = part { it.backgroundStyle }
+    val miniState: StateFlow<MiniPlayerState> = part { it.mini() }
+    val progressFraction: StateFlow<Float> = part { if (it.duration > 1) (it.currentPosition.toFloat() / it.duration).coerceIn(0f, 1f) else 0f }
 
     private val exceptionHandler = kotlinx.coroutines.CoroutineExceptionHandler { _, throwable ->
         android.util.Log.e("PlayerViewModel", "Coroutine failure", throwable)

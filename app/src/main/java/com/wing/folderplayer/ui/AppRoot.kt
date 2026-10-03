@@ -2,8 +2,9 @@ package com.wing.folderplayer.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -30,6 +31,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -43,8 +45,6 @@ import com.wing.folderplayer.ui.player.MainPlayerScreen
 import com.wing.folderplayer.ui.player.MiniPlayer
 import com.wing.folderplayer.ui.player.PlayerViewModel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 
 /** Pages of the app. The player is not a page: it is shown over them (mini ⇄ full). */
 object Routes {
@@ -77,7 +77,7 @@ fun rememberPlayerSheetState(): PlayerSheetState = rememberSaveable(saver = Play
  * The ViewModels are the activity's (tests and the settings screen share them); playback lives in MusicService and is
  * never started, stopped or re-queued by opening or closing anything here.
  */
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalAnimationApi::class)
 @Composable
 fun AppRoot(
     playerViewModel: PlayerViewModel,
@@ -91,12 +91,10 @@ fun AppRoot(
 
     // Narrow views of the player state: the full state changes every second while playing and must not recompose the
     // browser or this shell.
-    val hasTrack by remember(playerViewModel) { playerViewModel.uiState.map { it.hasTrack }.distinctUntilChanged() }
-        .collectAsState(playerViewModel.uiState.value.hasTrack)
-    val allPlaylists by remember(playerViewModel) { playerViewModel.uiState.map { it.allPlaylists }.distinctUntilChanged() }
-        .collectAsState(playerViewModel.uiState.value.allPlaylists)
+    val hasTrack by playerViewModel.hasTrack.collectAsState()
+    val allPlaylists by playerViewModel.allPlaylists.collectAsState()
     LaunchedEffect(playerViewModel, browserViewModel) {
-        playerViewModel.uiState.map { it.currentMediaId }.distinctUntilChanged().collect { browserViewModel.updateCurrentlyPlaying(it) }
+        playerViewModel.currentMediaId.collect { browserViewModel.updateCurrentlyPlaying(it) }
     }
 
     val entry by navController.currentBackStackEntryAsState()
@@ -124,10 +122,9 @@ fun AppRoot(
     val openPlayer = remember(sheet) { { sheet.expand() } }
     val collapsePlayer = remember(sheet) { { sheet.collapse() } }
 
-    val fullPlayer = remember { MutableTransitionState(sheet.expanded) }
-    fullPlayer.targetState = sheet.expanded
+    val fullPlayer = updateTransition(sheet.expanded, label = "fullPlayer")
     // Fully open and settled: the pages underneath are not drawn.
-    val covered = fullPlayer.currentState && fullPlayer.isIdle
+    val covered = fullPlayer.currentState && fullPlayer.targetState && !fullPlayer.isRunning
     val miniVisible = hasTrack && onBrowser
 
     Box(Modifier.fillMaxSize()) {
@@ -135,6 +132,7 @@ fun AppRoot(
             Modifier
                 .fillMaxSize()
                 .graphicsLayer { alpha = if (covered) 0f else 1f }
+                .testTag("app_pages")
                 // Hidden from TalkBack while the full player is in front.
                 .then(if (sheet.expanded) Modifier.clearAndSetSemantics { } else Modifier)
         ) {
@@ -161,15 +159,16 @@ fun AppRoot(
                         )
                     }
                     composable(Routes.SETTINGS) {
-                        settings { navController.popBackStack() }
+                        // Guarded: a double tap on ← must not pop the browser as well (empty page).
+                        settings { if (navController.currentDestination?.route == Routes.SETTINGS) navController.popBackStack() }
                     }
                 }
             }
             if (miniVisible) MiniPlayer(playerViewModel, onOpen = openPlayer)
         }
 
-        AnimatedVisibility(
-            visibleState = fullPlayer,
+        fullPlayer.AnimatedVisibility(
+            visible = { it },
             enter = slideInVertically(tween(250)) { it / 4 } + fadeIn(tween(200)),
             exit = slideOutVertically(tween(220)) { it / 4 } + fadeOut(tween(180)),
         ) {
