@@ -29,3 +29,27 @@ no system per-app language).
 
 Fix: on Android 13+ read the language from `LocaleManager.applicationLocales` (and stop wrapping the context there),
 keeping the preference only for older versions.
+
+Both issues above are still open; the navigation redesign (0.6.0-dev1, [UI_REDESIGN.md](UI_REDESIGN.md)) does not
+touch them.
+
+## Fixed by the navigation redesign (0.6.0-dev1)
+
+- Tapping the playback notification while the app was open started a second app screen on top of the first (with its
+  own player connection); Back then led to the old screen. The tap now brings the running screen forward and opens the
+  full player.
+- Settings and the browser were recomposed with every player state update (about once a second during playback),
+  because they read the whole player state. Found by reading the code, not measured; whether it contributed to the
+  reported stutter is unknown.
+- The folder-image index (`artwork-index.json`) was rewritten on the main thread for every folder image found while
+  scrolling; it is now written on an I/O thread, at most once per half second. Also not measured as a cause of the
+  stutter.
+
+## Navigation redesign: open points (stage 1)
+
+- Opening a folder from search results or the favourites list leaves that list; Back then goes to the folder's parent
+  instead of back to the results (as before the redesign).
+- Settings shows no mini player.
+- No drag gestures between mini and full player yet (stage 2, see [UI_REDESIGN.md](UI_REDESIGN.md)).
+- How the new navigation feels on a real phone (smoothness, reachability) has not been checked yet; the earlier
+  report of stutter when swiping between pages is not explained, so it is not claimed to be fixed.

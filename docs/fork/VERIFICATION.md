@@ -109,6 +109,27 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - The full suites on API 26 / 33 / 36, the 16 KB-page image and ARM translation on `bf18888` (only API 34 ran all
   suites; API 26 ran `JapaneseUiTest` and `CastCleanupTest`).
 - Real HyperOS hardware (debugging there waived for now), a NAS (postponed), SD cards.
+- Navigation redesign 0.6.0-dev1 on a real phone: feel of opening / closing the player and of the browser, notification
+  tap, Back gesture, TalkBack (see 5.5).
+
+### 5.5 Navigation redesign, stage 1 (`feature/player-navigation`, 2026-10-04)
+
+Browser-based navigation with mini / full player ([UI_REDESIGN.md](UI_REDESIGN.md)). App code as of `285e6a7`
+(later commits: tests and documentation only).
+
+| Check | Result |
+|---|---|
+| `assembleDebug assembleDebugAndroidTest lintDebug testDebugUnitTest` | exit 0; lint 0 errors, 61 warnings (same count as before, none in new code); JVM tests 120, 0 failures, 21 skipped (fixture-server tests). One earlier run had `CastSessionOrderTest#lateFailureOfAnOlderCastKeepsTheNewerSession` fail with a `SocketTimeoutException` on a localhost HEAD request while lint and assemble ran in parallel; alone 3/3 passed, and the next full run passed (cast code is unchanged) |
+| `StringResourcesParityTest` with the new strings | passed (part of the JVM run); `gen_translations.py` writes 230 strings per language |
+| `NavigationUiTest` API 34 (new) | 11/11: browser as start page and playback without the player page; Back from the player keeps folder, scroll position and playback; search / favourites state after player and Settings; mini player tap vs. play/pause; 6× open/close keeps track, queue, position and the number of session controllers (also across recreation); Settings from every browser level and back; Back chain folder → source root → source list → system (no app handler left on the source list, playback continues after leaving); Back closes sheet, menu, keyboard (on-screen keyboard shown and checked), player, Settings in that order; failed track and an unreachable server (loading) still open / close; notification intent opens the player in the same activity (one resumed activity, same controller count) and Back lands on the browser, not Settings; long Japanese title, 320 dp width, landscape, last row above the mini player |
+| Other suites API 34 | `BrowserUiTest` 5/5, `LibraryUiTest` 5/5, `SyncTagsUiTest` 2/2, `AiNfoUiTest` 7/7, `FontUiTest` 4/4, `LicensesUiTest` 1/1, `JapaneseUiTest` 3/3, `SourceUiTest` 2/2, `SafTest` 4/4 (with reboot sequence), `NotificationSwitchTest` 2/2, `PlaybackServiceTest` 8/8, `LocalAccessTest` 5/5 permission states, `MigrationTest` 1/1, `SourceRegistryTest` 3/3, `NetworkPlaybackTest` 2/2, `NativeDecodeTest` 4/4, `RetryExportTest` 5/5, `CastCleanupTest` 1/1, `NativeIoErrorTest` 4/4 |
+| Test changes | page-swipe helpers replaced (Back, ⋮ → Settings, mini player); `BrowserUiTest` forgets the LateCover index entry a previous run left (a14 was not repeatable on the same app data) and samples only fully visible tiles (a18); `SafTest` opens the source list itself (the browser starts on the last folder) |
+| Order dependence seen (not changed) | `RetryExportTest#sameNameFiles…` fails when run right after `MigrationTest` without `PlaybackServiceTest` in between: the migrated data switches next-folder playback on and playback moves past the track. In the default `run-suites.sh` order it passes (5/5 after resetting the preference the same way) |
+| Signed release build `-PfpVersionName=0.6.0-dev1 -PfpVersionCode=60001` | `FolderPlayerFork-0.6.0-dev1.apk`, SHA-256 `5729fc176b300171bb68e23ccc3b500c0785de6d20750e1d232230a748cfde37`; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; signature v2; not debuggable; arm64-v8a + x86_64; `zipalign -c -P 16` and `check-16k.sh` PASS |
+| Update over v0.5.2-rc1 (emulator API 34) | rc1 draft APK (SHA-256 `523a0793…7d5d8e`) installed, one favourite added and Japanese chosen; 0.6.0-dev1 installed with `adb install -r`: versionCode 50201 → 60001, favourite and language kept, opens on the browser; song tap → full player, Back → browser with mini player |
+
+Not checked: other API levels, a real phone (feel / smoothness of the new navigation, real notification tap, TalkBack
+reading order), and the playlist overlay's Back in landscape (code path only).
 
 ### 5.4 First release candidate `v0.5.2-rc1` (tag at `771fd13`, docs-only after `bf18888`)
 
