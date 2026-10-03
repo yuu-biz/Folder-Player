@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
@@ -37,40 +38,54 @@ import com.wing.folderplayer.cast.CastController
 
 /** Folder image first; if it cannot be loaded the embedded picture; otherwise the placeholder. */
 @Composable
-fun CoverImage(uiState: PlayerUiState, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop) {
+fun CoverImage(
+    uiState: PlayerUiState,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop,
+    tag: String = "player_cover",
+    placeholderIconSize: Dp = 80.dp,
+) = CoverImage(uiState.coverUri, uiState.coverFallback, modifier, contentScale, tag, placeholderIconSize)
+
+@Composable
+fun CoverImage(
+    primary: Any?,
+    fallback: ByteArray?,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop,
+    tag: String = "player_cover",
+    placeholderIconSize: Dp = 80.dp,
+) {
     val context = LocalContext.current
-    val primary = uiState.coverUri
-    val fallback = uiState.coverFallback
     if (primary == null && fallback == null) {
-        CoverPlaceholder(modifier)
+        CoverPlaceholder(modifier, placeholderIconSize)
         return
     }
     SubcomposeAsyncImage(
         model = ImageRequest.Builder(context).data(primary ?: fallback).crossfade(true).build(),
         contentDescription = stringResource(R.string.player_cover),
         contentScale = contentScale,
-        modifier = modifier.testTag("player_cover"),
+        modifier = modifier.testTag(tag),
         error = {
             if (fallback != null && primary != null) {
                 SubcomposeAsyncImage(
                     model = ImageRequest.Builder(context).data(fallback).build(),
                     contentDescription = null,
                     contentScale = contentScale,
-                    error = { CoverPlaceholder(Modifier.fillMaxSize()) },
+                    error = { CoverPlaceholder(Modifier.fillMaxSize(), placeholderIconSize) },
                     modifier = Modifier.fillMaxSize(),
                 )
-            } else CoverPlaceholder(Modifier.fillMaxSize())
+            } else CoverPlaceholder(Modifier.fillMaxSize(), placeholderIconSize)
         },
     )
 }
 
 @Composable
-fun CoverPlaceholder(modifier: Modifier) {
+fun CoverPlaceholder(modifier: Modifier, iconSize: Dp = 80.dp) {
     Box(
         modifier = modifier.background(Brush.linearGradient(listOf(Color(0xFF333333), Color(0xFF111111)))),
         contentAlignment = Alignment.Center
     ) {
-        Icon(Icons.Default.MusicNote, contentDescription = null, modifier = Modifier.size(80.dp), tint = Color.White.copy(alpha = 0.2f))
+        Icon(Icons.Default.MusicNote, contentDescription = null, modifier = Modifier.size(iconSize), tint = Color.White.copy(alpha = 0.2f))
     }
 }
 
