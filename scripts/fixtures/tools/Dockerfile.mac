@@ -1,0 +1,12 @@
+# Builds Monkey's Audio "mac" (3-Clause BSD) to encode the .ape test fixture. Not part of the app.
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl unzip cmake g++ make && rm -rf /var/lib/apt/lists/*
+ARG MAC_ZIP=MAC_1327_SDK.zip
+RUN curl -fsSL -o /tmp/mac.zip https://monkeysaudio.com/files/${MAC_ZIP} \
+ && sha256sum /tmp/mac.zip \
+ && mkdir /src && cd /src && unzip -q /tmp/mac.zip \
+ && cmake -S /src -B /build -DCMAKE_BUILD_TYPE=Release >/dev/null \
+ && cmake --build /build -j"$(nproc)" >/dev/null \
+ && find /build -maxdepth 2 -type f -name mac -exec cp {} /usr/local/bin/mac \; \
+ && test -x /usr/local/bin/mac
+ENTRYPOINT ["/usr/local/bin/mac"]

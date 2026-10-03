@@ -1,0 +1,22 @@
+# Protocol fixture servers. Start: scripts/fixtures/servers.sh up   (needs build/fixture from make_fixture.py)
+name: fp-fixtures
+services:
+  samba:
+    build: ./servers/samba
+    volumes: ["../../build/fixture:/fixture:ro"]
+    ports: ["14445:445"]
+  ftp:
+    build: ./servers/ftp
+    volumes: ["../../build/fixture:/fixture:ro", "../../build/fixture-servers/certs:/certs:ro"]
+    ports: ["2121-2124:2121-2124", "30000-30079:30000-30079"]
+  webdav:
+    build: ./servers/webdav
+    volumes: ["../../build/fixture:/fixture:ro"]
+    ports: ["18580:80"]
+  renderer:
+    build: ./servers/renderer
+    command: ["-f", "FP Fixture Renderer", "-I", "eth0", "--logfile", "stdout",
+              "--gstout-audiopipe", "audioconvert ! audioresample ! fakesink sync=true"]
+networks:
+  default:
+    name: fp-fixtures
