@@ -160,7 +160,7 @@ jobs:
           "$BT/apksigner" verify --min-sdk-version 26 --print-certs "$APK" > signers.txt
           cat signers.txt
           [ "$(grep -c '^Signer #[0-9]* certificate DN' signers.txt)" = 1 ] || { echo "::error::expected one signer"; exit 1; }
-          if grep -q 'certificate DN: C=US, O=Android, CN=Android Debug' signers.txt; then echo "::error::debug-signed"; exit 1; fi
+          if grep -q 'CN=Android Debug' signers.txt; then echo "::error::debug-signed"; exit 1; fi
           CERT=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' signers.txt)
           [ -n "$CERT" ] || { echo "::error::no certificate digest"; exit 1; }
           "$BT/aapt2" dump badging "$APK" > badging.txt
