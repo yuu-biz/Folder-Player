@@ -4,7 +4,8 @@ with added features (SMB/FTP/SAF sources, local cover fix for Android 13+, and m
 
 - Installs as a separate app (`com.wing.folderplayer.fork`, "Folder Player Fork") next to the original app.
 - Android 8.0 or newer; native decoders for arm64-v8a and x86_64.
-- {SIGNING_NOTE}
+- Signed with the fork's release key, certificate SHA-256 `{CERT_SHA256}`. Updates install only over builds signed
+  with that certificate.
 
 ## Licenses
 
