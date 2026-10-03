@@ -1,7 +1,8 @@
 name: Release APK
 
-# Push a tag like v0.5.1 to build the APK and publish it as a GitHub release.
-# "Run workflow" (workflow_dispatch) builds the same APK as a workflow artifact without creating a release.
+# Push a tag like v0.5.1 to test, build, sign and publish the APK as a GitHub release.
+# "Run workflow" (workflow_dispatch) runs the same checks and keeps the APK as a workflow artifact; it never creates a
+# release.
 on:
   push:
     tags: ['v*']
@@ -9,6 +10,11 @@ on:
 
 permissions:
   contents: write
+
+# Never run two builds of the same ref at once (a re-run must not race a still running upload).
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   NDK_VERSION: 28.2.13676358
@@ -19,9 +25,59 @@ env:
 jobs:
   apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+
+      - name: Version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            # vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-<label>N (pre-release N = 1..98).
+            # versionCode depends only on the tag, so a re-run builds the same version.
+            if [[ ! "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)(-[A-Za-z.]*([1-9][0-9]?))?$ ]]; then
+              echo "::error::tag $GITHUB_REF_NAME is not vMAJOR.MINOR.PATCH[-labelN]"; exit 1
+            fi
+            M=${BASH_REMATCH[1]}; m=${BASH_REMATCH[2]}; p=${BASH_REMATCH[3]}; pre=${BASH_REMATCH[5]:-99}
+            if [ -n "${BASH_REMATCH[4]}" ] && [ "$pre" -gt 98 ]; then
+              echo "::error::pre-release number must be 1..98"; exit 1
+            fi
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+            echo "VERSION_CODE=$(( ((10#$M * 100 + 10#$m) * 100 + 10#$p) * 100 + 10#$pre ))" >> "$GITHUB_ENV"
+          else
+            echo "VERSION=0.0.0-ci.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+            echo "VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          fi
+
+      - name: Signing secrets
+        env:
+          FP_KEYSTORE_BASE64: ${{ secrets.FP_KEYSTORE_BASE64 }}
+          FP_KEYSTORE_PASSWORD: ${{ secrets.FP_KEYSTORE_PASSWORD }}
+          FP_KEY_ALIAS: ${{ secrets.FP_KEY_ALIAS }}
+          FP_KEY_PASSWORD: ${{ secrets.FP_KEY_PASSWORD }}
+        run: |
+          missing=""
+          for v in FP_KEYSTORE_BASE64 FP_KEYSTORE_PASSWORD FP_KEY_ALIAS FP_KEY_PASSWORD; do
+            [ -n "${!v}" ] || missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then
+            # Releases are only ever published signed with the release key.
+            echo "::error::missing signing secrets:$missing (see docs/fork/RELEASE.md)"; exit 1
+          fi
+
+      # Fail before the long native build if a published release for this tag already exists: its APK, checksums
+      # and notes must never be replaced by a different build.
+      - name: Existing release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --json isDraft > release.json 2>/dev/null; then
+            if [ "$(jq -r .isDraft release.json)" = "false" ]; then
+              echo "::error::release $GITHUB_REF_NAME is already published; push a new tag instead of re-running"; exit 1
+            fi
+            echo "a draft from an unfinished run exists; it will be replaced"
+          fi
+          rm -f release.json
 
       - name: JetBrains JDK 21
         run: |
@@ -36,6 +92,7 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
             "platforms;android-34" "build-tools;34.0.0" "ndk;$NDK_VERSION" "cmake;3.22.1" > /dev/null
+          echo "BT=$ANDROID_HOME/build-tools/34.0.0" >> "$GITHUB_ENV"
 
       - name: Cache FFmpeg build
         uses: actions/cache@v4
@@ -57,42 +114,64 @@ jobs:
       - name: FFmpeg (LGPL, from the pinned source tarball)
         run: bash native/build-ffmpeg.sh
 
-      - name: Version
+      # Gate: nothing is built for release unless the JVM tests and lint pass. (The real-server protocol tests and the
+      # emulator suites need the Docker fixtures and run locally, see docs/fork/VERIFICATION.md.)
+      - name: Unit tests and lint
         run: |
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then VERSION="${GITHUB_REF_NAME#v}"; else VERSION="0.0.0-ci.${GITHUB_RUN_NUMBER}"; fi
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          chmod +x gradlew
+          bash scripts/wsl-gradle.sh --no-daemon testDebugUnitTest lintDebug
 
-      - name: Build
+      # Gate: every resolved runtime library has a notice in the app, and the notices asset is current.
+      - name: License notices
+        run: |
+          bash scripts/wsl-gradle.sh --no-daemon -q :app:dependencies --configuration releaseRuntimeClasspath > deps.txt
+          bash scripts/wsl-gradle.sh --no-daemon -q :app:dependencies --configuration coreLibraryDesugaring >> deps.txt
+          python3 scripts/licenses/gen_notices.py --check deps.txt
+          python3 scripts/licenses/gen_notices.py --verify
+          rm -f deps.txt
+
+      - name: Test and lint reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-${{ env.VERSION }}
+          path: |
+            app/build/reports
+            app/build/test-results
+
+      - name: Build and sign
         env:
           FP_KEYSTORE_BASE64: ${{ secrets.FP_KEYSTORE_BASE64 }}
           FP_KEYSTORE_PASSWORD: ${{ secrets.FP_KEYSTORE_PASSWORD }}
           FP_KEY_ALIAS: ${{ secrets.FP_KEY_ALIAS }}
           FP_KEY_PASSWORD: ${{ secrets.FP_KEY_PASSWORD }}
         run: |
-          chmod +x gradlew
-          PROPS="-PfpVersionName=$VERSION -PfpVersionCode=$VERSION_CODE"
-          if [ -n "$FP_KEYSTORE_BASE64" ]; then
-            echo "$FP_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-            printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
-              "$RUNNER_TEMP/release.jks" "$FP_KEYSTORE_PASSWORD" "$FP_KEY_ALIAS" "$FP_KEY_PASSWORD" > keystore.properties
-            bash scripts/wsl-gradle.sh --no-daemon $PROPS assembleRelease
-            cp app/build/outputs/apk/release/app-release.apk "FolderPlayerFork-$VERSION.apk"
-            echo "SIGNING=release" >> "$GITHUB_ENV"
-          else
-            echo "::warning::No signing secrets: publishing a debug-signed APK"
-            bash scripts/wsl-gradle.sh --no-daemon $PROPS assembleDebug
-            cp app/build/outputs/apk/debug/app-debug.apk "FolderPlayerFork-$VERSION-debug.apk"
-            echo "SIGNING=debug" >> "$GITHUB_ENV"
-          fi
-          rm -f keystore.properties "$RUNNER_TEMP/release.jks"
-          sha256sum FolderPlayerFork-*.apk > SHA256SUMS.txt
-          cat SHA256SUMS.txt
+          trap 'rm -f keystore.properties "$RUNNER_TEMP/release.jks"' EXIT
+          echo "$FP_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$RUNNER_TEMP/release.jks" "$FP_KEYSTORE_PASSWORD" "$FP_KEY_ALIAS" "$FP_KEY_PASSWORD" > keystore.properties
+          bash scripts/wsl-gradle.sh --no-daemon -PfpVersionName="$VERSION" -PfpVersionCode="$VERSION_CODE" assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "FolderPlayerFork-$VERSION.apk"
 
-      - name: 16 KB page check
+      - name: Verify APK
         run: |
-          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$BT/zipalign" -c -P 16 4 FolderPlayerFork-*.apk
+          APK="FolderPlayerFork-$VERSION.apk"
+          # Signed with exactly one release certificate (APK signature scheme v2+), not debuggable, right version.
+          "$BT/apksigner" verify --min-sdk-version 26 --print-certs "$APK" > signers.txt
+          cat signers.txt
+          [ "$(grep -c '^Signer #[0-9]* certificate DN' signers.txt)" = 1 ] || { echo "::error::expected one signer"; exit 1; }
+          if grep -q 'certificate DN: C=US, O=Android, CN=Android Debug' signers.txt; then echo "::error::debug-signed"; exit 1; fi
+          CERT=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' signers.txt)
+          [ -n "$CERT" ] || { echo "::error::no certificate digest"; exit 1; }
+          "$BT/aapt2" dump badging "$APK" > badging.txt
+          if grep -q "application-debuggable" badging.txt; then echo "::error::APK is debuggable"; exit 1; fi
+          grep -q "versionCode='$VERSION_CODE' versionName='$VERSION'" badging.txt \
+            || { echo "::error::version mismatch: $(head -1 badging.txt)"; exit 1; }
+          "$BT/zipalign" -c -P 16 4 "$APK"
+          echo "CERT_SHA256=$CERT" >> "$GITHUB_ENV"
+          sha256sum "$APK" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          rm -f signers.txt badging.txt
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -102,24 +181,22 @@ jobs:
             FolderPlayerFork-*.apk
             SHA256SUMS.txt
 
+      # Notes, APK and checksums go up together into a draft that only becomes visible once everything is attached.
       - name: GitHub release
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "$SIGNING" = "debug" ]; then
-            SIGNING_NOTE="This build is signed with a temporary debug key (no release key configured), so it cannot be installed over a build signed with a different key."
-          else
-            SIGNING_NOTE="Signed with the fork's release key."
-          fi
-          sed -e "s|{VERSION_TAG}|$GITHUB_REF_NAME|g" -e "s|{VERSION}|$VERSION|g" -e "s|{SIGNING_NOTE}|$SIGNING_NOTE|" \
+          sed -e "s|{VERSION_TAG}|$GITHUB_REF_NAME|g" -e "s|{VERSION}|$VERSION|g" -e "s|{CERT_SHA256}|$CERT_SHA256|g" \
             -e "s|{REPO}|$GITHUB_SERVER_URL/$GITHUB_REPOSITORY|g" \
             .github/release-notes.md > notes.md
           { echo; echo '```'; cat SHA256SUMS.txt; echo '```'; } >> notes.md
+          if grep -q '{[A-Z_]*}' notes.md; then echo "::error::unreplaced placeholder in notes"; exit 1; fi
           cp native/src-cache/ffmpeg-7.1.5.tar.xz .
-          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" FolderPlayerFork-*.apk SHA256SUMS.txt ffmpeg-7.1.5.tar.xz --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" FolderPlayerFork-*.apk SHA256SUMS.txt ffmpeg-7.1.5.tar.xz \
-              --title "Folder Player Fork $VERSION" --notes-file notes.md
+          if gh release view "$GITHUB_REF_NAME" --json isDraft > release.json 2>/dev/null; then
+            [ "$(jq -r .isDraft release.json)" = "true" ] || { echo "::error::release was published meanwhile"; exit 1; }
+            gh release delete "$GITHUB_REF_NAME" --yes
           fi
+          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "Folder Player Fork $VERSION" --notes-file notes.md \
+            "FolderPlayerFork-$VERSION.apk" SHA256SUMS.txt ffmpeg-7.1.5.tar.xz
+          gh release edit "$GITHUB_REF_NAME" --draft=false
