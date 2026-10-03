@@ -5,6 +5,7 @@ import androidx.core.content.edit
 import android.content.ContentValues
 import android.content.Context
 import android.media.MediaScannerConnection
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.StatFs
@@ -85,6 +86,73 @@ object ExportCore {
             throw e
         }
     }
+
+    /** What makes an exported file "the same track": source + path, plus size and mtime (a replaced file is new). */
+    fun identity(sourceUri: String, size: Long, lastModified: Long) = "$sourceUri|$size|$lastModified"
+
+    /** [name], or "name (n).ext" with the smallest n >= 2 not in [taken] (compared case-insensitively). */
+    fun uniqueName(name: String, taken: Set<String>): String {
+        val lower = taken.mapTo(HashSet()) { it.lowercase() }
+        if (name.lowercase() !in lower) return name
+        val dot = name.lastIndexOf('.').takeIf { it > 0 } ?: name.length
+        val stem = name.substring(0, dot)
+        val ext = name.substring(dot)
+        var n = 2
+        while ("$stem ($n)$ext".lowercase() in lower) n++
+        return "$stem ($n)$ext"
+    }
+
+    /** Only our own recorded output counts as a duplicate; a file that merely has the same name and size does not. */
+    fun alreadyExported(index: Map<String, String>, identity: String, size: Long, store: ExportStore): Boolean =
+        index[identity]?.let { store.exists(it, size) } == true
+
+    /** Publishes [part] under [relDir] with a free name; never replaces an existing file. Returns the stored location. */
+    fun publish(part: File, relDir: String, name: String, store: ExportStore): String {
+        var last: IOException? = null
+        repeat(3) {
+            try {
+                return store.write(part, relDir, uniqueName(name, store.names(relDir)))
+            } catch (e: java.nio.file.FileAlreadyExistsException) {
+                last = e // created concurrently by someone else: pick the next free name
+            }
+        }
+        throw last ?: IOException("no free name in $relDir")
+    }
+}
+
+/** Where exports go: the shared Music collection. Locations are opaque strings (content URI or absolute path). */
+interface ExportStore {
+    /** True when [location] (as returned by [write]) still exists, is complete and has [size] bytes. */
+    fun exists(location: String, size: Long): Boolean
+    /** Display names currently present in [relDir]. */
+    fun names(relDir: String): Set<String>
+    /** Stores [part] as [relDir]/[name]; throws FileAlreadyExistsException instead of replacing a file. */
+    fun write(part: File, relDir: String, name: String): String
+}
+
+/** Plain files below [root] (Android 9 and older; unit tests). */
+class FileExportStore(private val root: File) : ExportStore {
+    override fun exists(location: String, size: Long): Boolean {
+        val f = File(location)
+        return f.isAbsolute && f.isFile && f.length() == size
+    }
+
+    override fun names(relDir: String): Set<String> = File(root, relDir).list()?.toSet() ?: emptySet()
+
+    override fun write(part: File, relDir: String, name: String): String {
+        val dir = File(root, relDir).apply { mkdirs() }
+        val out = File(dir, name)
+        if (out.exists()) throw java.nio.file.FileAlreadyExistsException(out.path)
+        val tmp = File(dir, ".$name.part")
+        try {
+            part.copyTo(tmp, overwrite = true)
+            // Without REPLACE_EXISTING the move fails rather than replacing a file that appeared meanwhile.
+            java.nio.file.Files.move(tmp.toPath(), out.toPath())
+        } finally {
+            tmp.delete()
+        }
+        return out.absolutePath
+    }
 }
 
 /**
@@ -152,17 +220,12 @@ class PlaybackExportManager(private val context: Context, private val player: Pl
         try {
             val fs = SourceRegistry.fileSystem(ref)
             val st = runInterruptible { fs.stat(ref.path) } ?: throw IOException("source file disappeared")
-            val dedupKey = "$key|${st.size}"
+            val identity = ExportCore.identity(key, st.size, st.lastModified)
             val index = loadIndex()
             val folder = ref.parent?.let { SourcePath.name(it.path) }?.ifBlank { null } ?: cfg.name
             val relDir = "${Environment.DIRECTORY_MUSIC}/${sanitize(settings.folderName)}/${sanitize(folder)}"
-            if (index[dedupKey] != null && outputExists(relDir, ref.name, st.size)) {
-                publish(ExportStatus(key, ExportStatus.State.SKIPPED_DUPLICATE, ref.name))
-                return
-            }
-            if (outputExists(relDir, ref.name, st.size)) {
-                index[dedupKey] = "$relDir/${ref.name}"
-                saveIndex(index)
+            migrateLegacyEntry(index, "$key|${st.size}", identity)
+            if (ExportCore.alreadyExported(index, identity, st.size, store)) {
                 publish(ExportStatus(key, ExportStatus.State.SKIPPED_DUPLICATE, ref.name))
                 return
             }
@@ -170,8 +233,9 @@ class PlaybackExportManager(private val context: Context, private val player: Pl
             val free = minOf(StatFs(context.cacheDir.path).availableBytes, StatFs(Environment.getExternalStorageDirectory().path).availableBytes)
             ExportCore.download(fs, ref.path, st.size, tmp, free)
             coroutineContext.ensureActive()
-            val saved = writeToMusic(tmp, relDir, ref.name)
-            index[dedupKey] = saved
+            val saved = ExportCore.publish(tmp, relDir, sanitize(ref.name), store)
+            if (saved.startsWith("/")) MediaScannerConnection.scanFile(context, arrayOf(saved), null, null)
+            index[identity] = saved
             saveIndex(index)
             publish(ExportStatus(key, ExportStatus.State.SAVED, saved))
         } catch (e: CancellationException) {
@@ -194,22 +258,41 @@ class PlaybackExportManager(private val context: Context, private val player: Pl
         "dsf" -> "audio/x-dsf"; "dff" -> "audio/x-dff"; else -> "audio/*"
     }
 
-    private fun outputExists(relDir: String, name: String, size: Long): Boolean {
-        if (Build.VERSION.SDK_INT >= 29) {
-            val c = context.contentResolver.query(
-                MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY),
-                arrayOf(MediaStore.MediaColumns._ID),
-                "${MediaStore.MediaColumns.RELATIVE_PATH}=? AND ${MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${MediaStore.MediaColumns.SIZE}=?",
-                arrayOf("$relDir/", name, size.toString()), null
-            ) ?: return false
-            return c.use { it.count > 0 }
-        }
-        val f = File(Environment.getExternalStorageDirectory(), "$relDir/$name")
-        return f.exists() && f.length() == size
+    private val store: ExportStore =
+        if (Build.VERSION.SDK_INT >= 29) MediaStoreExportStore() else FileExportStore(Environment.getExternalStorageDirectory())
+
+    /**
+     * Index entries of earlier versions were keyed "uri|size". Keep only those that point at a file we wrote
+     * ourselves (content URI / absolute path); the ones recorded for a same-named file found in Music/ are dropped.
+     */
+    private fun migrateLegacyEntry(index: MutableMap<String, String>, legacyKey: String, identity: String) {
+        val old = index.remove(legacyKey) ?: return
+        if (old.startsWith("content://") || old.startsWith("/")) index.putIfAbsent(identity, old)
+        saveIndex(index)
     }
 
-    private fun writeToMusic(tmp: File, relDir: String, name: String): String {
-        if (Build.VERSION.SDK_INT >= 29) {
+    private inner class MediaStoreExportStore : ExportStore {
+        private val collection get() = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+
+        override fun exists(location: String, size: Long): Boolean {
+            if (!location.startsWith("content://")) return false
+            val c = runCatching {
+                context.contentResolver.query(Uri.parse(location), arrayOf(MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.IS_PENDING), null, null, null)
+            }.getOrNull() ?: return false
+            return c.use { it.moveToFirst() && it.getLong(0) == size && it.getInt(1) == 0 }
+        }
+
+        override fun names(relDir: String): Set<String> {
+            val out = HashSet<String>()
+            context.contentResolver.query(
+                collection, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME),
+                "${MediaStore.MediaColumns.RELATIVE_PATH}=?", arrayOf("$relDir/"), null
+            )?.use { c -> while (c.moveToNext()) c.getString(0)?.let(out::add) }
+            return out
+        }
+
+        /** MediaStore never replaces on insert (it renames a colliding name itself); the stored URI is the identity. */
+        override fun write(part: File, relDir: String, name: String): String {
             val resolver = context.contentResolver
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, name)
@@ -217,10 +300,9 @@ class PlaybackExportManager(private val context: Context, private val player: Pl
                 put(MediaStore.MediaColumns.RELATIVE_PATH, "$relDir/")
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
-            val uri = resolver.insert(MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values)
-                ?: throw IOException("MediaStore insert failed")
+            val uri = resolver.insert(collection, values) ?: throw IOException("MediaStore insert failed")
             try {
-                resolver.openOutputStream(uri, "w")?.use { out -> tmp.inputStream().use { it.copyTo(out, 256 * 1024) } }
+                resolver.openOutputStream(uri, "w")?.use { out -> part.inputStream().use { it.copyTo(out, 256 * 1024) } }
                     ?: throw IOException("cannot open MediaStore output")
                 resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
                 return uri.toString()
@@ -229,13 +311,6 @@ class PlaybackExportManager(private val context: Context, private val player: Pl
                 throw e
             }
         }
-        val dir = File(Environment.getExternalStorageDirectory(), relDir).apply { mkdirs() }
-        val out = File(dir, name)
-        val part = File(dir, ".$name.part")
-        tmp.copyTo(part, overwrite = true)
-        if (!part.renameTo(out)) { part.delete(); throw IOException("cannot move into $dir") }
-        MediaScannerConnection.scanFile(context, arrayOf(out.path), null, null)
-        return out.path
     }
 
     companion object {
