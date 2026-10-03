@@ -46,7 +46,11 @@ class MusicService : MediaLibraryService() {
         current = this
         SourceRegistry.init(applicationContext)
 
+        // Notification / lock screen tap: the running activity (if any) shows the full player for the current track;
+        // CLEAR_TOP drops a system picker left on top of it, SINGLE_TOP delivers the intent instead of a second activity.
         val intent = Intent(this, MainActivity::class.java)
+            .setAction(MainActivity.ACTION_OPEN_PLAYER)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
 
         // fpsrc:// is resolved per sourceId (Local/SAF/WebDAV/SMB/FTP); file://, content:// and http(s):// fall back
