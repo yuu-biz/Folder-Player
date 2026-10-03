@@ -15,7 +15,7 @@ bash scripts/wsl-gradle.sh --stop >/dev/null 2>&1 || true
 pkill -f "[K]otlinCompileDaemon" 2>/dev/null || true
 [ ${#SUITES[@]} -eq 0 ] && SUITES=(LocalAccessTest MigrationTest SourceRegistryTest NetworkPlaybackTest NativeDecodeTest
   PlaybackServiceTest NotificationSwitchTest RetryExportTest SourceUiTest BrowserUiTest LibraryUiTest SyncTagsUiTest
-  SafTest AiNfoUiTest FontUiTest)
+  SafTest AiNfoUiTest FontUiTest LicensesUiTest CastCleanupTest NativeIoErrorTest)
 SDK=$("$HOME/android-sdk/platform-tools/adb" -s "$S" shell getprop ro.build.version.sdk | tr -d '\r')
 OUT="build/device-results/instrumentation/api$SDK-$(echo "$S" | tr ':.' '__')"
 mkdir -p "$OUT"
