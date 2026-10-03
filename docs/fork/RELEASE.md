@@ -10,10 +10,24 @@
    (reports are attached to the run) — and checks that every resolved runtime library has a notice in the app
    (`gen_notices.py --check`) and that the notices asset is current (`--verify`);
 4. builds and signs the release APK and verifies it: exactly one signer, not the debug certificate, not debuggable,
-   versionCode/versionName as derived from the tag, 16 KB zip alignment;
-5. creates a draft release with the notes, `FolderPlayerFork-<version>.apk`, `SHA256SUMS.txt` and
-   `ffmpeg-7.1.5.tar.xz` (the FFmpeg source the APK was built from, LGPL requirement), and publishes it only after
-   everything is attached. The notes carry the SHA-256 of the signing certificate read from the APK itself.
+   versionCode/versionName as derived from the tag, 16 KB zip alignment (`zipalign -c -P 16` from build-tools
+   35.0.0, the version pinned as `BUILD_TOOLS` in the workflow and in `scripts/check-16k.sh`; 34.0.0 has no `-P`);
+5. creates a **draft** release with the notes, `FolderPlayerFork-<version>.apk`, `SHA256SUMS.txt` and
+   `ffmpeg-7.1.5.tar.xz` (the FFmpeg source the APK was built from, LGPL requirement). The notes carry the SHA-256
+   of the signing certificate read from the APK itself. A tag with a pre-release label (`v0.5.1-rc1`) is marked as
+   a pre-release, also once published.
+
+The draft stays unpublished — visible only to collaborators of the repository — unless the repository variable
+`FP_PUBLISH_RELEASES` is `true` (Settings → Secrets and variables → Actions → Variables, or
+`gh variable set FP_PUBLISH_RELEASES --body true`). Without it, check the draft (download the APK, compare
+`SHA256SUMS.txt` and the certificate digest in the notes, install it on a device) and publish it by hand:
+
+```
+gh release edit v0.5.1 --draft=false
+```
+
+Keep the variable unset at least for the first release. Re-running the workflow for a tag whose release is still a
+draft replaces that draft.
 
 Tags are `vMAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH-<label>N` (N = 1..98). versionName is the tag without `v`;
 versionCode depends only on the tag: `((MAJOR*100 + MINOR)*100 + PATCH)*100 + N`, with N = 99 for a final release
