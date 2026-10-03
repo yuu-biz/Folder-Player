@@ -1,6 +1,8 @@
 name: Release APK
 
-# Push a tag like v0.5.1 to test, build, sign and publish the APK as a GitHub release.
+# Push a tag like v0.5.1 to test, build and sign the APK and attach it to a draft GitHub release. The draft is published
+# by hand after checking it, or automatically when the repository variable FP_PUBLISH_RELEASES is "true".
+# Tags with a pre-release label (v0.5.1-rc1) are always marked as pre-releases.
 # "Run workflow" (workflow_dispatch) runs the same checks and keeps the APK as a workflow artifact; it never creates a
 # release.
 on:
@@ -44,6 +46,7 @@ jobs:
               echo "::error::pre-release number must be 1..98"; exit 1
             fi
             echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+            echo "PRERELEASE=$([ -n "${BASH_REMATCH[4]}" ] && echo true || echo false)" >> "$GITHUB_ENV"
             echo "VERSION_CODE=$(( ((10#$M * 100 + 10#$m) * 100 + 10#$p) * 100 + 10#$pre ))" >> "$GITHUB_ENV"
           else
             echo "VERSION=0.0.0-ci.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
@@ -77,7 +80,7 @@ jobs:
             if [ "$(jq -r .isDraft release.json)" = "false" ]; then
               echo "::error::release $GITHUB_REF_NAME is already published; push a new tag instead of re-running"; exit 1
             fi
-            echo "a draft from an unfinished run exists; it will be replaced"
+            echo "an unpublished draft for this tag exists; it will be replaced by this run"
           fi
           rm -f release.json
 
@@ -185,11 +188,13 @@ jobs:
             FolderPlayerFork-*.apk
             SHA256SUMS.txt
 
-      # Notes, APK and checksums go up together into a draft that only becomes visible once everything is attached.
+      # Notes, APK and checksums go up together into a draft. It stays a draft (visible only to the repository's
+      # collaborators) unless FP_PUBLISH_RELEASES is "true".
       - name: GitHub release
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
+          PUBLISH: ${{ vars.FP_PUBLISH_RELEASES }}
         run: |
           sed -e "s|{VERSION_TAG}|$GITHUB_REF_NAME|g" -e "s|{VERSION}|$VERSION|g" -e "s|{CERT_SHA256}|$CERT_SHA256|g" \
             -e "s|{REPO}|$GITHUB_SERVER_URL/$GITHUB_REPOSITORY|g" \
@@ -201,6 +206,12 @@ jobs:
             [ "$(jq -r .isDraft release.json)" = "true" ] || { echo "::error::release was published meanwhile"; exit 1; }
             gh release delete "$GITHUB_REF_NAME" --yes
           fi
-          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "Folder Player Fork $VERSION" --notes-file notes.md \
+          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --prerelease="$PRERELEASE" \
+            --title "Folder Player Fork $VERSION" --notes-file notes.md \
             "FolderPlayerFork-$VERSION.apk" SHA256SUMS.txt ffmpeg-7.1.5.tar.xz
-          gh release edit "$GITHUB_REF_NAME" --draft=false
+          if [ "$PUBLISH" = "true" ]; then
+            gh release edit "$GITHUB_REF_NAME" --draft=false --prerelease="$PRERELEASE"
+            echo "published $GITHUB_REF_NAME (prerelease=$PRERELEASE)"
+          else
+            echo "::notice::draft $GITHUB_REF_NAME left unpublished (prerelease=$PRERELEASE); check it, then publish with: gh release edit $GITHUB_REF_NAME --draft=false"
+          fi
