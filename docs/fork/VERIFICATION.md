@@ -47,13 +47,42 @@ exists only for that test). AI features are tested against an OpenAI-compatible 
 ```
 bash native/build-ffmpeg.sh             # FFmpeg 7.1.5 from the pinned tarball (sha256 checked)
 bash scripts/wsl-gradle.sh assembleDebug
-bash scripts/check-16k.sh               # zipalign -c -P 16 + ELF LOAD alignment for every ABI
+bash scripts/check-16k.sh [apk]         # zipalign -c -P 16 + ELF LOAD alignment for every ABI
 ```
+
+`check-16k.sh` uses build-tools 35.0.0, the version the release workflow installs (`BUILD_TOOLS`); 34.0.0 has no
+`zipalign -P` and the script then fails instead of passing.
 
 The arm64-v8a library was also exercised on an x86_64 emulator through Android's ARM translation
 (`adb install --abi arm64-v8a`, then `NativeDecodeTest`).
 
-## 5. Results (2026-10-03)
+## 5. Results
+
+### 5.1 Final code commit `bf18888` (2026-10-04)
+
+All rows below ran on `bf18888` (Japanese UI, cast session ordering, build-tools 35.0.0 / draft releases). The commit
+that follows it changes only this file.
+
+| Check | Result |
+|---|---|
+| `assembleDebug lintDebug testDebugUnitTest` | exit 0; lint 0 errors, 61 warnings (none in the changed files); JVM tests 120, 0 failures, 21 skipped (the fixture-server tests of the next two rows) |
+| — `CastSessionOrderTest` | 6/6, and 3 more runs 6/6; with the generation checks removed 5 of 6 fail (late failure of an older cast stops the newer relay, Play / polling after stop) |
+| — `StringResourcesParityTest` | 4/4; with a string added only to English it fails for all 5 translations (fr, it, ja, zh-rCN, zh-rTW) |
+| Real-protocol tests (SMB, FTP/FTPS, WebDAV, relay) | 23/23 |
+| DLNA end-to-end (gmrender-resurrect, `DlnaControlPoint`) | passed |
+| License notices (`gen_notices.py --check` / `--verify`) | 161 artifacts covered; asset up to date |
+| `gen_translations.py` | regenerates fr / it / zh-rCN / zh-rTW byte-identical, writes values-ja (225 strings, 7 plurals) |
+| Signed release build (local `keystore.properties`, release key) | one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e99204e5596526c83407164e543ab29f7ce77add916cab476303436da3c1a` (= the key); not debuggable; versionName/Code as passed; `zipalign -c -P 16 4` (35.0.0) ok; `check-16k.sh` PASS (arm64-v8a, x86_64: LOAD 0x4000) |
+| zipalign versions | 34.0.0: `invalid option -- 'P'`, exit 2; 35.0.0: exit 0. `check-16k.sh` with `BUILD_TOOLS=34.0.0` now fails (it used to report PASS) |
+| Instrumentation API 34, all suites (`run-suites.sh`) | 68/68 test processes passed, none skipped (all 19 suites incl. `JapaneseUiTest`, `LibraryUiTest` with Japanese in the language loop, `CastCleanupTest`, the permission and SAF sequences) |
+| `JapaneseUiTest` API 34 | 3/3: values-ja for ja / ja-JP / ja-JP+en-US, other languages unchanged, ko → English; Japanese chosen in Settings applies at once (also `LocaleManager`) and is kept after a restart |
+| `JapaneseUiTest` API 26 (per-activity locale path, before Android 13) | 3/3 |
+| Emulator system locale switched to ja-JP (app language "System"), API 34 and API 26 | settings screen in Japanese (`JapaneseUiTest#a1`) |
+| `CastCleanupTest` API 34 and API 26 | passed (relay, tokens, Wi-Fi and wake lock released after a failed cast) |
+
+### 5.2 Earlier full runs (2026-10-03, recorded in `38b06da`)
+
+Not repeated on `bf18888`:
 
 | Check | Result |
 |---|---|
@@ -66,4 +95,17 @@ The arm64-v8a library was also exercised on an x86_64 emulator through Android's
 | arm64-v8a native library under ARM translation | 4/4 |
 | Next to the original app | both installed side by side, both start |
 
-Not covered by these runs: real HyperOS hardware, a NAS, on-device DLNA discovery (emulators sit behind NAT), SD cards.
+The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest` on API 34 at `8d040a1`.
+
+### 5.3 Still to check on devices
+
+- The release workflow itself has not run yet (no tag pushed): build-tools 35.0.0 install on the runner, the
+  keystore secrets, and the draft (pre-release for `-rcN` tags). Check the first draft before publishing it.
+- The release APK on a real phone: install, and later an update over it signed with the same key.
+- Casting on a real network: discovery of a real renderer (emulators sit behind NAT) and switching / stopping while
+  a renderer is slow; the ordering is covered by `CastSessionOrderTest` with a fake renderer only.
+- Japanese UI on a real phone with Japanese system language (emulators only so far), and how the longer Japanese
+  labels fit on small screens.
+- The full suites on API 26 / 33 / 36, the 16 KB-page image and ARM translation on `bf18888` (only API 34 ran all
+  suites; API 26 ran `JapaneseUiTest` and `CastCleanupTest`).
+- Real HyperOS hardware (debugging there waived for now), a NAS (postponed), SD cards.
