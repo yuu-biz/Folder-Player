@@ -140,6 +140,7 @@
     <string name="settings_native_decoder_ok">附加解码器（ALAC/WMA/APE/DSF/DFF）已启用 – %1$s</string>
     <string name="settings_native_decoder_missing">此设备上附加解码器不可用（无法播放 WMA/APE/DSF/DFF）</string>
     <string name="settings_about_version">Folder Player Fork %1$s (%2$d)</string>
+    <string name="settings_licenses">开源许可</string>
     <string name="settings_about_fork">Folder Player 的非官方个人分支（追加了功能），并非原作者发布的版本。</string>
     <string name="settings_debug_on">（调试模式已开启 – 日志位于 Download/FolderPlayer_Logs）</string>
     <string name="player_cover">专辑封面</string>

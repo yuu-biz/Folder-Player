@@ -140,6 +140,7 @@
     <string name="settings_native_decoder_ok">Decoder aggiuntivi (ALAC/WMA/APE/DSF/DFF) attivi – %1$s</string>
     <string name="settings_native_decoder_missing">Decoder aggiuntivi non disponibili su questo dispositivo (WMA/APE/DSF/DFF non riproducibili)</string>
     <string name="settings_about_version">Folder Player Fork %1$s (%2$d)</string>
+    <string name="settings_licenses">Licenze open source</string>
     <string name="settings_about_fork">Fork personale non ufficiale di Folder Player con funzioni aggiunte; non è la versione dell\'autore.</string>
     <string name="settings_debug_on">(MODALITÀ DEBUG ATTIVA – log in Download/FolderPlayer_Logs)</string>
     <string name="player_cover">Copertina</string>
