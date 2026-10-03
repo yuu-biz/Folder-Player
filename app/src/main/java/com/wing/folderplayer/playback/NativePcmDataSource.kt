@@ -20,16 +20,27 @@ import java.io.IOException
 class NativeIo(private val reader: RandomAccessReader) {
     private var position = 0L
 
+    /**
+     * The last exception thrown to native code. The C side only sees "I/O error" (ERR_IO); this keeps what it was
+     * (connection reset, authentication, ...) so the data source can report the right, possibly retryable, error.
+     */
+    @Volatile var lastError: Throwable? = null
+        private set
+
+    private inline fun <T> recording(block: () -> T): T = try { block() } catch (t: Throwable) { lastError = t; throw t }
+
     @Keep
-    fun read(buffer: ByteArray, length: Int): Int {
+    fun read(buffer: ByteArray, length: Int): Int = recording {
         val n = reader.read(position, buffer, 0, length)
         if (n > 0) position += n
-        return n
+        n
     }
 
     /** whence: 0=SET 1=CUR 2=END, 0x10000=AVSEEK_SIZE. Returns the new position, the size, or -1. */
     @Keep
-    fun seek(offset: Long, whence: Int): Long {
+    fun seek(offset: Long, whence: Int): Long = recording { seekTo(offset, whence) }
+
+    private fun seekTo(offset: Long, whence: Int): Long {
         if (whence == 0x10000) return reader.size
         val target = when (whence) {
             0 -> offset
@@ -95,6 +106,7 @@ object NativeDecoder {
 @OptIn(UnstableApi::class)
 class NativePcmDataSource : BaseDataSource(true) {
     private var reader: RandomAccessReader? = null
+    private var io: NativeIo? = null
     private var handle = 0L
     private var passthrough: SourceDataSource? = null
     private var uri: Uri? = null
@@ -113,11 +125,13 @@ class NativePcmDataSource : BaseDataSource(true) {
         try {
             val r = SourceRegistry.fileSystem(ref).openRandomAccess(ref.path)
             reader = r
-            handle = NativeDecoder.nativeOpen(NativeIo(r), ext, MAX_OUTPUT_RATE)
+            val nio = NativeIo(r).also { io = it }
+            handle = NativeDecoder.nativeOpen(nio, ext, MAX_OUTPUT_RATE)
         } catch (e: NativeDecoderException) {
+            val failure = nativeFailure(e.code, e)
             closeNative()
             if (ext == "m4a" && e.unsupported) return openPassthrough(dataSpec)
-            throw DataSourceException(e, if (e.unsupported) PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED else PlaybackException.ERROR_CODE_DECODING_FAILED)
+            throw failure
         } catch (e: IOException) {
             closeNative()
             throw SourceErrors.toDataSourceException(e)
@@ -137,7 +151,7 @@ class NativePcmDataSource : BaseDataSource(true) {
             val frame = pcmOffset / blockAlign
             skipInFrame = (pcmOffset % blockAlign).toInt()
             val rc = NativeDecoder.nativeSeekFrame(handle, frame)
-            if (rc < 0) throw DataSourceException(NativeDecoderException(rc, "seek failed"), PlaybackException.ERROR_CODE_IO_UNSPECIFIED)
+            if (rc < 0) throw nativeFailure(rc, NativeDecoderException(rc, "seek failed"), PlaybackException.ERROR_CODE_IO_UNSPECIFIED)
         }
         opened = true
         transferStarted(dataSpec)
@@ -182,8 +196,21 @@ class NativePcmDataSource : BaseDataSource(true) {
             position = end
             return C.RESULT_END_OF_INPUT
         }
-        val code2 = if (code == NativeDecoder.ERR_IO) PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED else PlaybackException.ERROR_CODE_DECODING_FAILED
-        throw DataSourceException(NativeDecoderException(code, "native decode failed ($code)"), code2)
+        throw nativeFailure(code, NativeDecoderException(code, "native decode failed ($code)"))
+    }
+
+    /**
+     * Maps a native error. ERR_IO means reading the source failed: report the original source exception (a lost
+     * connection stays a retryable network error, an authentication failure stays a permission error) rather than
+     * "decoding failed", which would stop playback for good.
+     */
+    private fun nativeFailure(code: Int, e: NativeDecoderException, otherwise: Int = PlaybackException.ERROR_CODE_DECODING_FAILED): DataSourceException {
+        if (code == NativeDecoder.ERR_IO) {
+            val cause = io?.lastError
+            return if (cause is IOException) SourceErrors.toDataSourceException(cause)
+            else DataSourceException(e, PlaybackException.ERROR_CODE_IO_UNSPECIFIED)
+        }
+        return DataSourceException(e, if (e.unsupported) PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED else otherwise)
     }
 
     override fun getUri(): Uri? = uri
@@ -192,6 +219,7 @@ class NativePcmDataSource : BaseDataSource(true) {
         if (handle != 0L) { NativeDecoder.nativeClose(handle); handle = 0L }
         runCatching { reader?.close() }
         reader = null
+        io = null
     }
 
     override fun close() {
