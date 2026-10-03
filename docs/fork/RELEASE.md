@@ -46,6 +46,10 @@ git push origin v0.5.1
 
 ## Signing
 
+The release key exists (created 2026-10-04, certificate SHA-256
+`bd7e99204e5596526c83407164e543ab29f7ce77add916cab476303436da3c1a`) and the four secrets below are set; do not create
+another one. Every release's notes show the digest of the certificate the APK was signed with; it must be this one.
+
 Android only installs an update over an existing install when both are signed with the same key. Create the key once
 and keep a backup — a lost key means users must uninstall before installing a newer build:
 

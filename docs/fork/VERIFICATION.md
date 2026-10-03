@@ -60,12 +60,12 @@ The arm64-v8a library was also exercised on an x86_64 emulator through Android's
 
 ### 5.1 Final code commit `bf18888` (2026-10-04)
 
-All rows below ran on `bf18888` (Japanese UI, cast session ordering, build-tools 35.0.0 / draft releases). The commit
-that follows it changes only this file.
+All rows below ran on `bf18888` (Japanese UI, cast session ordering, build-tools 35.0.0 / draft releases). The commits
+after it change only documentation.
 
 | Check | Result |
 |---|---|
-| `assembleDebug lintDebug testDebugUnitTest` | exit 0; lint 0 errors, 61 warnings (none in the changed files); JVM tests 120, 0 failures, 21 skipped (the fixture-server tests of the next two rows) |
+| `assembleDebug lintDebug testDebugUnitTest` | exit 0; lint 0 errors, 61 warnings, none in the changed code (the one in `SettingsScreen.kt`, line 372, is in untouched code); JVM tests 120, 0 failures, 21 skipped (the fixture-server tests of the next two rows) |
 | — `CastSessionOrderTest` | 6/6, and 3 more runs 6/6; with the generation checks removed 5 of 6 fail (late failure of an older cast stops the newer relay, Play / polling after stop) |
 | — `StringResourcesParityTest` | 4/4; with a string added only to English it fails for all 5 translations (fr, it, ja, zh-rCN, zh-rTW) |
 | Real-protocol tests (SMB, FTP/FTPS, WebDAV, relay) | 23/23 |
