@@ -58,10 +58,14 @@ class WebDavProtocolTest {
         repo.add(MusicFile("t.flac", "/fixture/Album-B/track.flac", false, 1, 0, "dav-alice"))
         repo.sync(alice, path).let { assertTrue(it.toString(), it is SyncResult.Synced) }
         assertEquals(1, FavoritesCodec.decode(alice.readText(path)).items.size)
-        // Read-only account: sync fails only for the remote part.
+        // Read-only account with a local entry the remote lacks: sync fails only for the remote part.
         val bobRepo = FavoritesRepository(tmp.root.resolve("bob.json"))
+        bobRepo.add(MusicFile("b.flac", "/fixture/Album-A/b.flac", false, 1, 0, "dav-bob"))
         bobRepo.sync(fs("bob", "bobpass"), path).let { assertTrue(it.toString(), it is SyncResult.RemoteNotWritable) }
-        assertEquals(1, bobRepo.items.value.size) // merged remote entry locally
+        assertEquals(2, bobRepo.items.value.size) // merged remote entry locally
+        // Nothing new locally: the remote is not rewritten at all (no write attempt, so no error either).
+        FavoritesRepository(tmp.root.resolve("carol.json")).sync(fs("bob", "bobpass"), path)
+            .let { assertTrue(it.toString(), it is SyncResult.Synced) }
 
         val nfoPath = "/rw/Info-${System.nanoTime()}.nfo"
         alice.write(nfoPath, NfoParser.toXml("T", "A", "Review", null).toByteArray(), overwrite = true)

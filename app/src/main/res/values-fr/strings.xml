@@ -168,6 +168,7 @@
     <string name="sync_done">synchronisé (%1$d ajoutés, %2$d au total)</string>
     <string name="sync_remote_broken">le fav.json distant est corrompu (%1$s) ; rien n\'a été écrit. Utilisez « Remplacer le distant » pour l\'écraser.</string>
     <string name="sync_remote_read_only">le distant est en lecture seule (%1$s) ; %2$d fusionnés en local uniquement</string>
+    <string name="sync_remote_unreadable_entries">le fichier distant contient %1$d entrées illisibles par cette version ; il n’a pas été réécrit (%2$d fusionnés en local). Utilisez « Remplacer le distant » pour l’écraser.</string>
     <string name="sync_failed">échec de la synchronisation : %1$s</string>
     <string name="ai_not_configured">Adresse, clé ou modèle d\'IA non configuré</string>
     <string name="ai_lyrics_not_found">L\'IA n\'a pas trouvé ces paroles</string>

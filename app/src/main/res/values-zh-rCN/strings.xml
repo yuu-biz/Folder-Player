@@ -168,6 +168,7 @@
     <string name="sync_done">已同步（新增 %1$d，共 %2$d）</string>
     <string name="sync_remote_broken">远程 fav.json 已损坏（%1$s）；未写入任何内容。可使用“替换远程”覆盖。</string>
     <string name="sync_remote_read_only">远程为只读（%1$s）；仅将 %2$d 项合并到本地</string>
+    <string name="sync_remote_unreadable_entries">远程文件含有 %1$d 项此版本无法读取的条目，未改写该文件（已合并到本地：%2$d）。如需覆盖，请使用“替换远程”。</string>
     <string name="sync_failed">同步失败：%1$s</string>
     <string name="ai_not_configured">未设置 AI 地址、密钥或模型</string>
     <string name="ai_lyrics_not_found">AI 未找到这首歌的歌词</string>
