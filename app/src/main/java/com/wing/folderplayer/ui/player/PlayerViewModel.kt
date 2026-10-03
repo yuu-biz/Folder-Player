@@ -108,7 +108,13 @@ data class PlayerUiState(
     // Explicit AI lyrics request
     val lyricsRequestRunning: Boolean = false,
     val lyricsError: String? = null,
-)
+
+    /** Set by every play request, before the track has loaded (or failed): the player must stay reachable. */
+    val playRequested: Boolean = false,
+) {
+    /** There is a track (playing, paused, loading, failed or restored from the last session) to show a player for. */
+    val hasTrack: Boolean get() = currentMediaId != null || playRequested
+}
 
 class PlayerViewModel : ViewModel() {
 
@@ -959,6 +965,7 @@ class PlayerViewModel : ViewModel() {
             currentPosition = 0L,
             duration = 0L,
             playbackError = null,
+            playRequested = true,
         )
         lastMediaIdBeforeIntent = player?.currentMediaItem?.mediaId
         pendingPlayIntent = startPath?.let { SourceUris.toUri(folder.sourceId, it) } ?: "ANY_NEW"
@@ -976,21 +983,22 @@ class PlayerViewModel : ViewModel() {
     /** Plays [files] (already sorted as shown) starting at [startIndex]. */
     fun playCustomList(files: List<MusicFile>, startIndex: Int) {
         cancelRestore()
+        val firstFile = files.getOrNull(startIndex) ?: return
+        // Shown at once, also while the controller is still connecting after a cold start.
+        _uiState.value = _uiState.value.copy(
+            currentTitle = SourcePath.baseName(firstFile.name),
+            currentArtist = "",
+            currentFolderName = firstFile.ref.parent?.let { SourcePath.name(it.path) } ?: "",
+            currentMediaId = firstFile.ref.toUriString(),
+            lyrics = emptyList(),
+            coverUri = null,
+            isBuffering = true,
+            playbackError = null,
+            playRequested = true,
+        )
         viewModelScope.launch(exceptionHandler) {
-            val firstFile = files.getOrNull(startIndex) ?: return@launch
             awaitPlayer()
             currentFolder = firstFile.ref.parent
-
-            _uiState.value = _uiState.value.copy(
-                currentTitle = SourcePath.baseName(firstFile.name),
-                currentArtist = "",
-                currentFolderName = currentFolder?.let { SourcePath.name(it.path) } ?: "",
-                currentMediaId = firstFile.ref.toUriString(),
-                lyrics = emptyList(),
-                coverUri = null,
-                isBuffering = true,
-                playbackError = null,
-            )
             lastMediaIdBeforeIntent = player?.currentMediaItem?.mediaId
             pendingPlayIntent = firstFile.ref.toUriString()
 
@@ -1041,6 +1049,7 @@ class PlayerViewModel : ViewModel() {
             currentPosition = 0L,
             duration = 0L,
             playbackError = null,
+            playRequested = true,
         )
         lastMediaIdBeforeIntent = player?.currentMediaItem?.mediaId
         pendingPlayIntent = "ANY_NEW"
