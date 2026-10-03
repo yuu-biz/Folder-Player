@@ -36,6 +36,7 @@
         <activity
             android:name="com.wing.folderplayer.MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
+            android:launchMode="singleTop"
             android:exported="true"
             android:theme="@style/Theme.FolderPlayer">
             <intent-filter>
