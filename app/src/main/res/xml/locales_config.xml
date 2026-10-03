@@ -5,4 +5,5 @@
     <locale android:name="zh-TW"/>
     <locale android:name="fr"/>
     <locale android:name="it"/>
+    <locale android:name="ja"/>
 </locale-config>

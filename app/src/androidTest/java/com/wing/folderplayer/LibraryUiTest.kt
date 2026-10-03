@@ -154,7 +154,7 @@ class LibraryUiTest : UiTestBase() {
             scrolled(tag); node(tag).assertIsSelected()
         }
         // Every language can be selected; switch through them and back to the system language.
-        for (tag in listOf("zh-CN", "zh-TW", "it", "en", "")) {
+        for (tag in listOf("zh-CN", "zh-TW", "it", "ja", "en", "")) {
             toSettings()
             scrolled("lang_$tag"); click("lang_$tag")
             until(15_000, "language $tag") { AppLocale.get(Fx.ctx) == tag }
