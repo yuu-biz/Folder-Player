@@ -15,7 +15,12 @@ import com.wing.folderplayer.data.source.SourceType
 import com.wing.folderplayer.data.source.SourceUris
 import com.wing.folderplayer.data.source.readBytes
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Semaphore
@@ -62,6 +67,19 @@ class ThumbnailRepository private constructor(private val context: Context) {
         else ConcurrentHashMap()
     } catch (e: Exception) {
         ConcurrentHashMap()
+    }
+
+    // Folder thumbnails are resolved from the UI's coroutines, so the index is written on an I/O thread, and coalesced:
+    // scrolling through many folders writes the file once instead of once per image found.
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val saveLock = Any()
+    private var pendingSave: Job? = null
+
+    private fun scheduleSave() {
+        synchronized(saveLock) {
+            pendingSave?.cancel()
+            pendingSave = ioScope.launch { delay(SAVE_DELAY_MS); saveIndex() }
+        }
     }
 
     @Synchronized
@@ -132,7 +150,7 @@ class ThumbnailRepository private constructor(private val context: Context) {
             when (result) {
                 is ArtworkResult.Found -> {
                     positive[key] = IndexEntry(result.image.toUriString(), result.entry.name, result.entry.size, result.entry.lastModified)
-                    saveIndex()
+                    scheduleSave()
                 }
                 ArtworkResult.None -> negative[key] = System.currentTimeMillis()
                 else -> Unit
@@ -177,21 +195,23 @@ class ThumbnailRepository private constructor(private val context: Context) {
         val prefix = folder.toUriString() + "|"
         positive.keys.removeIf { it.startsWith(prefix) }
         negative.keys.removeIf { it.startsWith(prefix) }
-        saveIndex()
+        scheduleSave()
     }
 
     fun invalidateSource(sourceId: String) {
         val prefix = SourceUris.toUri(sourceId, "/").removeSuffix("/")
         positive.keys.removeIf { it.startsWith(prefix) }
         negative.keys.removeIf { it.startsWith(prefix) }
-        saveIndex()
+        scheduleSave()
     }
 
     /** Forget every "no image" result (after a permission grant or settings change). */
     fun invalidateNegatives() = negative.clear()
 
     /** Clears image index and thumbnail files only — sources, settings and playlists are untouched. */
+    @Synchronized // with saveIndex: a write in progress cannot bring the deleted file back with old entries
     fun clearCaches() {
+        synchronized(saveLock) { pendingSave?.cancel() }
         positive.clear()
         negative.clear()
         indexFile.delete()
@@ -201,6 +221,7 @@ class ThumbnailRepository private constructor(private val context: Context) {
     companion object {
         const val MAX_IMAGE_BYTES = 20L * 1024 * 1024
         private const val NEGATIVE_TTL_MS = 10 * 60 * 1000L
+        private const val SAVE_DELAY_MS = 500L
         // Holds only the application context, which lives as long as the process.
         @android.annotation.SuppressLint("StaticFieldLeak")
         @Volatile private var instance: ThumbnailRepository? = null
