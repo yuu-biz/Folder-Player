@@ -1,38 +1,35 @@
 package com.wing.folderplayer.ui.browser
 
 import android.app.Application
-import android.os.Environment
+import android.content.Intent
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.wing.folderplayer.data.source.LocalSource
+import com.wing.folderplayer.data.artwork.ArtworkResult
+import com.wing.folderplayer.data.artwork.ThumbnailRepository
+import com.wing.folderplayer.data.favorites.FavoriteItem
+import com.wing.folderplayer.data.favorites.FavoritesRepository
+import com.wing.folderplayer.data.favorites.SyncResult
+import com.wing.folderplayer.data.prefs.SourcePreferences
+import com.wing.folderplayer.data.search.SearchProgress
+import com.wing.folderplayer.data.search.SearchRepository
+import com.wing.folderplayer.data.source.ConnectionTestResult
+import com.wing.folderplayer.data.source.MediaTypes
 import com.wing.folderplayer.data.source.MusicFile
+import com.wing.folderplayer.data.source.SourceConfig
+import com.wing.folderplayer.data.source.SourcePath
+import com.wing.folderplayer.data.source.SourceRef
+import com.wing.folderplayer.data.source.SourceRegistry
+import com.wing.folderplayer.data.source.SourceType
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
-
-import com.wing.folderplayer.data.source.MusicSource
-
-import com.wing.folderplayer.data.source.WebDavSource
-import com.wing.folderplayer.data.prefs.SourcePreferences
-import java.util.UUID
-
-import androidx.annotation.Keep
-
-@Keep
-enum class SourceType { LOCAL, WEBDAV }
-
-@Keep
-data class SourceConfig(
-    val id: String = UUID.randomUUID().toString(),
-    val name: String,
-    val type: SourceType,
-    val url: String = "",
-    val path: String? = null,
-    val username: String = "",
-    val password: String = ""
-)
+import java.io.File
 
 data class CacheEntry(
     val files: List<MusicFile>,
@@ -43,25 +40,43 @@ data class CacheEntry(
     val sortAscending: Boolean
 )
 
+data class SearchUiState(
+    val active: Boolean = false,
+    val query: String = "",
+    val running: Boolean = false,
+    val results: List<MusicFile> = emptyList(),
+    val foldersScanned: Int = 0,
+    val foldersSkipped: Int = 0,
+    val truncated: Boolean = false,
+)
+
 data class BrowserUiState(
-    val currentPath: String = "",
+    /** null = source list (root). */
+    val currentFolder: SourceRef? = null,
+    val showingFavorites: Boolean = false,
     val files: List<MusicFile> = emptyList(),
     val isLoading: Boolean = false,
-    val currentSource: SourceConfig? = null,
-    val currentlyPlayingPath: String? = null,
+    val currentlyPlayingMediaId: String? = null,
     val sortField: String = "NAME",
     val sortAscending: Boolean = true,
-    val availableSources: List<SourceConfig> = listOf(
-        SourceConfig(name = "Local Storage", type = SourceType.LOCAL, url = Environment.getExternalStorageDirectory().absolutePath)
-    ),
+    val availableSources: List<SourceConfig> = emptyList(),
+    val viewMode: String = "LIST",
+    val gridDensity: Int = 3,
     // Scroll memory
     val scrollToIndex: Int = 0,
     val scrollToOffset: Int = 0,
     val scrollTrigger: Int = 0, // Increment to trigger scroll in UI
-    
     // Playlist Context Menu
-    val selectedFileForPlaylist: MusicFile? = null
-)
+    val selectedFileForPlaylist: MusicFile? = null,
+    val search: SearchUiState = SearchUiState(),
+    val favorites: List<FavoriteItem> = emptyList(),
+    val message: String? = null,
+    /** Bumped when folder images must be looked up again (refresh, permission change, cache cleared). */
+    val thumbnailRevision: Int = 0,
+) {
+    val currentSource: SourceConfig? get() = currentFolder?.let { f -> availableSources.firstOrNull { it.id == f.sourceId } }
+    val isRoot: Boolean get() = currentFolder == null && !showingFavorites
+}
 
 class BrowserViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -73,266 +88,178 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     private val exceptionHandler = kotlinx.coroutines.CoroutineExceptionHandler { _, throwable ->
         android.util.Log.e("BrowserViewModel", "Unhandled exception in coroutine", throwable)
-        _error.value = "An error occurred: ${throwable.localizedMessage}"
+        _error.value = com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_generic, throwable.localizedMessage ?: "")
         _uiState.value = _uiState.value.copy(isLoading = false)
     }
 
-    private val localSource = LocalSource()
     private val sourcePreferences: SourcePreferences
-    // Cache WebDAV sources to avoid recreating
-    private val webDavSources = mutableMapOf<String, WebDavSource>()
-    
-    // Directory Cache (Expires after 20 minutes)
-    // Key is absolute path
+    private val thumbnails: ThumbnailRepository
+    val favoritesRepository: FavoritesRepository
+    private val searchRepository = SearchRepository({ ref -> SourceRegistry.fileSystem(ref).list(ref.path) })
+    private var loadJob: Job? = null
+    private var searchJob: Job? = null
+
+    // Directory Cache (Expires after 20 minutes), keyed by folder URI
     private val directoryCache = mutableMapOf<String, CacheEntry>()
-    private val CACHE_EXPIRY_MS = 20 * 60 * 1000L // 20 minutes
+    private val CACHE_EXPIRY_MS = 20 * 60 * 1000L
 
     init {
-        // Initialize prefs using application context
-        sourcePreferences = com.wing.folderplayer.data.prefs.SourcePreferences(application)
-        
-        loadSources()
-        
-        // Initialize state, potentially restoring last browsed
-        val lastSource = sourcePreferences.getLastBrowsedSource()
-        val lastPath = sourcePreferences.getLastBrowsedPath()
+        SourceRegistry.init(application)
+        sourcePreferences = SourcePreferences(application)
+        thumbnails = ThumbnailRepository.get(application)
+        favoritesRepository = FavoritesRepository(File(application.filesDir, "favorites/fav.json"))
 
-        if (lastSource != null && lastPath != "ROOT") {
-            if (lastSource.type == SourceType.WEBDAV) {
-                com.wing.folderplayer.data.source.WebDavAuthManager.setCredentials(lastSource.username, lastSource.password)
-            }
-            _uiState.value = _uiState.value.copy(
-                currentPath = lastPath,
-                currentSource = lastSource
-            )
-            loadPath(lastPath)
-        } else {
-            _uiState.value = _uiState.value.copy(
-                currentPath = "ROOT", 
-                currentSource = null
-            )
+        viewModelScope.launch {
+            SourceRegistry.sources.collect { list -> _uiState.value = _uiState.value.copy(availableSources = list) }
         }
-    }
-
-    private fun loadSources() {
-        val context = getApplication<Application>()
-        val savedSources = sourcePreferences.getSavedSources()
-        
-        val localSources = mutableListOf<SourceConfig>()
-        localSources.add(SourceConfig(name = "Internal Storage", type = SourceType.LOCAL, url = Environment.getExternalStorageDirectory().absolutePath))
-        
-        // Discover SD Card
-        val externalFilesDirs = context.getExternalFilesDirs(null)
-        if (externalFilesDirs.size > 1) {
-            for (i in 1 until externalFilesDirs.size) {
-                val file = externalFilesDirs[i]
-                if (file != null) {
-                    val path = file.absolutePath.substringBefore("/Android")
-                    localSources.add(SourceConfig(name = "SD Card ${if (i > 1) i else ""}", type = SourceType.LOCAL, url = path))
-                }
+        viewModelScope.launch {
+            favoritesRepository.items.collect { list ->
+                _uiState.value = _uiState.value.copy(favorites = list)
+                if (_uiState.value.showingFavorites) showFavorites()
             }
         }
+        _uiState.value = _uiState.value.copy(gridDensity = sourcePreferences.getGridDensity())
 
-        val allSources = localSources + savedSources
-        _uiState.value = _uiState.value.copy(availableSources = allSources)
-    }
-
-    fun addWebDavSource(name: String, url: String, path: String?, user: String, pass: String) {
-        val newSource = SourceConfig(
-            name = name.ifBlank { "My NAS" },
-            type = SourceType.WEBDAV,
-            url = if (url.startsWith("http")) url else "http://$url",
-            path = path,
-            username = user,
-            password = pass
-        )
-        val currentSources = sourcePreferences.getSavedSources()
-        val updatedSources = currentSources + newSource
-        sourcePreferences.saveSources(updatedSources)
-        loadSources()
-    }
-
-    fun editWebDavSource(id: String, name: String, url: String, path: String?, user: String, pass: String) {
-        val currentSources = sourcePreferences.getSavedSources().toMutableList()
-        val index = currentSources.indexOfFirst { it.id == id }
-        if (index != -1) {
-            currentSources[index] = currentSources[index].copy(
-                name = name,
-                url = url,
-                path = path,
-                username = user,
-                password = pass
-            )
-            sourcePreferences.saveSources(currentSources)
-            webDavSources.remove(id) // Force recreate on next access
-            loadSources()
+        val last = sourcePreferences.getLastBrowsed()
+        if (last != null && SourceRegistry.get(last.sourceId) != null) {
+            loadFolder(last)
         }
+    }
+
+    // ---------------- sources ----------------
+
+    /** [password]: null keeps the stored secret. */
+    fun saveSource(config: SourceConfig, password: String?) {
+        SourceRegistry.upsert(config, password)
+        thumbnails.invalidateSource(config.id)
+        directoryCache.keys.removeIf { SourceRef(config.id, "/").toUriString().removeSuffix("/").let(it::startsWith) }
     }
 
     fun removeSource(sourceId: String) {
-        val currentSources = sourcePreferences.getSavedSources().toMutableList()
-        currentSources.removeAll { it.id == sourceId }
-        sourcePreferences.saveSources(currentSources)
-        webDavSources.remove(sourceId)
-        loadSources()
+        SourceRegistry.remove(sourceId)
+        thumbnails.invalidateSource(sourceId)
     }
 
-    fun duplicateWebDavSource(sourceId: String) {
-        val currentSources = sourcePreferences.getSavedSources().toMutableList()
-        val original = currentSources.find { it.id == sourceId }
-        if (original != null) {
-            val copy = original.copy(id = UUID.randomUUID().toString(), name = "${original.name} (Copy)")
-            currentSources.add(copy)
-            sourcePreferences.saveSources(currentSources)
-            loadSources()
+    fun duplicateSource(sourceId: String) {
+        SourceRegistry.duplicate(sourceId)
+    }
+
+    fun moveSourceUp(sourceId: String) = SourceRegistry.move(sourceId, -1)
+    fun moveSourceDown(sourceId: String) = SourceRegistry.move(sourceId, +1)
+
+    suspend fun testConnection(config: SourceConfig, password: String?): ConnectionTestResult = withContext(Dispatchers.IO) {
+        val fs = try {
+            if (password == null && SourceRegistry.get(config.id) != null) SourceRegistry.create(config) else SourceRegistry.create(config, password ?: "")
+        } catch (e: Exception) {
+            return@withContext ConnectionTestResult.fromException(e)
         }
+        try { runInterruptible { fs.testConnection() } } finally { runCatching { fs.close() } }
     }
 
-    fun moveSourceUp(sourceId: String) {
-        val currentSources = sourcePreferences.getSavedSources().toMutableList()
-        val index = currentSources.indexOfFirst { it.id == sourceId }
-        if (index > 0) {
-            val item = currentSources.removeAt(index)
-            currentSources.add(index - 1, item)
-            sourcePreferences.saveSources(currentSources)
-            loadSources()
+    /** Called after ACTION_OPEN_DOCUMENT_TREE returned [tree]; persists the permission and adds the source. */
+    fun addSafSource(tree: Uri, displayName: String) {
+        val app = getApplication<Application>()
+        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        try {
+            app.contentResolver.takePersistableUriPermission(tree, flags)
+        } catch (e: SecurityException) {
+            // Write may not be grantable (read-only provider); keep read access.
+            app.contentResolver.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-    }
-
-    fun moveSourceDown(sourceId: String) {
-        val currentSources = sourcePreferences.getSavedSources().toMutableList()
-        val index = currentSources.indexOfFirst { it.id == sourceId }
-        if (index != -1 && index < currentSources.size - 1) {
-            val item = currentSources.removeAt(index)
-            currentSources.add(index + 1, item)
-            sourcePreferences.saveSources(currentSources)
-            loadSources()
-        }
-    }
-
-    private fun getEffectiveSourcePath(config: SourceConfig): String {
-        return when (config.type) {
-            SourceType.LOCAL -> config.url
-            SourceType.WEBDAV -> {
-                var effectiveUrl = if (config.path?.isNotEmpty() == true) {
-                    val baseUrl = config.url.trimEnd('/')
-                    val path = config.path.trimStart('/')
-                    "$baseUrl/$path"
-                } else {
-                    config.url
-                }
-            
-                // Crucial: WebDAV directories usually MUST end with / to list contents correctly
-                if (!effectiveUrl.endsWith("/")) {
-                    effectiveUrl += "/"
-                }
-                
-                // Basic encoding for spaces if not already encoded
-                if (effectiveUrl.contains(" ") && !effectiveUrl.contains("%20")) {
-                    effectiveUrl = effectiveUrl.replace(" ", "%20")
-                }
-                effectiveUrl
-            }
-        }
-    }
-
-    private fun getSource(config: SourceConfig): MusicSource {
-        return when (config.type) {
-            SourceType.LOCAL -> localSource
-            SourceType.WEBDAV -> {
-                webDavSources.getOrPut(config.id) {
-                    WebDavSource(getEffectiveSourcePath(config), config.username, config.password)
-                }
-            }
-        }
-    }
-
-    fun selectSource(sourceConfig: SourceConfig) {
-        if (sourceConfig.type == SourceType.WEBDAV) {
-            com.wing.folderplayer.data.source.WebDavAuthManager.setCredentials(sourceConfig.username, sourceConfig.password)
+        val existing = SourceRegistry.savedSources().firstOrNull { it.type == SourceType.SAF && it.url == tree.toString() }
+        if (existing != null) {
+            // Re-selected after revocation: same source id, so favorites/playlists keep working.
+            SourceRegistry.upsert(existing.copy(revision = existing.revision + 1), null)
+            thumbnails.invalidateSource(existing.id)
         } else {
-            com.wing.folderplayer.data.source.WebDavAuthManager.clear()
+            SourceRegistry.upsert(SourceConfig(name = displayName, type = SourceType.SAF, url = tree.toString()), null)
         }
-        _uiState.value = _uiState.value.copy(currentSource = sourceConfig)
-        val path = getEffectiveSourcePath(sourceConfig)
-        sourcePreferences.saveLastBrowsedState(sourceConfig, path)
-        loadPath(path)
+        thumbnails.invalidateNegatives()
+    }
+
+    // ---------------- navigation ----------------
+
+    fun selectSource(source: SourceConfig) {
+        closeSearch()
+        loadFolder(SourceRef(source.id, SourcePath.ROOT))
     }
 
     fun clearError() {
         _error.value = null
     }
 
+    fun clearMessage() {
+        _uiState.value = _uiState.value.copy(message = null)
+    }
+
     fun refresh() {
-        directoryCache.remove(_uiState.value.currentPath)
-        loadPath(_uiState.value.currentPath)
+        val folder = _uiState.value.currentFolder ?: return
+        directoryCache.remove(folder.toUriString())
+        thumbnails.invalidate(folder)
+        _uiState.value.files.filter { it.isDirectory }.forEach { thumbnails.invalidate(it.ref) }
+        thumbnails.invalidateNegatives()
+        bumpThumbnails()
+        loadFolder(folder)
+    }
+
+    fun onPermissionsChanged() {
+        thumbnails.invalidateNegatives()
+        bumpThumbnails()
+        directoryCache.clear()
+        _uiState.value.currentFolder?.let { loadFolder(it) }
     }
 
     /**
      * @param isBackNavigation If true, we will try to restore the scroll position from cache.
-     *                         If false, we will default to the top (0).
      */
-    fun loadPath(path: String, isBackNavigation: Boolean = false) {
-        val sourceConfig = _uiState.value.currentSource
-        if (sourceConfig == null) {
-             return
-        }
-        
-        // Clean stale cache entries periodically
+    fun loadFolder(folder: SourceRef, isBackNavigation: Boolean = false) {
         val now = System.currentTimeMillis()
         directoryCache.entries.removeIf { now - it.value.timestamp > CACHE_EXPIRY_MS }
+        loadJob?.cancel()
 
-        viewModelScope.launch(exceptionHandler) {
-            try {
-                _uiState.value = _uiState.value.copy(isLoading = true, currentPath = path)
-                sourcePreferences.saveLastBrowsedState(_uiState.value.currentSource, path)
-                
-                // 1. Determine desired sort (Check override then global default)
-                val override = sourcePreferences.getDirectorySort(path)
-                val (field, asc) = if (override != null) {
-                    override.field to override.ascending
-                } else {
-                    val default = sourcePreferences.getDefaultSort()
-                    default.field to default.ascending
-                }
+        _uiState.value = _uiState.value.copy(
+            isLoading = true,
+            currentFolder = folder,
+            showingFavorites = false,
+            viewMode = sourcePreferences.getViewMode(folder),
+        )
+        sourcePreferences.saveLastBrowsedState(folder)
 
-                // 2. Check Cache
-                val cached = directoryCache[path]
-                if (cached != null && (now - cached.timestamp < CACHE_EXPIRY_MS)) {
-                    val finalFiles = if (cached.sortField != field || cached.sortAscending != asc) {
-                        applySort(cached.files, field, asc)
-                    } else {
-                        cached.files
-                    }
-                    
-                    _uiState.value = _uiState.value.copy(
-                        files = finalFiles,
-                        isLoading = false,
-                        sortField = field,
-                        sortAscending = asc,
-                        scrollToIndex = if (isBackNavigation) cached.scrollIndex else 0,
-                        scrollToOffset = if (isBackNavigation) cached.scrollOffset else 0,
-                        scrollTrigger = _uiState.value.scrollTrigger + 1
-                    )
-                    return@launch
-                }
+        loadJob = viewModelScope.launch(exceptionHandler) {
+            val override = sourcePreferences.getDirectorySort(folder)
+            val (field, asc) = override?.let { it.field to it.ascending }
+                ?: sourcePreferences.getDefaultSort().let { it.field to it.ascending }
 
-                // 3. Fetch from Source
-                val source = getSource(sourceConfig)
-                val filesRaw = source.list(path)
-                
-                val files = applySort(filesRaw, field, asc)
-                
-                // 3. Update Cache
-                directoryCache[path] = CacheEntry(
-                    files = files,
-                    timestamp = System.currentTimeMillis(),
-                    sortField = field,
-                    sortAscending = asc
-                )
-                
+            val key = folder.toUriString()
+            val cached = directoryCache[key]
+            if (cached != null && (now - cached.timestamp < CACHE_EXPIRY_MS)) {
+                val finalFiles = if (cached.sortField != field || cached.sortAscending != asc) applySort(cached.files, field, asc) else cached.files
                 _uiState.value = _uiState.value.copy(
-                    files = files, 
+                    files = finalFiles,
+                    isLoading = false,
+                    sortField = field,
+                    sortAscending = asc,
+                    scrollToIndex = if (isBackNavigation) cached.scrollIndex else 0,
+                    scrollToOffset = if (isBackNavigation) cached.scrollOffset else 0,
+                    scrollTrigger = _uiState.value.scrollTrigger + 1
+                )
+                return@launch
+            }
+
+            try {
+                val filesRaw = runInterruptible(Dispatchers.IO) { SourceRegistry.fileSystem(folder).list(folder.path) }
+                val files = withContext(Dispatchers.Default) { applySort(filesRaw, field, asc) }
+                directoryCache[key] = CacheEntry(files, System.currentTimeMillis(), sortField = field, sortAscending = asc)
+                val cfg = SourceRegistry.get(folder.sourceId)
+                if (cfg?.type == SourceType.LOCAL) {
+                    val report = com.wing.folderplayer.utils.PermissionDiagnostics.report(getApplication())
+                    if (report.audio == com.wing.folderplayer.utils.PermissionDiagnostics.Access.DENIED) {
+                        _uiState.value = _uiState.value.copy(message = getApplication<Application>().getString(com.wing.folderplayer.R.string.browser_local_no_audio_permission))
+                    }
+                }
+                if (_uiState.value.currentFolder != folder) return@launch
+                _uiState.value = _uiState.value.copy(
+                    files = files,
                     isLoading = false,
                     sortField = field,
                     sortAscending = asc,
@@ -340,204 +267,127 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     scrollToOffset = 0,
                     scrollTrigger = _uiState.value.scrollTrigger + 1
                 )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
-                android.util.Log.e("BrowserViewModel", "Error loading path: $path", e)
-                _error.value = "Load Failed: ${e.localizedMessage ?: "Network or Server Error"}"
+                android.util.Log.e("BrowserViewModel", "Error loading folder: ${e.javaClass.simpleName} ${e.message}")
+                _error.value = com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_load_failed, com.wing.folderplayer.ui.player.PlaybackErrorText.describe(e))
                 _uiState.value = _uiState.value.copy(isLoading = false, files = emptyList())
             }
         }
     }
 
     fun saveScrollPosition(index: Int, offset: Int) {
-        val currentPath = _uiState.value.currentPath
-        directoryCache[currentPath]?.let { entry ->
-            directoryCache[currentPath] = entry.copy(scrollIndex = index, scrollOffset = offset)
+        val key = _uiState.value.currentFolder?.toUriString() ?: return
+        directoryCache[key]?.let { entry ->
+            directoryCache[key] = entry.copy(scrollIndex = index, scrollOffset = offset)
         }
     }
 
     private fun applySort(list: List<MusicFile>, by: String, ascending: Boolean): List<MusicFile> {
         // ALWAYS put folders first
         val (folders, files) = list.partition { it.isDirectory }
-        
-        val sortedFolders = when(by) {
-            "NAME" -> if (ascending) folders.sortedBy { it.name.lowercase() } else folders.sortedByDescending { it.name.lowercase() }
-            "DATE" -> if (ascending) folders.sortedBy { it.lastModified } else folders.sortedByDescending { it.lastModified }
-            "SIZE" -> if (ascending) folders.sortedBy { it.size } else folders.sortedByDescending { it.size }
-            else -> folders
+
+        fun sort(l: List<MusicFile>) = when (by) {
+            "NAME" -> if (ascending) l.sortedBy { it.name.lowercase() } else l.sortedByDescending { it.name.lowercase() }
+            "DATE" -> if (ascending) l.sortedBy { it.lastModified } else l.sortedByDescending { it.lastModified }
+            "SIZE" -> if (ascending) l.sortedBy { it.size } else l.sortedByDescending { it.size }
+            else -> l
         }
-        
-        val sortedFiles = when(by) {
-            "NAME" -> if (ascending) files.sortedBy { it.name.lowercase() } else files.sortedByDescending { it.name.lowercase() }
-            "DATE" -> if (ascending) files.sortedBy { it.lastModified } else files.sortedByDescending { it.lastModified }
-            "SIZE" -> if (ascending) files.sortedBy { it.size } else files.sortedByDescending { it.size }
-            else -> files
-        }
-        
-        return sortedFolders + sortedFiles
+        return sort(folders) + sort(files)
     }
 
-    fun updateCurrentlyPlaying(path: String?) {
-        _uiState.value = _uiState.value.copy(currentlyPlayingPath = path)
+    fun updateCurrentlyPlaying(mediaId: String?) {
+        _uiState.value = _uiState.value.copy(currentlyPlayingMediaId = mediaId)
     }
 
     fun sortFiles(by: String) {
         viewModelScope.launch(exceptionHandler) {
-            try {
-                val currentField = _uiState.value.sortField
-                val currentAscending = _uiState.value.sortAscending
-                val currentPath = _uiState.value.currentPath
-                val filesToSort = _uiState.value.files
-                
-                // Toggle if same field, default to ascending if new field
-                val newAscending = if (currentField == by) !currentAscending else true
-                
-                val sorted = withContext(kotlinx.coroutines.Dispatchers.Default) {
-                     applySort(filesToSort, by, newAscending)
-                }
-                
-                // Save as override for this folder
-                try {
-                    if (currentPath != "ROOT" && currentPath.isNotEmpty()) {
-                        sourcePreferences.saveDirectorySort(currentPath, by, newAscending)
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("BrowserViewModel", "Error saving dir sort", e)
-                }
-                
-                _uiState.value = _uiState.value.copy(files = sorted, sortField = by, sortAscending = newAscending)
-
-                // Update Cache to reflect new sorted state
-                directoryCache[currentPath]?.let { entry ->
-                    directoryCache[currentPath] = entry.copy(
-                        files = sorted,
-                        sortField = by,
-                        sortAscending = newAscending
-                    )
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("BrowserViewModel", "Error sorting files", e)
+            val state = _uiState.value
+            val folder = state.currentFolder ?: return@launch
+            val newAscending = if (state.sortField == by) !state.sortAscending else true
+            val sorted = withContext(Dispatchers.Default) { applySort(state.files, by, newAscending) }
+            sourcePreferences.saveDirectorySort(folder, by, newAscending)
+            _uiState.value = _uiState.value.copy(files = sorted, sortField = by, sortAscending = newAscending)
+            val key = folder.toUriString()
+            directoryCache[key]?.let { entry ->
+                directoryCache[key] = entry.copy(files = sorted, sortField = by, sortAscending = newAscending)
             }
         }
+    }
+
+    fun setViewMode(mode: String) {
+        val folder = _uiState.value.currentFolder
+        if (folder != null) sourcePreferences.saveViewMode(folder, mode) else sourcePreferences.saveDefaultViewMode(mode)
+        _uiState.value = _uiState.value.copy(viewMode = mode)
+    }
+
+    fun setGridDensity(columns: Int) {
+        sourcePreferences.saveGridDensity(columns)
+        _uiState.value = _uiState.value.copy(gridDensity = columns.coerceIn(2, 5))
     }
 
     fun navigateUp() {
-        val currentSource = _uiState.value.currentSource
-        if (currentSource == null) return
-
-        val path = _uiState.value.currentPath
-        val effectiveRoot = getEffectiveSourcePath(currentSource)
-        
-        if (currentSource.type == SourceType.LOCAL) {
-             // Local logic
-             if (path == effectiveRoot) {
-                 // Back to Root
-                 exitSource()
-             } else {
-                  val parent = java.io.File(path).parent
-                  if (parent != null && parent.startsWith(effectiveRoot)) { 
-                      loadPath(parent, isBackNavigation = true)
-                  } else {
-                     exitSource()
-                 }
-             }
-        } else {
-            // WebDAV Logic
-            val pathClean = path.trimEnd('/')
-            val rootClean = effectiveRoot.trimEnd('/')
-            
-            if (pathClean == rootClean || path.isEmpty() || path == "/") {
-                exitSource()
-            } else {
-                 val parentPath = path.trimEnd('/').substringBeforeLast('/', "")
-                 
-                 if (parentPath.length < rootClean.length || !parentPath.startsWith("http")) {
-                     exitSource()
-                  } else {
-                       loadPath(parentPath, isBackNavigation = true)
-                  }
-            }
-        }
+        if (_uiState.value.search.active) { closeSearch(); return }
+        if (_uiState.value.showingFavorites) { exitSource(); return }
+        val folder = _uiState.value.currentFolder ?: return
+        val parent = folder.parent
+        if (parent == null) exitSource() else loadFolder(parent, isBackNavigation = true)
     }
 
     fun exitSource() {
-        sourcePreferences.saveLastBrowsedState(null, "ROOT")
-        _uiState.value = _uiState.value.copy(currentSource = null, currentPath = "ROOT", files = emptyList())
+        loadJob?.cancel()
+        closeSearch()
+        sourcePreferences.saveLastBrowsedState(null)
+        _uiState.value = _uiState.value.copy(currentFolder = null, showingFavorites = false, files = emptyList(), isLoading = false)
     }
 
     fun onFileClicked(
-        file: MusicFile, 
-        onFolderPlay: (SourceConfig, String, String?) -> Unit,
-        onCustomPlay: (SourceConfig, List<MusicFile>, Int) -> Unit,
-        onCuePlay: (SourceConfig, String) -> Unit
+        file: MusicFile,
+        onFolderPlay: (SourceRef, String?) -> Unit,
+        onCustomPlay: (List<MusicFile>, Int) -> Unit,
+        onCuePlay: (SourceRef) -> Unit
     ) {
         if (file.isDirectory) {
-            loadPath(file.path)
+            closeSearch()
+            loadFolder(file.ref)
+            return
+        }
+        if (MediaTypes.isCue(file.name)) {
+            onCuePlay(file.ref)
+            return
+        }
+        if (!MediaTypes.isAudio(file.name)) return
+
+        val list = when {
+            _uiState.value.search.active -> _uiState.value.search.results
+            _uiState.value.showingFavorites -> _uiState.value.files
+            else -> _uiState.value.files
+        }
+        val musicFiles = list.filter { !it.isDirectory && MediaTypes.isAudio(it.name) }
+        val clickIndex = musicFiles.indexOfFirst { it.sourceId == file.sourceId && it.path == file.path }
+        if (clickIndex != -1) {
+            onCustomPlay(musicFiles, clickIndex)
         } else {
-             val ext = file.name.substringAfterLast('.', "").lowercase()
-             
-             // Handle CUE Specifically
-             if (ext == "cue") {
-                 _uiState.value.currentSource?.let { sourceConfig ->
-                     onCuePlay(sourceConfig, file.path)
-                 }
-                 return
-             }
-
-             // Filter: Only play music files
-             if (!isMusic(file.name)) return
-
-             _uiState.value.currentSource?.let { sourceConfig ->
-                 // Logic to play folder while maintaining SORT ORDER
-                 val musicFiles = _uiState.value.files.filter { !it.isDirectory && isMusic(it.name) }
-                 val clickIndex = musicFiles.indexOfFirst { it.path == file.path }
-                 
-                 if (clickIndex != -1) {
-                     onCustomPlay(sourceConfig, musicFiles, clickIndex)
-                 } else {
-                     // Fallback
-                     val parentPath = if (sourceConfig.type == SourceType.LOCAL) {
-                         java.io.File(file.path).parent ?: file.path
-                     } else {
-                         if (file.path.contains('/')) {
-                            file.path.substringBeforeLast('/')
-                         } else {
-                            file.path
-                         }
-                     }
-                     onFolderPlay(sourceConfig, parentPath, file.path)
-                 }
-             }
-        }
-    }
-    
-    fun playCurrentFolder(onFolderPlay: (SourceConfig, String, String?) -> Unit) {
-        _uiState.value.currentSource?.let {
-            onFolderPlay(it, _uiState.value.currentPath, null)
+            onFolderPlay(file.ref.parent ?: SourceRef(file.sourceId, SourcePath.ROOT), file.path)
         }
     }
 
-    private fun isMusic(name: String): Boolean {
-        val ext = name.substringAfterLast('.', "").lowercase()
-        // Specifically exclude playlist/container files from the music list
-        return ext in listOf("mp3", "flac", "m4a", "wav", "ogg", "aac", "opus", "ape", "dsf", "dff")
+    fun playCurrentFolder(onFolderPlay: (SourceRef, String?) -> Unit) {
+        _uiState.value.currentFolder?.let { onFolderPlay(it, null) }
     }
 
-    fun shufflePlay(onFolderPlay: (SourceConfig, String, String?) -> Unit, onCustomPlay: (SourceConfig, List<MusicFile>, Int) -> Unit) {
-        val source = _uiState.value.currentSource ?: return
+    fun shufflePlay(onFolderPlay: (SourceRef, String?) -> Unit, onCustomPlay: (List<MusicFile>, Int) -> Unit) {
         val files = _uiState.value.files
         if (files.isEmpty()) return
 
-        val musicFiles = files.filter { !it.isDirectory && isMusic(it.name) }
+        val musicFiles = files.filter { !it.isDirectory && MediaTypes.isAudio(it.name) }
         val folders = files.filter { it.isDirectory }
 
         if (musicFiles.isNotEmpty()) {
-            // Shuffle music files and play
-            val shuffled = musicFiles.shuffled()
-            onCustomPlay(source, shuffled, 0)
+            onCustomPlay(musicFiles.shuffled(), 0)
         } else if (folders.isNotEmpty()) {
-            // Pick a random folder and play it sequential
-            val picked = folders.random()
-            onFolderPlay(source, picked.path, null)
+            onFolderPlay(folders.random().ref, null)
         }
     }
 
@@ -551,5 +401,108 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     fun closePlaylistDialog() {
         _uiState.value = _uiState.value.copy(selectedFileForPlaylist = null)
+    }
+
+    // ---------------- thumbnails ----------------
+
+    suspend fun folderThumbnail(folder: SourceRef): ArtworkResult = thumbnails.folderThumbnail(folder)
+
+    private fun bumpThumbnails() {
+        _uiState.value = _uiState.value.copy(thumbnailRevision = _uiState.value.thumbnailRevision + 1)
+    }
+
+    /** Called after the image cache was cleared in Settings: visible folders look up their image again. */
+    fun onImageCacheCleared() = bumpThumbnails()
+
+    // ---------------- favorites ----------------
+
+    fun isFavorite(file: MusicFile): Boolean = favoritesRepository.isFavorite(file.ref, file.isDirectory)
+
+    fun toggleFavorite(file: MusicFile) = favoritesRepository.toggle(file)
+
+    fun showFavorites() {
+        closeSearch()
+        loadJob?.cancel()
+        val sources = SourceRegistry.sources.value.map { it.id }.toSet()
+        val entries = favoritesRepository.items.value.mapNotNull { f ->
+            val ref = f.ref ?: return@mapNotNull null
+            MusicFile(f.name.ifEmpty { ref.name }, ref.path, f.type == FavoriteItem.TYPE_FOLDER, f.size, f.timestamp, ref.sourceId)
+                .takeIf { ref.sourceId in sources }
+        }
+        _uiState.value = _uiState.value.copy(
+            showingFavorites = true,
+            currentFolder = null,
+            files = entries,
+            isLoading = false,
+            viewMode = sourcePreferences.getDefaultViewMode(),
+        )
+    }
+
+    fun syncFavorites() {
+        viewModelScope.launch(exceptionHandler) {
+            val targets = SourceRegistry.sources.value.filter { it.syncPath.isNotBlank() }
+            if (targets.isEmpty()) {
+                _uiState.value = _uiState.value.copy(message = com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.sync_no_path))
+                return@launch
+            }
+            val messages = targets.map { cfg ->
+                val r = runInterruptible(Dispatchers.IO) { favoritesRepository.sync(SourceRegistry.fileSystem(cfg.id), SourcePath.normalize(cfg.syncPath)) }
+                "${cfg.name}: " + describe(r)
+            }
+            _uiState.value = _uiState.value.copy(message = messages.joinToString("\n"))
+        }
+    }
+
+    fun replaceRemoteFavorites(sourceId: String) {
+        viewModelScope.launch(exceptionHandler) {
+            val cfg = SourceRegistry.get(sourceId) ?: return@launch
+            val r = runInterruptible(Dispatchers.IO) { favoritesRepository.replaceRemote(SourceRegistry.fileSystem(cfg.id), SourcePath.normalize(cfg.syncPath)) }
+            _uiState.value = _uiState.value.copy(message = "${cfg.name}: " + describe(r))
+        }
+    }
+
+    private fun describe(r: SyncResult): String = when (r) {
+        is SyncResult.Synced -> com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.sync_done, r.added, r.total)
+        is SyncResult.RemoteCorrupt -> com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.sync_remote_broken, r.reason)
+        is SyncResult.RemoteNotWritable -> com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.sync_remote_read_only, r.reason, r.mergedFromRemote)
+        is SyncResult.Failed -> com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.sync_failed, r.reason)
+    }
+
+    // ---------------- search ----------------
+
+    fun openSearch() {
+        if (_uiState.value.currentFolder == null) return
+        _uiState.value = _uiState.value.copy(search = SearchUiState(active = true))
+    }
+
+    fun closeSearch() {
+        searchJob?.cancel()
+        _uiState.value = _uiState.value.copy(search = SearchUiState())
+    }
+
+    fun search(query: String) {
+        val root = _uiState.value.currentFolder ?: return
+        searchJob?.cancel()
+        _uiState.value = _uiState.value.copy(search = SearchUiState(active = true, query = query, running = query.isNotBlank()))
+        if (query.isBlank()) return
+        searchJob = viewModelScope.launch(exceptionHandler) {
+            kotlinx.coroutines.delay(300) // debounce typing
+            searchRepository.search(root, query).collect { p: SearchProgress ->
+                _uiState.value = _uiState.value.copy(
+                    search = _uiState.value.search.copy(
+                        running = !p.done,
+                        results = p.results,
+                        foldersScanned = p.foldersScanned,
+                        foldersSkipped = p.foldersSkipped,
+                        truncated = p.truncated,
+                    )
+                )
+            }
+        }
+    }
+
+    fun cancelSearch() {
+        searchJob?.cancel()
+        _uiState.value = _uiState.value.copy(search = _uiState.value.search.copy(running = false))
     }
 }

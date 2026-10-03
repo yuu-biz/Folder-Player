@@ -14,25 +14,29 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.wing.folderplayer.service.MusicService
 import com.wing.folderplayer.data.prefs.PlaybackPreferences
-import com.wing.folderplayer.ui.browser.SourceConfig
-import com.wing.folderplayer.ui.browser.SourceType
 import com.wing.folderplayer.data.repo.PlayerRepository
-import com.wing.folderplayer.data.source.LocalSource
-import com.wing.folderplayer.utils.LrcParser
+import com.wing.folderplayer.data.repo.TitleMode
+import com.wing.folderplayer.data.source.MediaTypes
+import com.wing.folderplayer.data.source.MusicFile
+import com.wing.folderplayer.data.source.SourcePath
+import com.wing.folderplayer.data.source.SourceRef
+import com.wing.folderplayer.data.source.SourceRegistry
+import com.wing.folderplayer.data.source.SourceUris
+import com.wing.folderplayer.data.source.readText
+import com.wing.folderplayer.data.lyrics.LyricsRepository
+import com.wing.folderplayer.data.lyrics.LyricsResult
+import com.wing.folderplayer.data.ai.AlbumInfoRepository
 import com.wing.folderplayer.utils.LyricLine
 import com.wing.folderplayer.utils.CueParser
-import com.wing.folderplayer.utils.CueTrack
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
 import android.os.Environment
 import java.io.File
 
@@ -41,12 +45,20 @@ enum class TimerType { TIME, SONGS }
 data class PlayerUiState(
     val currentTitle: String = "No Song Playing",
     val currentArtist: String = "",
+    /** Folder image URI (fpsrc) or embedded picture bytes. */
     val coverUri: Any? = null,
+    /** Embedded picture used when the folder image cannot be displayed. */
+    val coverFallback: ByteArray? = null,
     val isPlaying: Boolean = false,
     val progress: Float = 0f,
     val duration: Long = 0L,
     val currentPosition: Long = 0L,
     val lyrics: List<LyricLine> = emptyList(),
+    /** False for plain-text lyrics without timestamps (shown without line sync). */
+    val lyricsSynced: Boolean = true,
+    /** Where the lyrics came from, e.g. "LRC", "Embedded", "Lyric API", "AI (model)". */
+    val lyricsSource: String = "",
+    val translatedLyrics: List<LyricLine> = emptyList(),
     val currentLyricIndex: Int = -1,
     val currentMediaId: String? = null,
     val currentFolderName: String = "",
@@ -57,28 +69,45 @@ data class PlayerUiState(
     val playlist: List<androidx.media3.common.MediaItem> = emptyList(),
     val coverDisplaySize: String = "STANDARD", // STANDARD or LARGE
     val autoNextFolder: Boolean = false,
-    
+    val backgroundStyle: String = "GRADIENT",
+
     // Buffering state
     val isBuffering: Boolean = false,
     val bufferedPosition: Long = 0L,
-    
-    // Album Info (Gemini)
+
+    // Album Info (AI / NFO)
     val albumInfo: String? = null,
     val artistInfo: String? = null,
     val albumInfoCacheKey: String? = null, // To ensure cache consistency
     val isFetchingAlbumInfo: Boolean = false,
+    val albumInfoFromCache: Boolean = false,
 
     // Playlist Management
     val activePlaylistId: String = "default",
     val activePlaylistName: String = "Default",
     val activePlaylistItems: List<PlaylistItem> = emptyList(),
     val allPlaylists: List<Playlist> = emptyList(),
-    
+
     // Sleep Timer
     val sleepTimerActive: Boolean = false,
     val sleepTimerValue: Int = 0,
     val sleepTimerType: TimerType = TimerType.TIME,
-    val sleepTimerLabel: String = "0 min"
+    val sleepTimerLabel: String = "0 min",
+
+    /** Last playback error shown to the user (e.g. "server cannot seek"). */
+    val playbackError: String? = null,
+
+    // NFO / AI album info
+    val albumInfoFromNfo: Boolean = false,
+    val albumInfoNfoTracks: List<com.wing.folderplayer.data.nfo.NfoTrack> = emptyList(),
+    val albumInfoAiModel: String? = null,
+    val albumInfoCanSave: Boolean = false,
+    val nfoSaveResult: String? = null,
+    val nfoNeedsOverwriteConfirm: Boolean = false,
+
+    // Explicit AI lyrics request
+    val lyricsRequestRunning: Boolean = false,
+    val lyricsError: String? = null,
 )
 
 class PlayerViewModel : ViewModel() {
@@ -96,18 +125,16 @@ class PlayerViewModel : ViewModel() {
     private var mediaControllerFuture: ListenableFuture<MediaController>? = null
     private var player: Player? = null
 
-    // For demo purposes, we will initialize the repository here
-    private val repository = PlayerRepository()
-    private val localSource = LocalSource()
-    
+    private var repository: PlayerRepository? = null
+    private var lyricsRepository: LyricsRepository? = null
+    private var albumInfoRepository: AlbumInfoRepository? = null
+
     private var metadataJob: kotlinx.coroutines.Job? = null
-    private val lyricsCache = mutableMapOf<String, List<LyricLine>>()
-    private val albumInfoCache = mutableMapOf<String, String>()
-    
-    // Keep track of current source for lyrics and cover loading
-    private var currentSource: com.wing.folderplayer.data.source.MusicSource? = null
-    private var currentFolderPath: String? = null
-    private var currentSourceConfig: SourceConfig? = null
+    private var albumInfoJob: kotlinx.coroutines.Job? = null
+    private val lyricsCache = mutableMapOf<String, LyricsResult>()
+
+    /** Folder whose contents are in the queue (for next-folder playback and restore). */
+    private var currentFolder: SourceRef? = null
     private var playbackPreferences: PlaybackPreferences? = null
     private var sourcePreferences: com.wing.folderplayer.data.prefs.SourcePreferences? = null
     private var lyricPreferences: com.wing.folderplayer.data.prefs.LyricPreferences? = null
@@ -116,29 +143,47 @@ class PlayerViewModel : ViewModel() {
     private var lastMediaIdBeforeIntent: String? = null
     private var playlistManager: PlaylistManager? = null
     private val audioInfoCache = mutableMapOf<String, String>()
-    
+    private var appContext: Context? = null
+
     // Sleep Timer internals
     private var sleepTimerDeadlineMs: Long = 0L
     private var remainingSongsCount: Int = 0
 
-    fun initializeController(context: Context) {
+    private fun repo(): PlayerRepository = repository!!
+
+    fun initializeController(callerContext: Context) {
+        // The ViewModel outlives the Activity (recreation, language change): never keep or bind with the Activity context.
+        // A MediaController bound through a destroyed Activity crashes on release ("Service not registered") and leaks it.
+        val context = callerContext.applicationContext
+        appContext = context
+        SourceRegistry.init(context.applicationContext)
         if (playbackPreferences == null) {
             playbackPreferences = PlaybackPreferences(context)
         }
+        if (repository == null) {
+            repository = PlayerRepository(context.applicationContext)
+        }
+        repo().titleMode = if (playbackPreferences?.getTitleMode() == "TAGS") TitleMode.TAGS else TitleMode.FILENAME
         if (sourcePreferences == null) {
             sourcePreferences = com.wing.folderplayer.data.prefs.SourcePreferences(context)
         }
         if (lyricPreferences == null) {
             lyricPreferences = com.wing.folderplayer.data.prefs.LyricPreferences(context)
         }
+        if (lyricsRepository == null) {
+            lyricsRepository = LyricsRepository(context.applicationContext, lyricPreferences!!)
+        }
+        if (albumInfoRepository == null) {
+            albumInfoRepository = AlbumInfoRepository(context.applicationContext, lyricPreferences!!)
+        }
         if (playlistManager == null) {
             playlistManager = PlaylistManager(context)
-            
+
             // Sync initial playlist state (Async load)
             val activeId = playbackPreferences!!.getActivePlaylistId()
             val all = playlistManager!!.getAllPlaylists()
             val currentActual = all.find { it.id == activeId } ?: all.first()
-            
+
             _uiState.value = _uiState.value.copy(
                 activePlaylistId = currentActual.id,
                 activePlaylistName = currentActual.name,
@@ -146,47 +191,49 @@ class PlayerViewModel : ViewModel() {
                 allPlaylists = all
             )
         }
-        
+        if (mediaControllerFuture != null) return
+
         // Safety Check: Detect "Init" folder trigger
         val musicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
         val resetTrigger = File(musicDir, "Init")
         val resetTriggerLower = File(musicDir, "init")
-        
+
         if (resetTrigger.exists() || resetTriggerLower.exists()) {
-             android.util.Log.w("PlayerViewModel", "Safe Mode Trigger Detected! Clearing persistence.")
-             playbackPreferences?.clearAll()
-             sourcePreferences?.clearAll()
-             lyricPreferences?.clear()
-             // We do NOT delete the folder, user must do it manually to re-enable persistence.
-             // We just skip restoration logic below.
-             return
+            android.util.Log.w("PlayerViewModel", "Safe Mode Trigger Detected! Clearing persistence.")
+            playbackPreferences?.clearAll()
+            sourcePreferences?.clearAll()
+            lyricPreferences?.clear()
+            // We do NOT delete the folder, user must do it manually to re-enable persistence.
+            // We just skip restoration logic below.
+            return
         }
-        
+
         // Restore cached UI state immediately for instant feedback
         val lastMediaId = playbackPreferences?.getLastMediaId()
         playbackPreferences?.getCachedMetadata()?.let { cached ->
-             _uiState.value = _uiState.value.copy(
-                 currentTitle = cached.title,
-                 currentArtist = cached.artist,
-                 currentFolderName = cached.folderName,
-                 audioInfo = cached.audioInfo,
-                 coverUri = cached.coverUri,
-                 lyrics = cached.lyrics.toList(),
-                 currentMediaId = lastMediaId
-             )
-             
-             // Also seed the lyrics cache to prevent re-fetching
-             if (lastMediaId != null && cached.lyrics.isNotEmpty()) {
-                 lyricsCache[lastMediaId] = cached.lyrics.toList()
-             }
+            _uiState.value = _uiState.value.copy(
+                currentTitle = cached.title,
+                currentArtist = cached.artist,
+                currentFolderName = cached.folderName,
+                audioInfo = cached.audioInfo,
+                coverUri = cached.coverUri,
+                lyrics = cached.lyrics.toList(),
+                currentMediaId = lastMediaId
+            )
+
+            // Also seed the lyrics cache to prevent re-fetching
+            if (lastMediaId != null && cached.lyrics.isNotEmpty()) {
+                lyricsCache[lastMediaId] = LyricsResult(cached.lyrics.toList(), true, "")
+            }
         }
-        
+
         // Load initial cover size and auto next folder setting
         val size = playbackPreferences?.getCoverDisplaySize() ?: "STANDARD"
         val autoNext = playbackPreferences?.getAutoNextFolder() ?: false
         _uiState.value = _uiState.value.copy(
             coverDisplaySize = size,
-            autoNextFolder = autoNext
+            autoNextFolder = autoNext,
+            backgroundStyle = playbackPreferences?.getBackgroundStyle() ?: "GRADIENT",
         )
 
         val sessionToken = SessionToken(context, ComponentName(context, MusicService::class.java))
@@ -197,82 +244,88 @@ class PlayerViewModel : ViewModel() {
                 player = controller
                 setupPlayerListener()
                 updatePlaybackState()
-                
-                // 1. Sync internal variables FROM PREFS first
-                syncInternalStateFromPrefs()
 
-                // 2. High-precision Restoration Detection
+                currentFolder = playbackPreferences?.getLastFolder()
+
+                // High-precision Restoration Detection
                 val savedMediaId = playbackPreferences?.getLastMediaId()
                 val playerMediaId = controller.currentMediaItem?.mediaId
                 val playerState = controller.playbackState
                 val isPlaying = controller.isPlaying
-                
-                // We restore if:
-                // a) The player is totally empty or idle.
-                // b) The player has items, but the ID doesn't match our 'last saved' ID, 
-                //    AND it's not currently playing (don't interrupt active music).
-                if (savedMediaId != null) {
+
+                if (savedMediaId != null && !userStartedPlayback) {
                     val isPlayerEmpty = controller.mediaItemCount == 0
                     val isMismatched = playerMediaId != savedMediaId
                     val isInterrupted = !isPlaying && playerState != Player.STATE_READY
-                    
+
                     if (isPlayerEmpty || (isMismatched && isInterrupted)) {
                         isRestoring = true
-                        android.util.Log.d("PlayerViewModel", "Detected state drift or cold start. Restoring last known song: $savedMediaId")
+                        android.util.Log.d("PlayerViewModel", "Detected state drift or cold start. Restoring last known song")
                     }
                 }
 
-                // 3. Initial sync
-                updateMetadata() 
-                
+                updateMetadata()
+
                 if (isRestoring) {
                     restoreLastState()
                 }
             } catch (e: Exception) {
                 android.util.Log.e("PlayerViewModel", "MediaController Init Error", e)
-                _error.value = "Playback System Failed to Initialize"
+                _error.value = com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_player_init)
             }
         }, MoreExecutors.directExecutor())
     }
 
-    private fun restoreLastState() {
-        val prefs = playbackPreferences ?: return
-        val config = prefs.getLastSourceConfig() ?: return
-        val folderPath = prefs.getLastFolderPath() ?: return
-        val mediaId = prefs.getLastMediaId()
+    /** Restore of the last session; cancelled as soon as the user starts something else. */
+    private var restoreJob: kotlinx.coroutines.Job? = null
 
-        if (mediaId == null) return
+    /** Set by any user play request; a controller that connects later must not restore the old session over it. */
+    private var userStartedPlayback = false
 
-        viewModelScope.launch(exceptionHandler) {
-            // Check if we were playing a CUE track
-            if (mediaId.contains("#track_")) {
-                // Determine cuePath: usually base name of the audio file referenced in ID
-                val audioPath = mediaId.substringBefore("#")
-                // Try .cue with same name as audio
-                val cuePath = audioPath.substringBeforeLast(".") + ".cue"
-                
-                playCueSheetInternal(config, cuePath, mediaId, prefs.getLastPosition(), playWhenReady = false)
-            } else if (mediaId.lowercase().endsWith(".cue")) {
-                playCueSheetInternal(config, mediaId, null, prefs.getLastPosition(), playWhenReady = false)
-            } else {
-                playFolderInternal(config, folderPath, mediaId, prefs.getLastPosition(), playWhenReady = false)
-            }
+    /**
+     * The MediaController connects asynchronously; a play request issued before that (e.g. right after a cold start)
+     * waits for it instead of being dropped.
+     */
+    private suspend fun awaitPlayer(): Player? {
+        player?.let { return it }
+        val future = mediaControllerFuture ?: return null
+        val controller = kotlinx.coroutines.suspendCancellableCoroutine<MediaController?> { cont ->
+            future.addListener({ cont.resume(runCatching { future.get() }.getOrNull()) {} }, MoreExecutors.directExecutor())
         }
+        return player ?: controller
     }
 
-    private fun syncInternalStateFromPrefs() {
+    /** Incremented by every user play request; delayed work of an older request checks it before touching the player. */
+    private var playRequestGeneration = 0
+
+    private fun cancelRestore() {
+        userStartedPlayback = true
+        playRequestGeneration++
+        restoreJob?.cancel()
+        restoreJob = null
+        isRestoring = false
+    }
+
+    private fun restoreLastState() {
         val prefs = playbackPreferences ?: return
-        val config = prefs.getLastSourceConfig() ?: return
-        val folderPath = prefs.getLastFolderPath() ?: return
-        
-        // Reconstruct source
-        currentSourceConfig = config
-        currentFolderPath = folderPath
-        currentSource = when (config.type) {
-            com.wing.folderplayer.ui.browser.SourceType.LOCAL -> localSource
-            com.wing.folderplayer.ui.browser.SourceType.WEBDAV -> {
-                com.wing.folderplayer.data.source.WebDavAuthManager.setCredentials(config.username, config.password)
-                com.wing.folderplayer.data.source.WebDavSource(config.url, config.username, config.password)
+        val folder = prefs.getLastFolder() ?: return
+        val mediaId = prefs.getLastMediaId() ?: return
+        if (SourceRegistry.get(folder.sourceId) == null) { isRestoring = false; return }
+
+        restoreJob = viewModelScope.launch(exceptionHandler) {
+            try {
+                if (SourceUris.isCueTrackId(mediaId)) {
+                    val audio = SourceUris.parse(mediaId) ?: return@launch
+                    val cue = SourceRef(audio.sourceId, SourcePath.baseName(audio.path) + ".cue")
+                    playCueSheetInternal(cue, mediaId, prefs.getLastPosition(), playWhenReady = false)
+                } else if (mediaId.lowercase().endsWith(".cue")) {
+                    playCueSheetInternal(SourceUris.parse(mediaId) ?: return@launch, null, prefs.getLastPosition(), playWhenReady = false)
+                } else {
+                    playFolderInternal(folder, SourceUris.parse(mediaId)?.path, prefs.getLastPosition(), playWhenReady = false)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("PlayerViewModel", "restore failed: ${e.message}")
+                isRestoring = false
             }
         }
     }
@@ -284,12 +337,16 @@ class PlayerViewModel : ViewModel() {
                 // to prevent older song data from 'flickering' in
                 _uiState.value = _uiState.value.copy(
                     currentTitle = "Switching Track..",
-                    lyrics = emptyList(), 
-                    currentLyricIndex = -1
+                    lyrics = emptyList(),
+                    translatedLyrics = emptyList(),
+                    currentLyricIndex = -1,
+                    playbackError = null,
                 )
                 metadataJob?.cancel()
+                aiLyricsJob?.cancel()
+                _uiState.value = _uiState.value.copy(lyricsRequestRunning = false, lyricsError = null)
                 updateMetadata()
-                
+
                 if (mediaItem == null && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
                     checkAndPlayNextFolder()
                 }
@@ -320,9 +377,26 @@ class PlayerViewModel : ViewModel() {
                 updatePlaybackState()
             }
 
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                _uiState.value = _uiState.value.copy(playbackError = PlaybackErrorText.describe(error))
+            }
+
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                // Media3 "plays" a file whose only audio track no decoder supports by advancing the clock in silence
+                // (e.g. FLAC on Android 8.0, which has no FLAC decoder). Say so instead of pretending to play.
+                val audio = tracks.groups.filter { it.type == androidx.media3.common.C.TRACK_TYPE_AUDIO }
+                if (audio.isNotEmpty() && audio.none { it.isSupported }) {
+                    val mime = audio.first().getTrackFormat(0).sampleMimeType ?: "?"
+                    _uiState.value = _uiState.value.copy(
+                        playbackError = com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_format_not_decodable, mime, android.os.Build.VERSION.RELEASE)
+                    )
+                }
+            }
+
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 updatePlaybackState()
                 if (isPlaying) {
+                    _uiState.value = _uiState.value.copy(playbackError = null)
                     startProgressLoop()
                     // Re-check metadata after 1.5 seconds to catch bitrates that populate after buffering
                     viewModelScope.launch(exceptionHandler) {
@@ -331,9 +405,9 @@ class PlayerViewModel : ViewModel() {
                     }
                 }
             }
-            
+
             override fun onEvents(player: Player, events: Player.Events) {
-                if (events.contains(Player.EVENT_MEDIA_METADATA_CHANGED) || 
+                if (events.contains(Player.EVENT_MEDIA_METADATA_CHANGED) ||
                     events.contains(Player.EVENT_TRACKS_CHANGED) ||
                     events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED) ||
                     events.contains(Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED) ||
@@ -344,8 +418,11 @@ class PlayerViewModel : ViewModel() {
         })
     }
 
+    private var progressJob: kotlinx.coroutines.Job? = null
+
     private fun startProgressLoop() {
-        viewModelScope.launch(exceptionHandler) {
+        if (progressJob?.isActive == true) return
+        progressJob = viewModelScope.launch(exceptionHandler) {
             while (player?.isPlaying == true) {
                 updatePlaybackState()
                 checkSleepTimer()
@@ -378,7 +455,7 @@ class PlayerViewModel : ViewModel() {
             resetSleepTimer()
             return
         }
-        
+
         val label = if (type == TimerType.TIME) "$value min" else "$value songs"
         _uiState.value = _uiState.value.copy(
             sleepTimerActive = true,
@@ -408,8 +485,8 @@ class PlayerViewModel : ViewModel() {
         val p = player ?: return
         val currentMediaItem = p.currentMediaItem ?: return
         val metadata = p.mediaMetadata
-        val currentTitleFromMetadata = metadata.title?.toString()
         val mediaId = currentMediaItem.mediaId
+        val titleFromMetadata = (metadata.title ?: metadata.displayTitle ?: currentMediaItem.mediaMetadata.displayTitle)?.toString()
 
         // Protection against metadata updates for the OLD song during transitions
         val pending = pendingPlayIntent
@@ -419,7 +496,7 @@ class PlayerViewModel : ViewModel() {
             } else {
                 mediaId == pending
             }
-            
+
             if (!isChangeDetected) {
                 // Still waiting for player to reach the new state or the target song.
                 return
@@ -428,15 +505,13 @@ class PlayerViewModel : ViewModel() {
         }
 
         // Guard: If we have an item but NO title yet, the service is still parsing metadata.
-        // We MUST NOT overwrite the UI with "No Song Playing" if we are restoring or buffering.
-        if (currentTitleFromMetadata.isNullOrBlank()) {
+        if (titleFromMetadata.isNullOrBlank()) {
             if (isRestoring || p.playbackState == Player.STATE_BUFFERING || p.playbackState == Player.STATE_IDLE) {
                 return
             }
         }
 
-        // Only once we have a real media item AND a valid title, or if we've truly given up,
-        if (!currentTitleFromMetadata.isNullOrBlank()) {
+        if (!titleFromMetadata.isNullOrBlank()) {
             isRestoring = false
         }
 
@@ -445,203 +520,147 @@ class PlayerViewModel : ViewModel() {
             items.add(p.getMediaItemAt(i))
         }
 
-        val folderName = cleanFolderName(mediaId)
-        
-        // Reset album info and lyrics cache if we changed folders
+        val ref = SourceUris.parse(mediaId)
+        val folderName = cleanFolderName(ref)
+
+        // Reset album info if we changed folders
         if (folderName != _uiState.value.currentFolderName) {
-            _uiState.value = _uiState.value.copy(albumInfo = null)
-            // Optional: Clear lyrics cache if switching albums to save memory
-            // lyricsCache.clear() 
+            albumInfoJob?.cancel()
+            _uiState.value = _uiState.value.copy(albumInfo = null, artistInfo = null, isFetchingAlbumInfo = false)
         }
-        val rawTitle = metadata.title?.toString() ?: "No Song Playing"
-        val musicExtensions = listOf("mp3", "flac", "m4a", "wav", "ogg", "aac", "opus", "ape", "dsf", "dff")
-        val cleanTitle = if (rawTitle.contains('.')) {
-            val ext = rawTitle.substringAfterLast('.').lowercase()
-            if (musicExtensions.contains(ext)) {
-                rawTitle.substringBeforeLast('.')
-            } else {
-                rawTitle
-            }
+        val rawTitle = titleFromMetadata ?: "No Song Playing"
+        val cleanTitle = if (rawTitle.contains('.') && SourcePath.extension(rawTitle) in MediaTypes.AUDIO) {
+            rawTitle.substringBeforeLast('.')
         } else {
             rawTitle
         }
-        
-        // Path validation: Check if this song actually belongs to our current directory context
-        val belongsToCurrentFolder = currentFolderPath != null && 
-                                     mediaId.contains(currentFolderPath!!)
-        
-        // If we are NOT restoring, and the player is playing something we didn't expect,
-        // we should update our context to match the player (reactive behavior).
-        if (!isRestoring && !belongsToCurrentFolder) {
-            // Update internal context to match reality in the player
-            val extractedParent = if (mediaId.contains("#track_")) {
-                mediaId.substringBefore("#").substringBeforeLast('/')
-            } else {
-                mediaId.substringBeforeLast('/')
-            }
-            if (extractedParent.isNotEmpty() && extractedParent.startsWith("http")) {
-                currentFolderPath = extractedParent
+
+        // Keep the folder context in sync with what the player is actually playing.
+        if (!isRestoring && ref != null) {
+            val parent = ref.parent
+            if (parent != null && parent != currentFolder && currentMediaItem.mediaMetadata.extras?.getBoolean(PlayerRepository.EXTRA_IS_CUE_TRACK) != true) {
+                currentFolder = parent
             }
         }
-        
-        // Extract audio format info from tracks
-        var audioInfo = ""
-        for (groupIndex in 0 until p.currentTracks.groups.size) {
-            val group = p.currentTracks.groups[groupIndex]
-            if (group.type == androidx.media3.common.C.TRACK_TYPE_AUDIO) {
-                // Grab info from the first track in the group even if not selected
-                val format = group.getTrackFormat(0)
-                val mime = format.sampleMimeType?.lowercase() ?: ""
-                val displayFormat = when {
-                    mime.contains("flac") -> "FLAC"
-                    mime.contains("alac") || mime.contains("apple") && mime.contains("lossless") -> "ALAC"
-                    mime.contains("mpeg") || mime.contains("mp3") -> "MP3"
-                    mime.contains("ogg") || mime.contains("vorbis") -> "OGG"
-                    mime.contains("opus") -> "OPUS"
-                    mime.contains("aac") -> "AAC"
-                    mime.contains("mp4") || mime.contains("m4a") -> "M4A"
-                    else -> {
-                        val ext = p.currentMediaItem?.mediaMetadata?.extras?.getString("file_ext")
-                        val fallback = ext?.uppercase()?.take(4) ?: p.currentMediaItem?.mediaId?.substringAfterLast('.')?.uppercase()?.take(4) ?: "AUDIO"
-                        if (mime.isNotEmpty()) "$fallback ($mime)" else fallback
-                    }
-                }
 
-                var bitrateStr = ""
-                val formatBitrate = format.bitrate
-                val extension = p.currentMediaItem?.mediaMetadata?.extras?.getString("file_ext") ?: ""
+        val audioInfo = computeAudioInfo(p, mediaId)
 
-                // Check cache first to prevent dynamic jumping or disappearance
-                val cachedInfo = audioInfoCache[mediaId]
-                if (cachedInfo != null && cachedInfo.contains("kbps")) {
-                    audioInfo = cachedInfo
-                    break
-                }
-
-                if (formatBitrate > 0) {
-                    bitrateStr = snapBitrate(formatBitrate / 1000.0, extension)
-                }
-                
-                var sampleRate = format.sampleRate
-                var channelCount = format.channelCount
-                
-                // Fallback 1: Local MediaMetadataRetriever
-                if (bitrateStr.isEmpty() || sampleRate <= 0 || channelCount <= 0) {
-                    val path = p.currentMediaItem?.mediaId?.let { 
-                        if (it.startsWith("file://")) it.substring(7) else if (it.startsWith("/") && !it.startsWith("http")) it else null
-                    }
-                    if (path != null && java.io.File(path).exists()) {
-                        try {
-                            val retriever = android.media.MediaMetadataRetriever()
-                            retriever.setDataSource(path)
-                            val b = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_BITRATE)
-                            if (b != null) {
-                                bitrateStr = snapBitrate(b.toDouble() / 1000.0, extension)
-                            }
-                            
-                            if (sampleRate <= 0) {
-                                val sr = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_SAMPLERATE)
-                                if (sr != null) {
-                                    sampleRate = sr.toInt()
-                                }
-                            }
-                            retriever.release()
-                        } catch (e: Exception) { e.printStackTrace() }
-                    }
-                }
-
-                // Fallback 2: Calculate from file size and duration
-                if (bitrateStr.isEmpty() && p.duration > 0) {
-                    val fileSize = p.currentMediaItem?.mediaMetadata?.extras?.getLong("file_size", 0L) ?: 0L
-                    if (fileSize > 0) {
-                        val durationSec = p.duration / 1000.0
-                        val bitrateCalc = ((fileSize * 8) / durationSec) / 1000.0
-                        bitrateStr = snapBitrate(bitrateCalc, extension)
-                    }
-                }
-
-                val samplerate = if (sampleRate > 0) {
-                    val rate = sampleRate / 1000.0
-                    if (rate % 1 == 0.0) "${rate.toInt()}kHz" else "${String.format("%.1f", rate)}kHz"
-                } else ""
-                
-                audioInfo = listOfNotNull(
-                    displayFormat,
-                    bitrateStr.ifEmpty { null },
-                    samplerate.ifEmpty { null }
-                ).joinToString(" | ")
-
-                // Cache it if we found a bitrate
-                if (bitrateStr.isNotEmpty()) {
-                    audioInfoCache[mediaId] = audioInfo
-                }
-                break
-            }
-        }
-        
-        // Immediate (FAST) Update: Update title, cover, and folder name synchronously
-        // so the UI reacts instantly to a song change without any coroutine delay.
         val currentArtistImmediate = metadata.artist?.toString() ?: ""
-        val targetMediaId = p.currentMediaItem?.mediaId
-        
-        // Synchronous cache check for immediate display
-        val cachedLyrics = if (targetMediaId != null) lyricsCache[targetMediaId] else null
-        
+        val targetMediaId = currentMediaItem.mediaId
+
+        val cached = lyricsCache[targetMediaId]
+
         _uiState.value = _uiState.value.copy(
             currentTitle = cleanTitle,
             currentArtist = currentArtistImmediate,
             currentFolderName = folderName,
-            coverUri = metadata.artworkUri ?: metadata.artworkData,
+            coverUri = metadata.artworkUri?.toString() ?: metadata.artworkData,
+            coverFallback = if (metadata.artworkUri != null) metadata.artworkData else null,
             audioInfo = audioInfo,
             isPlaying = p.isPlaying,
             currentMediaId = targetMediaId,
             playlist = items,
-            lyrics = cachedLyrics ?: listOf(LyricLine(0L, ".. Loading Lyrics ..")),
+            lyrics = cached?.lines ?: listOf(LyricLine(0L, ".. Loading Lyrics ..")),
+            lyricsSynced = cached?.synced ?: true,
+            lyricsSource = cached?.source ?: "",
             currentLyricIndex = -1
         )
-        
+
         metadataJob?.cancel()
         metadataJob = viewModelScope.launch(exceptionHandler) {
-             // DEEP Update
-             val lyrics = if (lyricsCache.containsKey(targetMediaId) && lyricsCache[targetMediaId]?.isNotEmpty() == true) {
-                 lyricsCache[targetMediaId] ?: emptyList()
-             } else {
-                 val loaded = loadLyrics(targetMediaId, cleanTitle, currentArtistImmediate, metadata)
-                 if (targetMediaId != null) lyricsCache[targetMediaId] = loaded
-                 loaded
-             }
+            val lyrics = cached ?: run {
+                val loaded = lyricsRepository?.load(currentMediaItem, cleanTitle, currentArtistImmediate, p.duration)
+                    ?: LyricsResult(emptyList(), true, "")
+                // Do not apply an answer for a song that is no longer playing.
+                if (p.currentMediaItem?.mediaId != targetMediaId) return@launch
+                // The user asked for AI lyrics while this automatic lookup was running: keep their result.
+                if (targetMediaId in explicitAiLyrics) lyricsCache[targetMediaId]?.let { return@run it }
+                lyricsCache[targetMediaId] = loaded
+                loaded
+            }
 
-             if (p.currentMediaItem?.mediaId != targetMediaId) return@launch
+            if (p.currentMediaItem?.mediaId != targetMediaId) return@launch
 
-             _uiState.value = _uiState.value.copy(
-               lyrics = lyrics,
-               duration = p.duration.takeIf { it > 0 } ?: 1L,
-               shuffleModeEnabled = p.shuffleModeEnabled,
-               repeatMode = p.repeatMode
-             )
-             
-             // Save for next restart (instant cache)
-             playbackPreferences?.saveCachedMetadata(
-                 com.wing.folderplayer.data.prefs.CachedMetadata(
-                     title = cleanTitle,
-                     artist = currentArtistImmediate,
-                     folderName = folderName,
-                     audioInfo = audioInfo,
-                     coverUri = metadata.artworkUri?.toString(),
-                     lyrics = lyrics.toTypedArray()
-                 )
-             )
-             
-             // Save playback state
-             if (!isRestoring && p.playbackState != Player.STATE_IDLE) {
-                 playbackPreferences?.savePlaybackState(
-                     currentSourceConfig,
-                     currentFolderPath,
-                     targetMediaId,
-                     p.currentPosition
-                 )
-             }
+            _uiState.value = _uiState.value.copy(
+                lyrics = lyrics.lines,
+                lyricsSynced = lyrics.synced,
+                lyricsSource = lyrics.source,
+                translatedLyrics = lyrics.translation,
+                duration = p.duration.takeIf { it > 0 } ?: 1L,
+                shuffleModeEnabled = p.shuffleModeEnabled,
+                repeatMode = p.repeatMode
+            )
+
+            // Save for next restart (instant cache)
+            playbackPreferences?.saveCachedMetadata(
+                com.wing.folderplayer.data.prefs.CachedMetadata(
+                    title = cleanTitle,
+                    artist = currentArtistImmediate,
+                    folderName = folderName,
+                    audioInfo = audioInfo,
+                    coverUri = metadata.artworkUri?.toString(),
+                    lyrics = if (lyrics.synced) lyrics.lines.toTypedArray() else emptyArray()
+                )
+            )
+
+            // Save playback state
+            if (!isRestoring && p.playbackState != Player.STATE_IDLE) {
+                playbackPreferences?.savePlaybackState(currentFolder, targetMediaId, p.currentPosition)
+            }
         }
+    }
+
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    private fun computeAudioInfo(p: Player, mediaId: String): String {
+        var audioInfo = ""
+        for (groupIndex in 0 until p.currentTracks.groups.size) {
+            val group = p.currentTracks.groups[groupIndex]
+            if (group.type != androidx.media3.common.C.TRACK_TYPE_AUDIO) continue
+            val format = group.getTrackFormat(0)
+            val mime = format.sampleMimeType?.lowercase() ?: ""
+            val extension = p.currentMediaItem?.mediaMetadata?.extras?.getString("file_ext") ?: ""
+            val displayFormat = when {
+                extension in MediaTypes.EXTRA_AUDIO -> extension.uppercase()
+                mime.contains("flac") -> "FLAC"
+                mime.contains("alac") || mime.contains("apple") && mime.contains("lossless") -> "ALAC"
+                mime.contains("mpeg") || mime.contains("mp3") -> "MP3"
+                mime.contains("ogg") || mime.contains("vorbis") -> "OGG"
+                mime.contains("opus") -> "OPUS"
+                mime.contains("aac") -> "AAC"
+                mime.contains("mp4") || mime.contains("m4a") -> "M4A"
+                mime.contains("raw") && extension == "m4a" -> "ALAC"
+                else -> {
+                    val fallback = extension.uppercase().take(4).ifEmpty { "AUDIO" }
+                    if (mime.isNotEmpty()) "$fallback ($mime)" else fallback
+                }
+            }
+
+            val cachedInfo = audioInfoCache[mediaId]
+            if (cachedInfo != null && cachedInfo.contains("kbps")) return cachedInfo
+
+            var bitrateStr = ""
+            if (format.bitrate > 0) bitrateStr = snapBitrate(format.bitrate / 1000.0, extension)
+            val sampleRate = format.sampleRate
+
+            // Calculate from file size and duration
+            if (bitrateStr.isEmpty() && p.duration > 0) {
+                val fileSize = p.currentMediaItem?.mediaMetadata?.extras?.getLong("file_size", 0L) ?: 0L
+                if (fileSize > 0) {
+                    val durationSec = p.duration / 1000.0
+                    bitrateStr = snapBitrate(((fileSize * 8) / durationSec) / 1000.0, extension)
+                }
+            }
+
+            val samplerate = if (sampleRate > 0) {
+                val rate = sampleRate / 1000.0
+                if (rate % 1 == 0.0) "${rate.toInt()}kHz" else "${String.format("%.1f", rate)}kHz"
+            } else ""
+
+            audioInfo = listOfNotNull(displayFormat, bitrateStr.ifEmpty { null }, samplerate.ifEmpty { null }).joinToString(" | ")
+            if (bitrateStr.isNotEmpty()) audioInfoCache[mediaId] = audioInfo
+            break
+        }
+        return audioInfo
     }
 
     fun toggleShuffle() {
@@ -672,113 +691,59 @@ class PlayerViewModel : ViewModel() {
 
     private fun checkAndPlayNextFolder() {
         if (!_uiState.value.autoNextFolder) return
-        
-        // We only move to next folder if repeat mode is OFF or ALL (not ONE)
-        // Usually if it's ALL, it will loop the current folder, so it will never reach STATE_ENDED.
-        // If it's OFF, it reaches STATE_ENDED.
-        
         viewModelScope.launch(exceptionHandler) {
             moveNextFolder()
         }
     }
 
     private suspend fun moveNextFolder() {
-        val config = currentSourceConfig ?: return
-        val currentPath = currentFolderPath ?: return
-        val source = currentSource ?: return
-        
-        // 1. Determine parent path
-        val parentPath = if (currentPath.contains("/")) {
-            currentPath.substringBeforeLast('/')
-        } else {
-            "" // Root
-        }
-        
-        // 2. List siblings (folders in the same parent)
-        val siblings = withContext(Dispatchers.IO) {
-            try {
-                source.list(parentPath)
-            } catch (e: Exception) {
-                emptyList()
-            }
-        }.filter { it.isDirectory }
-        
+        val folder = currentFolder ?: return
+        val parent = folder.parent ?: return
+
+        val siblings = try { repo().list(parent) } catch (e: Exception) { emptyList() }.filter { it.isDirectory }
         if (siblings.isEmpty()) return
-        
-        // 3. Apply sorting using SourcePreferences
-        val sortOption = sourcePreferences?.getDirectorySort(parentPath) ?: sourcePreferences?.getDefaultSort() ?: com.wing.folderplayer.data.prefs.SourcePreferences.SortOption("NAME", true)
-        
-        val sortedSiblings = when (sortOption.field) {
-            "NAME" -> {
-                if (sortOption.ascending) siblings.sortedBy { it.name.lowercase() }
-                else siblings.sortedByDescending { it.name.lowercase() }
-            }
-            "DATE" -> {
-                if (sortOption.ascending) siblings.sortedBy { it.lastModified }
-                else siblings.sortedByDescending { it.lastModified }
-            }
-            "SIZE" -> {
-                if (sortOption.ascending) siblings.sortedBy { it.size }
-                else siblings.sortedByDescending { it.size }
-            }
-            else -> siblings.sortedBy { it.name.lowercase() }
-        }
-        
-        // Find current folder in sorted siblings
-        val currentIndex = sortedSiblings.indexOfFirst { it.path == currentPath || it.path == "$currentPath/" || it.path.trimEnd('/') == currentPath.trimEnd('/') }
-        
+
+        val sortOption = sourcePreferences?.getDirectorySort(parent) ?: sourcePreferences?.getDefaultSort()
+            ?: com.wing.folderplayer.data.prefs.SourcePreferences.SortOption("NAME", true)
+        val sortedSiblings = repo().sortFiles(siblings, sortOption.field, sortOption.ascending)
+
+        val currentIndex = sortedSiblings.indexOfFirst { it.path == folder.path }
         if (currentIndex != -1 && currentIndex < sortedSiblings.size - 1) {
             val nextFolder = sortedSiblings[currentIndex + 1]
-            playFolderInternal(config, nextFolder.path, null, 0L, playWhenReady = true)
+            playFolderInternal(nextFolder.ref, null, 0L, playWhenReady = true)
         }
     }
 
     private fun snapBitrate(bitrateKbps: Double, extension: String): String {
         if (bitrateKbps <= 0) return ""
-        
+
         var capped = bitrateKbps
         if (extension.equals("mp3", ignoreCase = true) && capped > 320.5) {
             capped = 320.0
         }
 
         val standards = listOf(32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320)
-        
-        // Find closest standard
+
         val closest = standards.minByOrNull { Math.abs(it - capped) } ?: 0
-        // Snapping range: within 10kbps or 5%
         val diff = Math.abs(closest.toDouble() - capped)
         if (diff < 10.0 || diff < (capped * 0.05)) {
             return "${closest}kbps"
         }
 
-        // For VBR (average) or high-res formats (FLAC/WAV), use rounded value
         return "${capped.toInt()}kbps"
     }
 
-    private fun cleanFolderName(mediaId: String?): String {
-        if (mediaId == null) return ""
-        try {
-            val decodedPath = java.net.URLDecoder.decode(mediaId, "UTF-8")
-            val parts = decodedPath.split('/', '\\').filter { it.isNotEmpty() }
-            if (parts.size < 2) return "Root"
-            
-            // parts.last() is typically the filename (e.g., Song.mp3)
-            // The segment before it is the folder
-            val folderIndex = parts.size - 2
-            val folderPart = parts[folderIndex]
-            val cleanFolder = cleanString(folderPart)
-            
-            // If the folder name is very short (e.g., "CD1"), prepend the parent folder
-            if (cleanFolder.length <= 6 && folderIndex >= 1) {
-                val parentPart = parts[folderIndex - 1]
-                return "${cleanString(parentPart)} - $cleanFolder"
-            }
-            return cleanFolder
-        } catch (e: Exception) {
-            // Fallback: extract the part before the last slash
-            val trimmed = mediaId.substringBeforeLast('/')
-            return trimmed.substringAfterLast('/').ifEmpty { "Music" }
+    private fun cleanFolderName(ref: SourceRef?): String {
+        if (ref == null) return ""
+        val parts = SourcePath.segments(ref.path)
+        if (parts.size < 2) return SourceRegistry.get(ref.sourceId)?.name ?: "Root"
+        val folderIndex = parts.size - 2
+        val cleanFolder = cleanString(parts[folderIndex])
+        // If the folder name is very short (e.g., "CD1"), prepend the parent folder
+        if (cleanFolder.length <= 6 && folderIndex >= 1) {
+            return "${cleanString(parts[folderIndex - 1])} - $cleanFolder"
         }
+        return cleanFolder
     }
 
     private fun cleanString(input: String): String {
@@ -790,169 +755,122 @@ class PlayerViewModel : ViewModel() {
             .trim()
     }
 
-    fun fetchAlbumInfo() {
+    /** Localized error text; unreadable local files point the user to SAF folders (Android 11+ storage rules). */
+    private fun errorText(e: Throwable): String {
+        val ctx = appContext
+        if (ctx != null && e is com.wing.folderplayer.data.source.SourceException.PermissionDenied) {
+            return ctx.getString(com.wing.folderplayer.R.string.player_error_local_needs_saf)
+        }
+        return PlaybackErrorText.describe(e)
+    }
+
+    /** Folder of the current track (album info / NFO lookups). */
+    fun currentTrackFolder(): SourceRef? {
+        val item = player?.currentMediaItem ?: return null
+        val extras = item.mediaMetadata.extras
+        val cuePath = extras?.getString(PlayerRepository.EXTRA_CUE_PATH)
+        val ref = SourceUris.parse(item.mediaId) ?: return null
+        return if (cuePath != null) SourceRef(ref.sourceId, cuePath).parent else ref.parent
+    }
+
+    fun fetchAlbumInfo(forceRegenerate: Boolean = false) {
         val state = _uiState.value
-        val folder = state.currentFolderName
-        val artist = state.currentArtist
-        if (folder.isEmpty() || folder == "No Song Playing" || folder == "Root") return
-
-        val cacheKey = "$folder|$artist"
-        if (albumInfoCache.containsKey(cacheKey)) {
-            val cached = albumInfoCache[cacheKey] ?: ""
-            val parts = cached.split("[ARTIST_START]")
-            _uiState.value = _uiState.value.copy(
-                albumInfo = parts[0].trim(),
-                artistInfo = if (parts.size > 1) parts[1].trim() else null
-            )
-            return
-        }
-
-        val baseUrl = (lyricPreferences?.getAiBaseUrl() ?: "https://api.openai.com/v1").trim().removeSuffix("/")
-        val apiKey = (lyricPreferences?.getAiApiKey() ?: "").trim()
-        val modelName = (lyricPreferences?.getAiModel() ?: "gpt-3.5-turbo").trim()
-
-        if (apiKey.isEmpty()) {
-            _uiState.value = _uiState.value.copy(albumInfo = "Please set AI API Key in Settings to enable this feature.")
-            return
-        }
-
+        val folderName = state.currentFolderName
+        if (folderName.isEmpty() || folderName == "No Song Playing" || folderName == "Root") return
+        val folder = currentTrackFolder()
+        val repo = albumInfoRepository ?: return
+        albumInfoJob?.cancel()
         _uiState.value = _uiState.value.copy(isFetchingAlbumInfo = true, albumInfo = null, artistInfo = null)
+        albumInfoJob = viewModelScope.launch(exceptionHandler) {
+            val r = repo.load(folder, folderName, state.currentArtist, forceRegenerate)
+            if (currentTrackFolder() != folder) return@launch
+            _uiState.value = _uiState.value.copy(
+                isFetchingAlbumInfo = false,
+                albumInfo = r.album,
+                artistInfo = r.artist,
+                albumInfoFromCache = r.fromCache,
+                albumInfoFromNfo = r.nfo != null,
+                albumInfoNfoTracks = r.nfo?.tracks.orEmpty(),
+                albumInfoAiModel = r.model,
+                albumInfoCanSave = r.aiGenerated && r.error == null && repo.canSave(folder),
+                nfoSaveResult = null,
+                nfoNeedsOverwriteConfirm = false,
+            )
+            lastAlbumInfo = r
+        }
+    }
 
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val prompt = """
-                    你是一位资深的音乐唱片评论家。请简要介绍一下专辑《$folder》，它的演唱者/艺术家是 $artist。
-                    请按照以下格式返回内容，确保中间包含分隔符 [ARTIST_START]：
-                    
-                    [专辑介绍部分：从专辑特点、音乐风格、制作背景等角度进行分段介绍，项目符号请用简单的减号，不要使用Markdown格式。此部分300字以内。]
-                    [ARTIST_START]
-                    [艺术家介绍部分：介绍这个专辑的艺术家或乐团的生平或成就，不要使用Markdown格式。此部分200字以内。]
-                """.trimIndent()
-                
-                val json = org.json.JSONObject().apply {
-                    put("model", modelName)
-                    put("messages", org.json.JSONArray().put(
-                        org.json.JSONObject().apply {
-                            put("role", "user")
-                            put("content", prompt)
-                        }
-                    ))
-                }
+    private var lastAlbumInfo: com.wing.folderplayer.data.ai.AlbumInfo? = null
 
-                val client = okhttp3.OkHttpClient.Builder()
-                    .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-                    .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-                    .build()
-                val url = "$baseUrl/chat/completions"
-                android.util.Log.d("AIDebug", "Requesting URL: $url with model: $modelName")
-                
-                val request = okhttp3.Request.Builder()
-                    .url(url)
-                    .header("Authorization", "Bearer $apiKey")
-                    .post(json.toString().toRequestBody("application/json".toMediaType()))
-                    .build()
+    /** Writes the shown AI description to Info.nfo; asks for confirmation first if Info.nfo exists. */
+    fun saveAlbumInfoToNfo(overwrite: Boolean) {
+        val info = lastAlbumInfo ?: return
+        val folder = currentTrackFolder() ?: return
+        val repo = albumInfoRepository ?: return
+        viewModelScope.launch(exceptionHandler) {
+            val r = repo.saveToNfo(folder, _uiState.value.currentFolderName, info, overwrite)
+            _uiState.value = _uiState.value.copy(
+                nfoNeedsOverwriteConfirm = r is com.wing.folderplayer.data.nfo.NfoSaveResult.NeedsConfirmation,
+                nfoSaveResult = when (r) {
+                    com.wing.folderplayer.data.nfo.NfoSaveResult.Saved -> "SAVED"
+                    com.wing.folderplayer.data.nfo.NfoSaveResult.NeedsConfirmation -> null
+                    is com.wing.folderplayer.data.nfo.NfoSaveResult.NotWritable -> "READ_ONLY:" + r.reason
+                    is com.wing.folderplayer.data.nfo.NfoSaveResult.Failed -> "FAILED:" + r.reason
+                },
+            )
+        }
+    }
 
-                client.newCall(request).execute().use { response ->
-                    val body = response.body?.string()
-                    if (response.isSuccessful && body != null) {
-                        val respJson = org.json.JSONObject(body)
-                        val text = respJson.getJSONArray("choices")
-                            .getJSONObject(0)
-                            .getJSONObject("message")
-                            .getString("content")
-                        
-                        val cleanText = text.trim()
-                        albumInfoCache[cacheKey] = cleanText
-                        
-                        val parts = cleanText.split("[ARTIST_START]")
-                        _uiState.value = _uiState.value.copy(
-                            isFetchingAlbumInfo = false, 
-                            albumInfo = parts[0].trim(),
-                            artistInfo = if (parts.size > 1) parts[1].trim() else null
-                        )
-                    } else {
-                        android.util.Log.e("AIDebug", "Error Response (${response.code}): $body")
-                        val errorMsg = when(response.code) {
-                            429 -> "请求过于频繁（429）。"
-                            401 -> "API Key 授权失败。"
-                            404 -> "API 地址或模型未找到（404）。"
-                            else -> "获取失败：错误代码 ${response.code}"
-                        }
-                        _uiState.value = _uiState.value.copy(isFetchingAlbumInfo = false, albumInfo = errorMsg)
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("PlayerViewModel", "AI Error", e)
-                _uiState.value = _uiState.value.copy(isFetchingAlbumInfo = false, albumInfo = "Error: ${e.message}")
+    fun dismissNfoSaveState() {
+        _uiState.value = _uiState.value.copy(nfoSaveResult = null, nfoNeedsOverwriteConfirm = false)
+    }
+
+    private var aiLyricsJob: kotlinx.coroutines.Job? = null
+
+    /** Tracks whose shown lyrics come from an explicit "Get AI lyrics" request (not replaced by automatic lookups). */
+    private val explicitAiLyrics = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    /** User asked for AI lyrics (works even if automatic lookup is off; never without endpoint/key/model). */
+    fun requestAiLyrics(regenerate: Boolean) {
+        val p = player ?: return
+        val item = p.currentMediaItem ?: return
+        val repo = lyricsRepository ?: return
+        val mediaId = item.mediaId
+        val state = _uiState.value
+        aiLyricsJob?.cancel()
+        _uiState.value = state.copy(lyricsRequestRunning = true, lyricsError = null)
+        aiLyricsJob = viewModelScope.launch(exceptionHandler) {
+            val r = repo.fetchAi(item, state.currentTitle, state.currentArtist, p.duration, regenerate)
+            if (p.currentMediaItem?.mediaId != mediaId) return@launch // song changed meanwhile
+            if (r.error != null) {
+                _uiState.value = _uiState.value.copy(lyricsRequestRunning = false, lyricsError = r.error)
+            } else {
+                lyricsCache[mediaId] = r
+                explicitAiLyrics.add(mediaId)
+                _uiState.value = _uiState.value.copy(
+                    lyricsRequestRunning = false, lyrics = r.lines, lyricsSynced = r.synced,
+                    lyricsSource = r.source, translatedLyrics = r.translation,
+                )
             }
         }
     }
 
-    private fun extractEmbeddedLyrics(metadata: androidx.media3.common.MediaMetadata): String? {
-        // Media3 often puts unrecognized tags into extras
-        val extras = metadata.extras
-        if (extras != null) {
-            // Check common keys used by various extractors
-            return extras.getString("lyrics") 
-                ?: extras.getString("lyric")
-                ?: extras.getString("text")
-        }
-        return null
+    /** Current track for casting: source ref + display metadata. */
+    fun currentCastItem(): Triple<SourceRef, String, String>? {
+        val item = player?.currentMediaItem ?: return null
+        if (item.mediaMetadata.extras?.getBoolean(PlayerRepository.EXTRA_IS_CUE_TRACK) == true) return null
+        val ref = SourceUris.parse(item.mediaId) ?: return null
+        return Triple(ref, _uiState.value.currentTitle, _uiState.value.currentArtist)
     }
 
-    private suspend fun loadLyrics(
-        mediaId: String?, 
-        title: String, 
-        artist: String?,
-        metadata: androidx.media3.common.MediaMetadata? = null
-    ): List<LyricLine> {
-        if (mediaId == null || currentSource == null) return emptyList()
-        return withContext(Dispatchers.IO) {
-            try {
-                // 1. Try .lrc file in the same directory (Highest Priority)
-                val lrcPath = mediaId.substringBeforeLast('.') + ".lrc"
-                val lrcContent = currentSource?.readText(lrcPath)
-                if (lrcContent != null) {
-                    val parsed = LrcParser.parse(lrcContent)
-                    if (parsed.isNotEmpty()) return@withContext parsed
-                }
-                
-                // 2. Try Embedded lyrics (Priority 2)
-                metadata?.let { m ->
-                    val embedded = extractEmbeddedLyrics(m)
-                    if (!embedded.isNullOrBlank()) {
-                        val parsed = LrcParser.parse(embedded)
-                        if (parsed.isNotEmpty()) return@withContext parsed
-                    }
-                }
-
-                // 3. Try Lyric API (Priority 3)
-                val apiUrl = lyricPreferences?.getLyricApiUrl()
-                
-                val url = apiUrl
-                if (url != null && title != "No Song Playing") {
-                    val apiLrc = com.wing.folderplayer.data.network.LyricApi.fetchLyrics(url, title, artist)
-                    if (apiLrc != null) {
-                        val parsed = LrcParser.parse(apiLrc)
-                        if (parsed.isNotEmpty()) return@withContext parsed
-                    }
-                }
-
-                emptyList()
-            } catch (e: Exception) {
-                emptyList()
-            }
-        }
-    }
+    fun pauseLocal() { player?.pause() }
 
     fun updatePlaybackState() {
         player?.let { p ->
             val position = p.currentPosition
             val duration = p.duration.takeIf { it > 0 } ?: 1L
             val lyrics = _uiState.value.lyrics
-            // Find current lyric index
-            val index = lyrics.indexOfLast { it.timeMs <= position }
+            val index = if (_uiState.value.lyricsSynced) lyrics.indexOfLast { it.timeMs <= position } else -1
 
             _uiState.value = _uiState.value.copy(
                 currentPosition = position,
@@ -980,7 +898,7 @@ class PlayerViewModel : ViewModel() {
     fun previous() {
         _uiState.value = _uiState.value.copy(
             currentTitle = "Loading..",
-            lyrics = emptyList(), 
+            lyrics = emptyList(),
             currentLyricIndex = -1
         )
         lastMediaIdBeforeIntent = player?.currentMediaItem?.mediaId
@@ -991,14 +909,14 @@ class PlayerViewModel : ViewModel() {
     fun next() {
         _uiState.value = _uiState.value.copy(
             currentTitle = "Loading..",
-            lyrics = emptyList(), 
+            lyrics = emptyList(),
             currentLyricIndex = -1
         )
         lastMediaIdBeforeIntent = player?.currentMediaItem?.mediaId
         pendingPlayIntent = "ANY_NEW"
         player?.seekToNextMediaItem()
     }
-    
+
     fun seekTo(positionMs: Long) {
         player?.seekTo(positionMs)
         updatePlaybackState()
@@ -1018,7 +936,7 @@ class PlayerViewModel : ViewModel() {
         isRestoring = false
         _uiState.value = _uiState.value.copy(
             currentTitle = "Loading..",
-            lyrics = emptyList(), 
+            lyrics = emptyList(),
             currentLyricIndex = -1
         )
         lastMediaIdBeforeIntent = player?.currentMediaItem?.mediaId
@@ -1027,185 +945,151 @@ class PlayerViewModel : ViewModel() {
         player?.play()
     }
 
-    // Demo function to simulate playing a folder
-    // Updated to support SourceConfig
-    fun playFolder(sourceConfig: com.wing.folderplayer.ui.browser.SourceConfig, path: String, startingFileUri: String? = null) {
-        isRestoring = false
-        // Immediately set pending state for visual feedback
-        val pendingTitle = startingFileUri?.substringAfterLast('/')?.substringBeforeLast('.') ?: "Loading..."
-        val pendingFolder = path.substringAfterLast('/').let { 
-            try { java.net.URLDecoder.decode(it, "UTF-8") } catch (e: Exception) { it } 
-        }
+    /** Plays a folder, optionally starting at [startPath] (source-relative path of a file in it). */
+    fun playFolder(folder: SourceRef, startPath: String? = null) {
+        cancelRestore()
+        val pendingTitle = startPath?.let { SourcePath.baseName(SourcePath.name(it)) } ?: "Loading..."
         _uiState.value = _uiState.value.copy(
             currentTitle = pendingTitle,
-            currentFolderName = pendingFolder,
+            currentFolderName = SourcePath.name(folder.path),
             coverUri = null,
             lyrics = emptyList(),
             isBuffering = true,
             progress = 0f,
             currentPosition = 0L,
-            duration = 0L
+            duration = 0L,
+            playbackError = null,
         )
         lastMediaIdBeforeIntent = player?.currentMediaItem?.mediaId
-        pendingPlayIntent = startingFileUri ?: "ANY_NEW"
-        
+        pendingPlayIntent = startPath?.let { SourceUris.toUri(folder.sourceId, it) } ?: "ANY_NEW"
+
         viewModelScope.launch(exceptionHandler) {
-            playFolderInternal(sourceConfig, path, startingFileUri, 0L, playWhenReady = true)
+            try {
+                awaitPlayer()
+                playFolderInternal(folder, startPath, 0L, playWhenReady = true)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(isBuffering = false, playbackError = errorText(e))
+            }
         }
     }
 
-    fun playCustomList(sourceConfig: SourceConfig, files: List<com.wing.folderplayer.data.source.MusicFile>, startIndex: Int) {
-        isRestoring = false
+    /** Plays [files] (already sorted as shown) starting at [startIndex]. */
+    fun playCustomList(files: List<MusicFile>, startIndex: Int) {
+        cancelRestore()
         viewModelScope.launch(exceptionHandler) {
-            val source = when (sourceConfig.type) {
-                com.wing.folderplayer.ui.browser.SourceType.LOCAL -> {
-                    com.wing.folderplayer.data.source.WebDavAuthManager.clear()
-                    localSource
-                }
-                com.wing.folderplayer.ui.browser.SourceType.WEBDAV -> {
-                     com.wing.folderplayer.data.source.WebDavAuthManager.setCredentials(sourceConfig.username, sourceConfig.password)
-                     com.wing.folderplayer.data.source.WebDavSource(sourceConfig.url, sourceConfig.username, sourceConfig.password)
-                }
-            }
-            
-            // Reconstruct internal state
-            currentSource = source
-            val firstFile = files.getOrNull(startIndex)
-            val folderPath = firstFile?.path?.substringBeforeLast('/') ?: ""
-            currentFolderPath = folderPath
-            currentSourceConfig = sourceConfig
-            
-            // Fast UI Reset
+            val firstFile = files.getOrNull(startIndex) ?: return@launch
+            awaitPlayer()
+            currentFolder = firstFile.ref.parent
+
             _uiState.value = _uiState.value.copy(
-                currentTitle = firstFile?.name ?: "Loading...",
+                currentTitle = SourcePath.baseName(firstFile.name),
                 currentArtist = "",
-                currentFolderName = folderPath.substringAfterLast('/'),
-                currentMediaId = firstFile?.path,
+                currentFolderName = currentFolder?.let { SourcePath.name(it.path) } ?: "",
+                currentMediaId = firstFile.ref.toUriString(),
                 lyrics = emptyList(),
                 coverUri = null,
-                isBuffering = true
+                isBuffering = true,
+                playbackError = null,
             )
             lastMediaIdBeforeIntent = player?.currentMediaItem?.mediaId
-            pendingPlayIntent = firstFile?.path ?: "ANY_NEW"
-            
-            // Try to find cover for this batch (assuming same folder)
-            val coverUri = repository.findCover(source, folderPath)
+            pendingPlayIntent = firstFile.ref.toUriString()
 
-            val mediaItems = files.map { file ->
-                repository.createMediaItem(file.name, source.getUri(file.path), coverUri, null, file.size)
-            }
+            val mediaItems = repo().mediaItemsFor(files)
             player?.setMediaItems(mediaItems)
             if (startIndex in mediaItems.indices) {
                 player?.seekTo(startIndex, 0L)
             }
             player?.prepare()
             player?.play()
-            
-            // Save state
-            playbackPreferences?.savePlaybackState(sourceConfig, currentFolderPath, files.getOrNull(startIndex)?.path, 0L)
+
+            playbackPreferences?.savePlaybackState(currentFolder, firstFile.ref.toUriString(), 0L)
 
             // Sync to "Default" playlist
-            val playlistItems = files.map { file ->
-                PlaylistItem(
-                    path = file.path,
-                    title = file.name,
-                    artist = "",
-                    sourceId = getSourceId(sourceConfig),
-                    artworkUri = coverUri?.toString()
-                )
-            }
+            val playlistItems = files.mapIndexed { i, file -> playlistItemFor(file, mediaItems.getOrNull(i)) }
             playlistManager?.savePlaylist(Playlist("default", "Default", playlistItems))
-            
-            // Focus on Default in UI
+
             _uiState.value = _uiState.value.copy(
                 activePlaylistId = "default",
                 activePlaylistName = "Default",
                 activePlaylistItems = playlistItems
             )
             refreshPlaylists()
-            
-            // Force metadata update after a delay
+
             kotlinx.coroutines.delay(1000)
             updateMetadata()
         }
     }
 
-    fun playCueSheet(sourceConfig: SourceConfig, cuePath: String) {
-        isRestoring = false
-        // Immediately set pending state for visual feedback
-        val pendingTitle = cuePath.substringAfterLast('/').substringBeforeLast('.')
-        val pendingFolder = cuePath.substringBeforeLast('/').substringAfterLast('/').let { 
-            try { java.net.URLDecoder.decode(it, "UTF-8") } catch (e: Exception) { it } 
-        }
+    private fun playlistItemFor(file: MusicFile, item: MediaItem?) = PlaylistItem(
+        path = file.path,
+        title = SourcePath.baseName(file.name),
+        artist = "",
+        sourceId = file.sourceId,
+        artworkUri = item?.mediaMetadata?.artworkUri?.toString(),
+    )
+
+    fun playCueSheet(cue: SourceRef) {
+        cancelRestore()
         _uiState.value = _uiState.value.copy(
-            currentTitle = pendingTitle,
-            currentFolderName = pendingFolder,
-            currentMediaId = cuePath,
+            currentTitle = SourcePath.baseName(cue.name),
+            currentFolderName = cue.parent?.let { SourcePath.name(it.path) } ?: "",
+            currentMediaId = cue.toUriString(),
             coverUri = null,
             lyrics = emptyList(),
             isBuffering = true,
             progress = 0f,
             currentPosition = 0L,
-            duration = 0L
+            duration = 0L,
+            playbackError = null,
         )
         lastMediaIdBeforeIntent = player?.currentMediaItem?.mediaId
         pendingPlayIntent = "ANY_NEW"
-        
+
         viewModelScope.launch(exceptionHandler) {
-            playCueSheetInternal(sourceConfig, cuePath, null, 0L, playWhenReady = true)
+            try {
+                awaitPlayer()
+                playCueSheetInternal(cue, null, 0L, playWhenReady = true)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(isBuffering = false, playbackError = errorText(e))
+            }
         }
     }
 
     fun playPlaylistSong(playlistId: String, startIndex: Int) {
+        cancelRestore()
         val manager = playlistManager ?: return
         val playlist = manager.getPlaylist(playlistId) ?: return
         val items = playlist.items
-        val clickedItem = items.getOrNull(startIndex) ?: return
-        
+        if (items.getOrNull(startIndex) == null) return
+
         viewModelScope.launch(exceptionHandler) {
-            // Find SourceConfig to set up auth manager
-            val sources = sourcePreferences?.getSources() ?: emptyList()
-            val config = if (clickedItem.sourceId == "local") {
-                SourceConfig(name = "Local", type = com.wing.folderplayer.ui.browser.SourceType.LOCAL)
-            } else {
-                sources.find { it.url == clickedItem.sourceId }
+            awaitPlayer()
+            val mediaItems = items.mapNotNull { pItem ->
+                val ref = pItem.ref ?: return@mapNotNull null
+                if (SourceRegistry.get(ref.sourceId) == null) return@mapNotNull null
+                val file = MusicFile(ref.name, ref.path, false, 0, 0, ref.sourceId)
+                if (pItem.cueStartMs != null || MediaTypes.isCue(ref.name)) {
+                    null
+                } else {
+                    val built = repo().buildMediaItem(file, pItem.artworkUri, null)
+                    if (pItem.title.isNotBlank() && repo().titleMode == TitleMode.FILENAME) {
+                        built.buildUpon().setMediaMetadata(built.mediaMetadata.buildUpon().setTitle(pItem.title)
+                            .setArtist(pItem.artist?.takeIf { it.isNotBlank() }).build()).build()
+                    } else built
+                }
             }
-            
-            if (config != null && config.type == com.wing.folderplayer.ui.browser.SourceType.WEBDAV) {
-                com.wing.folderplayer.data.source.WebDavAuthManager.setCredentials(config.username, config.password)
-            } else {
-                com.wing.folderplayer.data.source.WebDavAuthManager.clear()
+            if (mediaItems.isEmpty()) {
+                _uiState.value = _uiState.value.copy(playbackError = com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_playlist_unavailable))
+                return@launch
             }
+            val clicked = items[startIndex].ref?.toUriString()
+            val index = mediaItems.indexOfFirst { it.mediaId == clicked }.coerceAtLeast(0)
 
-            val mediaItems = items.map { pItem ->
-            val uri = pItem.path
-            val finalUri = if (uri.startsWith("/") && !uri.startsWith("http")) {
-                "file://$uri"
-            } else {
-                uri
-            }
-
-            androidx.media3.common.MediaItem.Builder()
-                .setMediaId(pItem.path)
-                .setUri(finalUri)
-                .setMediaMetadata(
-                    androidx.media3.common.MediaMetadata.Builder()
-                        .setTitle(pItem.title)
-                        .setArtist(pItem.artist?.takeIf { it.isNotBlank() })
-                        .setArtworkUri(pItem.artworkUri?.let { android.net.Uri.parse(it) })
-                        .build()
-                )
-                .build()
-        }
-            
             player?.setMediaItems(mediaItems)
-            if (startIndex in mediaItems.indices) {
-                player?.seekTo(startIndex, 0L)
-            }
+            player?.seekTo(index, 0L)
             player?.prepare()
             player?.play()
-            
-            // Sync UI state
+
             _uiState.value = _uiState.value.copy(
                 activePlaylistId = playlistId,
                 activePlaylistName = playlist.name,
@@ -1216,94 +1100,68 @@ class PlayerViewModel : ViewModel() {
     }
 
     private suspend fun playCueSheetInternal(
-        sourceConfig: SourceConfig, 
-        cuePath: String, 
-        startingMediaId: String?, 
-        positionMs: Long, 
+        cue: SourceRef,
+        startingMediaId: String?,
+        positionMs: Long,
         playWhenReady: Boolean
     ) {
-        val source = when (sourceConfig.type) {
-            com.wing.folderplayer.ui.browser.SourceType.LOCAL -> {
-                com.wing.folderplayer.data.source.WebDavAuthManager.clear()
-                localSource
-            }
-            com.wing.folderplayer.ui.browser.SourceType.WEBDAV -> {
-                 com.wing.folderplayer.data.source.WebDavAuthManager.setCredentials(sourceConfig.username, sourceConfig.password)
-                 com.wing.folderplayer.data.source.WebDavSource(sourceConfig.url, sourceConfig.username, sourceConfig.password)
-            }
-        }
-        
-        val cueContent = source.readText(cuePath) ?: return
+        val fs = SourceRegistry.fileSystem(cue)
+        val cueContent = runInterruptible(Dispatchers.IO) { fs.readText(cue.path) }
         val (referencedFile, tracks) = CueParser.parse(cueContent)
         if (tracks.isEmpty()) return
 
-        val parentPath = cuePath.substringBeforeLast('/', "")
-        var audioPath: String? = null
-        
-        // 1. Try the file referenced in the BUG sheet
+        val parent = cue.parent ?: SourceRef(cue.sourceId, SourcePath.ROOT)
+        val siblings = repo().list(parent)
+        var audio: MusicFile? = null
+
+        // 1. The file referenced in the CUE sheet (name only; directories inside FILE are ignored)
         if (referencedFile != null) {
-            val p = if (parentPath.isEmpty()) referencedFile else "$parentPath/$referencedFile"
-            // Use name only for comparison if it's a relative path in the CUE
-            val name = referencedFile.substringAfterLast('/')
-            val list = source.list(parentPath)
-            if (list.any { it.name == name }) {
-                audioPath = p
+            val name = referencedFile.replace('\\', '/').substringAfterLast('/')
+            audio = siblings.firstOrNull { !it.isDirectory && it.name == name }
+                ?: siblings.firstOrNull { !it.isDirectory && it.name.equals(name, true) }
+        }
+        // 2. Fallback: same base name as the .cue with a known audio extension
+        if (audio == null) {
+            val base = SourcePath.baseName(cue.name)
+            for (ext in listOf("flac", "ape", "wav", "mp3", "m4a", "dsf", "dff", "wma")) {
+                audio = siblings.firstOrNull { !it.isDirectory && it.name.equals("$base.$ext", true) }
+                if (audio != null) break
             }
         }
-        
-        // 2. Fallback: Try common extensions with same name as .cue
-        if (audioPath == null) {
-            val base = cuePath.substringBeforeLast('.')
-            val possibleExtensions = listOf("flac", "ape", "wav", "mp3", "m4a", "dsf", "dff")
-            for (ext in possibleExtensions) {
-                val p = "$base.$ext"
-                val name = p.substringAfterLast('/')
-                val list = source.list(parentPath)
-                if (list.any { it.name == name }) {
-                    audioPath = p
-                    break
-                }
-            }
-        }
+        val audioFile = audio ?: return
 
-        if (audioPath == null) return
-
-        currentSource = source
-        currentSourceConfig = sourceConfig
-        currentFolderPath = cuePath.substringBeforeLast('/')
-        
-        val audioUri = source.getUri(audioPath)
-        val coverUri = repository.findCover(source, currentFolderPath!!)
+        currentFolder = parent
+        val cover = repo().coverFor(parent, siblings)
 
         val mediaItems = tracks.map { track ->
-            repository.createCueMediaItem(
-                fullAudioUri = audioUri,
+            repo().createCueMediaItem(
+                audio = audioFile,
                 trackTitle = track.title,
                 performer = track.performer,
                 startTimeMs = track.startTimeMs,
                 endTimeMs = track.endTimeMs,
-                coverUri = coverUri,
-                fileSize = 0
+                coverUri = cover,
+                cue = cue,
+                trackNumber = track.number,
             )
         }
 
         player?.setMediaItems(mediaItems)
-        
-        // Sync to "Default" playlist file
+
         if (!isRestoring) {
             val playlistItems = tracks.map { track ->
                 PlaylistItem(
-                    path = cuePath, // CUE tracks point to the .cue file
+                    path = cue.path,
                     title = track.title,
                     artist = track.performer ?: "",
-                    sourceId = getSourceId(sourceConfig),
-                    artworkUri = coverUri?.toString(),
-                    durationMs = (track.endTimeMs ?: 0L) - track.startTimeMs
+                    sourceId = cue.sourceId,
+                    artworkUri = cover,
+                    durationMs = (track.endTimeMs ?: 0L) - track.startTimeMs,
+                    cueStartMs = track.startTimeMs,
                 )
             }
             playlistManager?.savePlaylist(Playlist("default", "Default", playlistItems))
-            
-            // Focus on Default in UI
+
             _uiState.value = _uiState.value.copy(
                 activePlaylistId = "default",
                 activePlaylistName = "Default",
@@ -1311,7 +1169,6 @@ class PlayerViewModel : ViewModel() {
             )
             refreshPlaylists()
         }
-        // Find correct index to restore
         if (startingMediaId != null) {
             val index = mediaItems.indexOfFirst { it.mediaId == startingMediaId }
             if (index != -1) {
@@ -1326,62 +1183,43 @@ class PlayerViewModel : ViewModel() {
             player?.play()
         }
 
-        // Save state immediately
-        playbackPreferences?.savePlaybackState(sourceConfig, currentFolderPath!!, startingMediaId ?: cuePath, positionMs)
+        playbackPreferences?.savePlaybackState(parent, startingMediaId ?: mediaItems.first().mediaId, positionMs)
 
         kotlinx.coroutines.delay(1000)
         updateMetadata()
     }
 
     private suspend fun playFolderInternal(
-        sourceConfig: SourceConfig, 
-        path: String, 
-        startingFileUri: String?, 
+        folder: SourceRef,
+        startPath: String?,
         positionMs: Long,
         playWhenReady: Boolean
     ) {
-        val source = when (sourceConfig.type) {
-            com.wing.folderplayer.ui.browser.SourceType.LOCAL -> {
-                com.wing.folderplayer.data.source.WebDavAuthManager.clear()
-                localSource
-            }
-            com.wing.folderplayer.ui.browser.SourceType.WEBDAV -> {
-                 com.wing.folderplayer.data.source.WebDavAuthManager.setCredentials(sourceConfig.username, sourceConfig.password)
-                 com.wing.folderplayer.data.source.WebDavSource(sourceConfig.url, sourceConfig.username, sourceConfig.password)
-            }
-        }
-        
-        // Store current source for lyrics loading and persistence
-        currentSource = source
-        currentFolderPath = path
-        currentSourceConfig = sourceConfig
-        
-        // Get sorting preferences for this path to ensure restoration order is correct
-        val sortPref = sourcePreferences?.getDirectorySort(path) ?: sourcePreferences?.getDefaultSort()
-        
-        val items = repository.getMediaItemsInFolder(
-            source = source, 
-            path = path,
+        currentFolder = folder
+        val generation = playRequestGeneration
+
+        val sortPref = sourcePreferences?.getDirectorySort(folder) ?: sourcePreferences?.getDefaultSort()
+
+        val items = repo().getMediaItemsInFolder(
+            folder = folder,
             sortField = sortPref?.field ?: "NAME",
             sortAscending = sortPref?.ascending ?: true
         )
         player?.setMediaItems(items)
-        
-        // Sync to "Default" playlist file
+
         if (!isRestoring) {
-            val coverUri = repository.findCover(source, path)
             val playlistItems = items.map { item ->
+                val ref = SourceUris.parse(item.mediaId)
                 PlaylistItem(
-                    path = item.localConfiguration?.uri?.toString() ?: "",
-                    title = item.mediaMetadata.title?.toString() ?: "Unknown",
+                    path = ref?.path ?: "",
+                    title = item.mediaMetadata.displayTitle?.toString() ?: "Unknown",
                     artist = item.mediaMetadata.artist?.toString() ?: "",
-                    sourceId = getSourceId(sourceConfig),
-                    artworkUri = coverUri?.toString()
+                    sourceId = ref?.sourceId ?: "",
+                    artworkUri = item.mediaMetadata.artworkUri?.toString()
                 )
             }
             playlistManager?.savePlaylist(Playlist("default", "Default", playlistItems))
-            
-            // Focus on Default in UI
+
             _uiState.value = _uiState.value.copy(
                 activePlaylistId = "default",
                 activePlaylistName = "Default",
@@ -1389,55 +1227,36 @@ class PlayerViewModel : ViewModel() {
             )
             refreshPlaylists()
         }
-        
-        // Find the index of the starting file if provided
-        if (startingFileUri != null) {
-            val targetUri = source.getUri(startingFileUri).toString()
-            val index = items.indexOfFirst { it.localConfiguration?.uri.toString() == targetUri || it.mediaId == startingFileUri }
-            if (index != -1) {
-                player?.seekTo(index, positionMs)
-            }
-        } else if (positionMs > 0) {
-            player?.seekTo(0, positionMs)
-        }
-        
+
+        val target = startPath?.let { SourceUris.toUri(folder.sourceId, it) }
+        val index = if (target != null) items.indexOfFirst { it.mediaId == target } else 0
+        if (index > 0 || positionMs > 0) player?.seekTo(index.coerceAtLeast(0), positionMs)
+
         player?.prepare()
         if (playWhenReady) {
             player?.play()
         }
-        
-        // High reliability seek for restoration: 
+
+        // High reliability seek for restoration
         if (positionMs > 0) {
             viewModelScope.launch(exceptionHandler) {
-                // Wait for the player to transition from IDLE and start buffering/ready
                 var attempts = 0
                 while (player?.playbackState == Player.STATE_IDLE && attempts < 15) {
                     kotlinx.coroutines.delay(100)
                     attempts++
                 }
-                
-                // Extra delay to ensure internal state is settled
                 kotlinx.coroutines.delay(200)
-                
-                val index = if (startingFileUri != null) {
-                    val targetUri = source.getUri(startingFileUri).toString()
-                    items.indexOfFirst { it.localConfiguration?.uri.toString() == targetUri || it.mediaId == startingFileUri }
-                } else 0
-                
-                if (index != -1) {
-                    player?.seekTo(index, positionMs)
-                }
+                // The user may have started something else meanwhile; never seek their new queue.
+                if (generation == playRequestGeneration && index != -1) player?.seekTo(index.coerceAtLeast(0), positionMs)
             }
         }
-        
-        // Force metadata update after a short delay to ensure player is ready
+
         viewModelScope.launch(exceptionHandler) {
             kotlinx.coroutines.delay(1000)
             updateMetadata()
         }
-        
-        // Save state immediately
-        playbackPreferences?.savePlaybackState(sourceConfig, path, startingFileUri, positionMs)
+
+        playbackPreferences?.savePlaybackState(folder, target ?: items.firstOrNull()?.mediaId, positionMs)
     }
 
     fun setCoverDisplaySize(size: String) {
@@ -1445,16 +1264,32 @@ class PlayerViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(coverDisplaySize = size)
     }
 
+    fun setBackgroundStyle(style: String) {
+        playbackPreferences?.saveBackgroundStyle(style)
+        _uiState.value = _uiState.value.copy(backgroundStyle = style)
+    }
+
+    fun setTitleMode(mode: TitleMode) {
+        playbackPreferences?.saveTitleMode(mode.name)
+        repository?.titleMode = mode
+    }
+
+    /** Clears lyric results so a changed AI/lyrics setting takes effect for the current song. */
+    fun invalidateLyrics() {
+        lyricsCache.clear()
+        explicitAiLyrics.clear()
+        lyricsRepository?.clearMemory()
+        updateMetadata()
+    }
+
     // --- Playlist Management Methods ---
 
     fun switchPlaylist(id: String) {
         val manager = playlistManager ?: return
         val playlist = manager.getPlaylist(id) ?: return
-        
-        // 1. Persist active ID
+
         playbackPreferences?.saveActivePlaylistId(id)
-        
-        // 2. Clear Modes as requested
+
         _uiState.value = _uiState.value.copy(
             activePlaylistId = id,
             activePlaylistName = playlist.name,
@@ -1465,7 +1300,7 @@ class PlayerViewModel : ViewModel() {
         )
         player?.shuffleModeEnabled = false
         player?.repeatMode = Player.REPEAT_MODE_OFF
-        
+
         refreshPlaylists()
     }
 
@@ -1474,7 +1309,7 @@ class PlayerViewModel : ViewModel() {
         val all = manager.getAllPlaylists()
         val currentId = _uiState.value.activePlaylistId
         val currentItems = manager.getPlaylist(currentId)?.items ?: emptyList<PlaylistItem>()
-        
+
         _uiState.value = _uiState.value.copy(
             allPlaylists = all,
             activePlaylistItems = currentItems
@@ -1508,67 +1343,96 @@ class PlayerViewModel : ViewModel() {
 
     fun removeFromActivePlaylist(index: Int) {
         val currentId = _uiState.value.activePlaylistId
-        
+
         // If it's the default list, we also need to remove it from the PLAYER queue
         if (currentId == "default") {
             player?.removeMediaItem(index)
         }
-        
+
         playlistManager?.removeFromPlaylist(currentId, index)
         refreshPlaylists()
     }
 
-    fun addFilesToPlaylist(targetPlaylistId: String, sourceConfig: SourceConfig, files: List<com.wing.folderplayer.data.source.MusicFile>) {
+    fun addFilesToPlaylist(targetPlaylistId: String, files: List<MusicFile>) {
         viewModelScope.launch(exceptionHandler) {
-            val sourceId = getSourceId(sourceConfig)
-            val source = when (sourceConfig.type) {
-                com.wing.folderplayer.ui.browser.SourceType.LOCAL -> localSource
-                com.wing.folderplayer.ui.browser.SourceType.WEBDAV -> {
-                    com.wing.folderplayer.data.source.WebDavAuthManager.setCredentials(sourceConfig.username, sourceConfig.password)
-                    com.wing.folderplayer.data.source.WebDavSource(sourceConfig.url, sourceConfig.username, sourceConfig.password)
-                }
-            }
-            
             val allItems = mutableListOf<PlaylistItem>()
             for (file in files) {
                 if (file.isDirectory) {
-                    val coverUri = repository.findCover(source, file.path)
-                    val mediaItems = repository.getMediaItemsInFolder(source, file.path)
+                    val mediaItems = repo().getMediaItemsInFolder(file.ref)
                     mediaItems.forEach { item ->
+                        val ref = SourceUris.parse(item.mediaId) ?: return@forEach
                         allItems.add(PlaylistItem(
-                            path = item.localConfiguration?.uri?.toString() ?: "",
-                            title = item.mediaMetadata.title?.toString() ?: "Unknown",
+                            path = ref.path,
+                            title = item.mediaMetadata.displayTitle?.toString() ?: "Unknown",
                             artist = item.mediaMetadata.artist?.toString() ?: "",
-                            sourceId = sourceId,
-                            artworkUri = coverUri?.toString(),
-                            durationMs = 0L
+                            sourceId = ref.sourceId,
+                            artworkUri = item.mediaMetadata.artworkUri?.toString(),
                         ))
                     }
                 } else {
-                    val parent = if (file.path.contains("/")) file.path.substringBeforeLast("/") else file.path
-                    val coverUri = repository.findCover(source, parent)
+                    val parent = file.ref.parent
+                    val cover = parent?.let { repo().coverFor(it) }
                     allItems.add(PlaylistItem(
                         path = file.path,
-                        title = file.name,
+                        title = SourcePath.baseName(file.name),
                         artist = "",
-                        sourceId = sourceId,
-                        artworkUri = coverUri?.toString(),
-                        durationMs = 0L
+                        sourceId = file.sourceId,
+                        artworkUri = cover,
                     ))
                 }
             }
-            
+
             playlistManager?.appendToPlaylist(targetPlaylistId, allItems)
             refreshPlaylists()
         }
     }
 
-    private fun getSourceId(config: SourceConfig): String {
-        return if (config.type == com.wing.folderplayer.ui.browser.SourceType.LOCAL) "local" else config.url
-    }
-
     override fun onCleared() {
         mediaControllerFuture?.let { MediaController.releaseFuture(it) }
         super.onCleared()
+    }
+}
+
+fun PlaylistItem.matchesMediaId(mediaId: String?): Boolean {
+    if (mediaId == null) return false
+    val r = ref ?: return false
+    if (cueStartMs != null) {
+        return SourceUris.isCueTrackId(mediaId) && SourceUris.cueStartMs(mediaId) == cueStartMs &&
+            SourceUris.parse(mediaId)?.sourceId == r.sourceId
+    }
+    return mediaId == r.toUriString()
+}
+
+/** User-facing text for playback failures (kept short; details go to logcat). */
+object PlaybackErrorText {
+    fun describe(t: Throwable): String {
+        var c: Throwable? = t
+        while (c != null) {
+            when (c) {
+                is com.wing.folderplayer.data.source.SourceException.SeekUnsupported -> return com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_seek_unsupported)
+                is com.wing.folderplayer.data.source.SourceException.AuthFailed -> return com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_auth_failed)
+                is com.wing.folderplayer.data.source.SourceException.PermissionDenied -> return com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_permission_denied, c.message ?: "")
+                is com.wing.folderplayer.data.source.SourceException.NotFound -> return com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_not_found)
+                is com.wing.folderplayer.data.source.SourceException.Unreachable -> return com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_unreachable)
+                is com.wing.folderplayer.data.source.SourceException.TlsFailure -> return com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_tls)
+                is com.wing.folderplayer.playback.NativeDecoderException ->
+                    return if (c.unsupported) com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_unsupported_format_detail, c.message ?: "") else com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_decoding_failed, c.message ?: "")
+            }
+            c = c.cause
+        }
+        // Through MediaController the cause chain arrives flattened; fall back to the error code and message.
+        if (t is androidx.media3.common.PlaybackException) {
+            val msg = generateSequence<Throwable>(t) { it.cause }.mapNotNull { it.message }.joinToString(" / ")
+            return when {
+                msg.contains("REST", true) -> com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_seek_unsupported)
+                msg.contains("DST", true) -> com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_unsupported_format_detail, "DST-compressed DSD")
+                t.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NO_PERMISSION -> com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_permission_or_auth)
+                t.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND -> com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_not_found)
+                t.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED -> com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_network)
+                t.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED -> com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_unsupported_format)
+                else -> "${t.errorCodeName}: ${msg.take(160)}"
+            }
+        }
+        return t.message ?: t.javaClass.simpleName
     }
 }

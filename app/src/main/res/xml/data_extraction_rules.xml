@@ -1,9 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
     <cloud-backup>
-        <include domain="root" />
+        <include domain="sharedpref" path="."/>
+        <include domain="database" path="."/>
+        <include domain="file" path="."/>
+        <!-- Keystore-encrypted secrets cannot be restored on another device; never back them up. -->
+        <exclude domain="sharedpref" path="fp_credentials.xml"/>
+        <exclude domain="file" path="migration-backup/"/>
     </cloud-backup>
     <device-transfer>
-        <include domain="root" />
+        <include domain="sharedpref" path="."/>
+        <include domain="database" path="."/>
+        <include domain="file" path="."/>
+        <exclude domain="sharedpref" path="fp_credentials.xml"/>
+        <exclude domain="file" path="migration-backup/"/>
     </device-transfer>
 </data-extraction-rules>

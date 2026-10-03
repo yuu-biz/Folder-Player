@@ -1,57 +1,53 @@
 package com.wing.folderplayer.data.prefs
 
+import androidx.core.content.edit
+
 import android.content.Context
-import com.wing.folderplayer.ui.browser.SourceConfig
-import com.wing.folderplayer.ui.browser.SourceType
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import com.wing.folderplayer.data.source.SourceRef
 
 data class SortConfig(
     val field: String,
     val ascending: Boolean
 )
 
+/** Browser state. Folders are identified by [SourceRef] (sourceId + source-relative path). */
 class SourcePreferences(context: Context) {
     private val prefs = context.getSharedPreferences("source_prefs", Context.MODE_PRIVATE)
-    private val gson = Gson()
 
-    fun saveLastBrowsedState(source: SourceConfig?, path: String) {
-        try {
-            prefs.edit().apply {
-                putString("last_source", gson.toJson(source))
-                putString("last_path", path)
-                apply()
+    fun saveLastBrowsedState(folder: SourceRef?) {
+        prefs.edit().apply {
+            if (folder == null) {
+                remove("last_source_id")
+                putString("last_path", "ROOT")
+            } else {
+                putString("last_source_id", folder.sourceId)
+                putString("last_path", folder.path)
             }
-        } catch (e: Exception) {
-            android.util.Log.e("SourcePreferences", "Failed to save last browsed state", e)
+            apply()
         }
     }
 
-    fun getLastBrowsedSource(): SourceConfig? {
-        val json = prefs.getString("last_source", null) ?: return null
-        return try { gson.fromJson(json, SourceConfig::class.java) } catch (e: Exception) { null }
+    fun getLastBrowsed(): SourceRef? {
+        val id = prefs.getString("last_source_id", null) ?: return null
+        val path = prefs.getString("last_path", "ROOT") ?: return null
+        if (path == "ROOT" || !path.startsWith("/")) return null
+        return SourceRef(id, path)
     }
 
-    fun getLastBrowsedPath(): String = prefs.getString("last_path", "ROOT") ?: "ROOT"
+    /** Browser view mode per folder ("GRID"/"LIST"), falling back to the default. */
+    fun getViewMode(folder: SourceRef?): String =
+        folder?.let { prefs.getString("view_mode_" + it.toUriString(), null) } ?: getDefaultViewMode()
 
-    fun getLastSource(): SourceConfig? = getLastBrowsedSource()
-    fun getLastPath(): String = getLastBrowsedPath()
-
-    fun getSources(): List<SourceConfig> {
-        val json = prefs.getString("sources_list", null) ?: return emptyList()
-        val type = object : TypeToken<List<SourceConfig>>() {}.type
-        return try { gson.fromJson(json, type) } catch (e: Exception) { emptyList() }
+    fun saveViewMode(folder: SourceRef, mode: String) {
+        prefs.edit { putString("view_mode_" + folder.toUriString(), mode) }
     }
 
-    fun getSavedSources(): List<SourceConfig> = getSources()
+    fun getDefaultViewMode(): String = prefs.getString("default_view_mode", "LIST") ?: "LIST"
+    fun saveDefaultViewMode(mode: String) = prefs.edit { putString("default_view_mode", mode) }
 
-    fun saveSources(sources: List<SourceConfig>) {
-        try {
-            prefs.edit().putString("sources_list", gson.toJson(sources)).apply()
-        } catch (e: Exception) {
-            android.util.Log.e("SourcePreferences", "Failed to save sources list", e)
-        }
-    }
+    /** Grid columns on a phone in portrait (2..5). */
+    fun getGridDensity(): Int = prefs.getInt("grid_density", 3)
+    fun saveGridDensity(columns: Int) = prefs.edit { putInt("grid_density", columns.coerceIn(2, 5)) }
 
     fun getDefaultSort(): SortOption {
         val field = prefs.getString("default_sort_field", "NAME") ?: "NAME"
@@ -60,22 +56,25 @@ class SourcePreferences(context: Context) {
     }
 
     fun saveDefaultSort(field: String, ascending: Boolean) {
-        prefs.edit().putString("default_sort_field", field).putBoolean("default_sort_asc", ascending).apply()
+        prefs.edit { putString("default_sort_field", field); putBoolean("default_sort_asc", ascending) }
     }
 
-    fun getDirectorySort(path: String): SortOption? {
-        val field = prefs.getString("sort_field_$path", null) ?: return null
-        val asc = prefs.getBoolean("sort_asc_$path", true)
+    fun getDirectorySort(folder: SourceRef): SortOption? {
+        val key = folder.toUriString()
+        val field = prefs.getString("sort_field_$key", null) ?: return null
+        val asc = prefs.getBoolean("sort_asc_$key", true)
         return SortOption(field, asc)
     }
 
-    fun saveDirectorySort(path: String, field: String, ascending: Boolean) {
-        prefs.edit().putString("sort_field_$path", field).putBoolean("sort_asc_$path", ascending).apply()
+    fun saveDirectorySort(folder: SourceRef, field: String, ascending: Boolean) {
+        val key = folder.toUriString()
+        prefs.edit { putString("sort_field_$key", field); putBoolean("sort_asc_$key", ascending) }
     }
 
     data class SortOption(val field: String, val ascending: Boolean)
 
+    /** Safe-mode reset (Music/Init folder present), as in public main: clears everything in this file. */
     fun clearAll() {
-        prefs.edit().clear().apply()
+        prefs.edit { clear(); putInt("sources_schema", 2) }
     }
 }

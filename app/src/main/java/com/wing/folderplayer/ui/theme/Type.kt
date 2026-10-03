@@ -16,3 +16,17 @@ val Typography = Typography(
         letterSpacing = 0.5.sp
     )
 )
+
+/** Applies the selected app font to every Material text style. */
+fun typographyWith(family: FontFamily): Typography {
+    if (family == FontFamily.Default) return Typography
+    val t = Typography
+    fun TextStyle.f() = copy(fontFamily = family)
+    return Typography(
+        displayLarge = t.displayLarge.f(), displayMedium = t.displayMedium.f(), displaySmall = t.displaySmall.f(),
+        headlineLarge = t.headlineLarge.f(), headlineMedium = t.headlineMedium.f(), headlineSmall = t.headlineSmall.f(),
+        titleLarge = t.titleLarge.f(), titleMedium = t.titleMedium.f(), titleSmall = t.titleSmall.f(),
+        bodyLarge = t.bodyLarge.f(), bodyMedium = t.bodyMedium.f(), bodySmall = t.bodySmall.f(),
+        labelLarge = t.labelLarge.f(), labelMedium = t.labelMedium.f(), labelSmall = t.labelSmall.f(),
+    )
+}
