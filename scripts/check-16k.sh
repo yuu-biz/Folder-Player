@@ -6,18 +6,22 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 APK="${1:-app/build/outputs/apk/debug/app-debug.apk}"
 SDK="$HOME/android-sdk"
-BT=$(ls -d "$SDK"/build-tools/* | sort -V | tail -1)
+# Same build-tools as .github/workflows/release.yml (zipalign -P needs 35.0.0 or newer).
+BUILD_TOOLS="${BUILD_TOOLS:-35.0.0}"
+BT="$SDK/build-tools/$BUILD_TOOLS"
+grep -qx "Pkg.Revision=$BUILD_TOOLS" "$BT/source.properties" || { echo "build-tools $BUILD_TOOLS not installed in $SDK" >&2; exit 1; }
 NDK="$SDK/ndk/28.2.13676358"
 READELF="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
 OUT=build/device-results/16k-check.txt
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 {
-  echo "# $(date -u +%FT%TZ) commit $(git rev-parse --short HEAD) apk $APK sha256 $(sha256sum "$APK" | cut -d' ' -f1)"
+  echo "# $(date -u +%FT%TZ) commit $(git rev-parse --short HEAD) apk $APK sha256 $(sha256sum "$APK" | cut -d' ' -f1) build-tools $BUILD_TOOLS"
   echo "## zipalign -c -P 16 -v 4"
-  "$BT/zipalign" -c -P 16 -v 4 "$APK" | grep -E "lib/|Verification" || true
-  unzip -q -o "$APK" 'lib/*' -d "$TMP"
   RC=0
+  "$BT/zipalign" -c -P 16 -v 4 "$APK" > "$TMP/zipalign.txt" 2>&1 || { echo "zipalign check failed"; RC=1; }
+  grep -E "lib/|Verification|invalid|ERROR" "$TMP/zipalign.txt" || true
+  unzip -q -o "$APK" 'lib/*' -d "$TMP"
   for so in "$TMP"/lib/*/*.so; do
     abi=$(basename "$(dirname "$so")")
     echo "## $abi/$(basename "$so")"
