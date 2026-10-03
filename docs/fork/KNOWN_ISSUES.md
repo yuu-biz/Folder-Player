@@ -36,8 +36,8 @@ touch them.
 ## Fixed by the navigation redesign (0.6.0-dev1)
 
 - Tapping the playback notification while the app was open started a second app screen on top of the first (with its
-  own player connection); Back then led to the old screen. The tap now brings the running screen forward and opens the
-  full player.
+  own player connection); Back then led to the old screen (by code reading of the intent flags; not reproduced on a
+  device). The tap now brings the running screen forward and opens the full player (`NavigationUiTest#n10`).
 - Settings and the browser were recomposed with every player state update (about once a second during playback),
   because they read the whole player state. Found by reading the code, not measured; whether it contributed to the
   reported stutter is unknown.
