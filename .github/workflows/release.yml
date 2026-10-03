@@ -18,6 +18,8 @@ concurrency:
 
 env:
   NDK_VERSION: 28.2.13676358
+  # 35.0.0 or newer: older zipalign has no -P (16 KB page alignment check). scripts/check-16k.sh uses the same version.
+  BUILD_TOOLS: 35.0.0
   # gradle/gradle-daemon-jvm.properties requires a JetBrains JDK 21 (SDK build).
   JBR_TARBALL: jbrsdk-21.0.11-linux-x64-b1163.116.tar.gz
   JBR_SHA256: 097bf328b5bf5a236c095b8c8e5204c0eda91e5baa06b37383a7754b10671d8b
@@ -91,8 +93,10 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
-            "platforms;android-34" "build-tools;34.0.0" "ndk;$NDK_VERSION" "cmake;3.22.1" > /dev/null
-          echo "BT=$ANDROID_HOME/build-tools/34.0.0" >> "$GITHUB_ENV"
+            "platforms;android-34" "build-tools;$BUILD_TOOLS" "ndk;$NDK_VERSION" "cmake;3.22.1" > /dev/null
+          BT="$ANDROID_HOME/build-tools/$BUILD_TOOLS"
+          grep -qx "Pkg.Revision=$BUILD_TOOLS" "$BT/source.properties" || { echo "::error::build-tools $BUILD_TOOLS not installed"; exit 1; }
+          echo "BT=$BT" >> "$GITHUB_ENV"
 
       - name: Cache FFmpeg build
         uses: actions/cache@v4
