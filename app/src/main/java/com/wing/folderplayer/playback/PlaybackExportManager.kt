@@ -1,11 +1,11 @@
 package com.wing.folderplayer.playback
 
 import androidx.core.content.edit
+import androidx.core.net.toUri
 
 import android.content.ContentValues
 import android.content.Context
 import android.media.MediaScannerConnection
-import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.StatFs
@@ -271,13 +271,14 @@ class PlaybackExportManager(private val context: Context, private val player: Pl
         saveIndex(index)
     }
 
+    @androidx.annotation.RequiresApi(29)
     private inner class MediaStoreExportStore : ExportStore {
         private val collection get() = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
 
         override fun exists(location: String, size: Long): Boolean {
             if (!location.startsWith("content://")) return false
             val c = runCatching {
-                context.contentResolver.query(Uri.parse(location), arrayOf(MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.IS_PENDING), null, null, null)
+                context.contentResolver.query(location.toUri(), arrayOf(MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.IS_PENDING), null, null, null)
             }.getOrNull() ?: return false
             return c.use { it.moveToFirst() && it.getLong(0) == size && it.getInt(1) == 0 }
         }
