@@ -23,6 +23,7 @@ Releases (APK downloads): [RELEASE.md](RELEASE.md).
 | More formats | extension list only | ALAC, WMA, APE, DSF, DFF through FFmpeg 7.1.5 built from source (JNI, arm64-v8a + x86_64, 16 KB pages); DST is reported as unsupported | `NativeDecodeTest`, `scripts/check-16k.sh` |
 | Fonts | built-in | Noto Sans SC / LXGW WenKai / Sarasa UI SC download (pinned, checksum-verified), TTF/OTF import, safe fallback | `FontUiTest` |
 | Languages & display | hard-coded strings | English, Simplified/Traditional Chinese, French, Italian, Japanese; grid density, background style, cover size restored | `LibraryUiTest` |
+| Navigation (0.6.0-dev1) | Player / Browser / Settings pages switched by swiping | browser as start page, mini player, full player over the browser, Settings from ⋮, Back order and kept browsing state ([UI_REDESIGN.md](UI_REDESIGN.md)) | `NavigationUiTest` |
 | Network retry | — | retries transient network errors with growing delays for up to 5 minutes; not for login/not-found errors | `PlaybackLogicTest`, `RetryExportTest` |
 
 Existing behaviour (Local/WebDAV playback, LRC, CUE, playlists, sleep timer, sort memory, next-folder playback,

@@ -33,6 +33,11 @@ Tags are `vMAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH-<label>N` (N = 1..98). vers
 versionCode depends only on the tag: `((MAJOR*100 + MINOR)*100 + PATCH)*100 + N`, with N = 99 for a final release
 (`v0.5.1` → 50199, `v0.5.1-rc1` → 50101), so pre-releases sort below their final release.
 
+Prototype APKs built locally for trying out a version before its release (no tag) use the same formula with a
+`dev` label: `-PfpVersionName=0.6.0-dev1 -PfpVersionCode=60001`, then `dev2` = 60002, and so on. They install over
+0.5.2-rc1 (50201) and are replaced by the final `v0.6.0` (60099). A pre-release tag of the same version must use a
+number above the last dev build (after `0.6.0-dev3`, tag `v0.6.0-rc4` or later), so the code never goes down.
+
 The real-server protocol tests and the emulator suites need the Docker fixtures and are run locally before tagging
 (see [VERIFICATION.md](VERIFICATION.md)).
 
