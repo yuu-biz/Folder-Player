@@ -3,21 +3,21 @@ package com.wing.folderplayer
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeLeft
-import androidx.compose.ui.test.swipeRight
 import org.junit.Rule
 
-/** Drives the real MainActivity UI (player ⇄ browser ⇄ settings pager) through Compose semantics. */
+/** Drives the real MainActivity UI (browser; settings from its menu; mini / full player over it) through Compose semantics. */
 @OptIn(ExperimentalTestApi::class)
 abstract class UiTestBase {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
@@ -27,7 +27,14 @@ abstract class UiTestBase {
     protected fun node(tag: String): SemanticsNodeInteraction = compose.onNodeWithTag(tag, useUnmergedTree = true)
 
     protected fun exists(tag: String) = runCatching { node(tag).assertExists(); true }.getOrDefault(false)
-    protected fun textExists(text: String) = runCatching { compose.onNodeWithText(text, useUnmergedTree = true).assertExists(); true }.getOrDefault(false)
+    protected fun textExists(text: String) = runCatching { compose.onNode(visibleText(text), useUnmergedTree = true).assertExists(); true }.getOrDefault(false)
+
+    /**
+     * Text on the front-most layer: while the full player is open the pages stay composed underneath it (hidden from
+     * accessibility, but still in the unmerged test tree), so their texts are left out.
+     */
+    protected fun visibleText(text: String): SemanticsMatcher =
+        if (exists("player_full")) hasText(text) and !hasAnyAncestor(hasTestTag("app_pages")) else hasText(text)
 
     protected fun until(timeoutMs: Long = 10_000, what: String = "", cond: () -> Boolean) {
         try {
@@ -50,7 +57,7 @@ abstract class UiTestBase {
         compose.onNodeWithTag(tag).performClick()
         compose.waitForIdle()
     }
-    protected fun clickText(text: String) { compose.onNodeWithText(text, useUnmergedTree = true).performClick(); compose.waitForIdle() }
+    protected fun clickText(text: String) { compose.onNode(visibleText(text), useUnmergedTree = true).performClick(); compose.waitForIdle() }
     protected fun longClick(tag: String) { node(tag).performTouchInput { longClick() }; compose.waitForIdle() }
 
     /** Replaces the text of a field inside a (scrollable) dialog. */
@@ -59,31 +66,41 @@ abstract class UiTestBase {
         compose.waitForIdle()
     }
 
-    /** Pager page 0 = player, 1 = browser, 2 = settings. */
+    /** System Back, through the same dispatcher the Compose back handlers use. */
+    protected fun pressBack() {
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+    }
+
+    protected fun playerOpen() = exists("player_full")
+    protected fun browserShown() = !playerOpen() && !exists("settings_column") &&
+        (exists("source_list") || exists("file_list") || exists("file_grid"))
+
+    /** Browser is the base page: Settings and the full player are closed over it. */
     protected fun toBrowser() {
         compose.waitForIdle()
-        if (!exists("source_list") && !exists("file_list") && !exists("file_grid")) {
-            // Page 2 (settings) is right of the browser, page 0 (player) left of it.
-            if (exists("settings_column")) compose.onRoot().performTouchInput { swipeRight() } else compose.onRoot().performTouchInput { swipeLeft() }
-        }
-        until(10_000, "browser") { exists("source_list") || exists("file_list") || exists("file_grid") }
+        if (playerOpen()) click("btn_collapse_player")
+        if (exists("settings_column")) pressBack()
+        until(10_000, "browser") { browserShown() }
     }
 
+    /** Settings is opened from the browser's ⋮ menu (on every browser level). */
     protected fun toSettings() {
         toBrowser()
-        compose.onRoot().performTouchInput { swipeLeft() }
-        until(10_000, "settings") { exists("settings_column") }
+        click("btn_overflow")
+        click("menu_settings")
+        until(10_000, "settings") { exists("settings_column") && !exists("btn_overflow") }
     }
 
+    /** The full player is opened from the mini player (there must be a track). */
     protected fun toPlayer() {
-        // The pager may keep an adjacent page partly composed, so decide by the page that is showing.
-        repeat(2) {
-            if (exists("source_list") || exists("file_list") || exists("file_grid") || exists("settings_column") || exists("search_field")) {
-                compose.onRoot().performTouchInput { swipeRight() }
-                compose.waitForIdle()
-            }
+        compose.waitForIdle()
+        if (!playerOpen()) {
+            toBrowser()
+            until(10_000, "mini player") { exists("mini_player") }
+            click("mini_player")
         }
-        until(10_000, "player") { !exists("source_list") && !exists("file_list") && !exists("file_grid") && !exists("settings_column") }
+        until(10_000, "player") { playerOpen() }
         compose.waitForIdle()
     }
 }

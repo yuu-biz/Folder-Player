@@ -7,10 +7,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeLeft
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
@@ -56,7 +54,7 @@ class SafTest : ServiceTestBase() {
 
     private fun toBrowser() {
         compose.waitForIdle()
-        if (!exists("source_list")) compose.onRoot().performTouchInput { swipeLeft() }
+        // The browser is the start page (no page swipe any more); this suite works on its source list.
         compose.waitUntil(10_000) { exists("source_list") }
     }
 

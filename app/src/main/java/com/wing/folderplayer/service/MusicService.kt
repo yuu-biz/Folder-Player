@@ -150,6 +150,10 @@ class MusicService : MediaLibraryService() {
         return mediaSession
     }
 
+    /** For instrumentation tests (main thread): controllers bound to the session, e.g. the app's own one per activity. */
+    internal val connectedControllerCount: Int get() = mediaSession.connectedControllers.size
+    internal val isPlayingForTest: Boolean get() = player.isPlaying
+
     override fun onDestroy() {
         if (current === this) current = null
         pendingNotification?.let { notificationHandler.removeCallbacks(it) }
