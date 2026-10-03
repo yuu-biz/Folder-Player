@@ -50,10 +50,10 @@ Third-party libraries
 
 Apache License 2.0:
   - AndroidX / Jetpack (Compose, Media3, Lifecycle, Navigation, DataStore, Activity, Core, AppCompat, DocumentFile and their dependencies) — https://developer.android.com/jetpack
-  - Kotlin standard library, kotlinx.coroutines — https://kotlinlang.org
+  - Kotlin standard library, kotlin-reflect, kotlinx.coroutines — https://kotlinlang.org
   - Accompanist — https://github.com/google/accompanist
   - OkHttp, Okio, Retrofit — Square, Inc. — https://square.github.io
-  - Gson, Guava, JSR-305 annotations — https://github.com/google
+  - Gson, Guava (with failureaccess, listenablefuture), JSR-305 annotations, Error Prone annotations — https://github.com/google
   - Coil — https://coil-kt.github.io/coil
   - SMBJ, ASN-One — Jeroen van Erp — https://github.com/hierynomus/smbj
   - Apache Commons Net, Apache Commons IO — The Apache Software Foundation (NOTICE files below)
