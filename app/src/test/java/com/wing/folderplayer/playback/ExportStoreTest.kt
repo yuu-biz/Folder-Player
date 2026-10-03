@@ -11,8 +11,8 @@ import org.junit.rules.TemporaryFolder
 import java.io.File
 
 /**
- * Auto-save destination rules: a track counts as already saved only through its own identity (source + path + size +
- * mtime) and a still existing output; an unrelated file with the same name (and even the same size) is never taken for
+ * Auto-save destination rules: a track counts as already saved only through its own identity (source + path + size)
+ * and a still existing output; an unrelated file with the same name (and even the same size) is never taken for
  * it and never overwritten; colliding names get a free " (n)" name.
  */
 class ExportStoreTest {
@@ -27,18 +27,25 @@ class ExportStoreTest {
         assertEquals("README (2)", ExportCore.uniqueName("README", setOf("readme")))
     }
 
-    @Test fun identityIncludesSourceAndVersionOfTheFile() {
-        val a = ExportCore.identity("fpsrc://smb/A/CD1/t.flac", 10, 1)
-        assertNotEquals(a, ExportCore.identity("fpsrc://ftp/A/CD1/t.flac", 10, 1))
-        assertNotEquals(a, ExportCore.identity("fpsrc://smb/B/CD1/t.flac", 10, 1))
-        assertNotEquals(a, ExportCore.identity("fpsrc://smb/A/CD1/t.flac", 10, 2))
+    @Test fun identityIncludesSourcePathAndSize() {
+        val a = ExportCore.identity("fpsrc://smb/A/CD1/t.flac", 10)
+        assertNotEquals(a, ExportCore.identity("fpsrc://ftp/A/CD1/t.flac", 10))
+        assertNotEquals(a, ExportCore.identity("fpsrc://smb/B/CD1/t.flac", 10))
+        assertNotEquals(a, ExportCore.identity("fpsrc://smb/A/CD1/t.flac", 11))
+    }
+
+    @Test fun onlyOwnOutputsAreValidIndexEntries() {
+        assertTrue(ExportCore.isOwnOutput("content://media/external/audio/media/12"))
+        assertTrue(ExportCore.isOwnOutput("/storage/emulated/0/Music/FolderPlayer/A/t.flac"))
+        // What earlier versions stored for a same-named file found in Music/.
+        assertFalse(ExportCore.isOwnOutput("Music/FolderPlayer/A/t.flac"))
     }
 
     @Test fun anUnrelatedSameNameSameSizeFileIsNeitherADuplicateNorOverwritten() {
         val store = FileExportStore(tmp.newFolder("music"))
         val userFile = File(tmp.root, "music/Music/FolderPlayer/CD1/track.flac").apply { parentFile!!.mkdirs(); writeBytes(ByteArray(100) { 7 }) }
         val index = mutableMapOf<String, String>()
-        val id = ExportCore.identity("fpsrc://smb/A/CD1/track.flac", 100, 1)
+        val id = ExportCore.identity("fpsrc://smb/A/CD1/track.flac", 100)
         assertFalse("same name and size, but not our export", ExportCore.alreadyExported(index, id, 100, store))
 
         val ours = ByteArray(100) { 1 }
@@ -61,7 +68,7 @@ class ExportStoreTest {
 
     @Test fun aDeletedOutputIsExportedAgain() {
         val store = FileExportStore(tmp.newFolder("music"))
-        val id = ExportCore.identity("fpsrc://smb/A/t.flac", 5, 1)
+        val id = ExportCore.identity("fpsrc://smb/A/t.flac", 5)
         val saved = ExportCore.publish(part(ByteArray(5)), "Music/FolderPlayer/A", "t.flac", store)
         val index = mutableMapOf(id to saved)
         assertTrue(ExportCore.alreadyExported(index, id, 5, store))
