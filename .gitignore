@@ -28,3 +28,13 @@ Thumbs.db
 # Captures and Logs
 captures/
 *.log
+
+# Local test credentials / environment (never commit)
+test-env.local.properties
+*.local.properties
+# Native build outputs (rebuilt from source by scripts)
+native/build/
+native/out/
+native/src-cache/
+# Device test output
+build/device-results/
