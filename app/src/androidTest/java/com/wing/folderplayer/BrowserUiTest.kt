@@ -70,6 +70,9 @@ class BrowserUiTest : UiTestBase() {
 
     @Before fun reset() {
         Fx.ctx.getSharedPreferences("artwork_prefs", 0).edit().clear().commit()
+        // a14 ends with LateCover/cover.jpg found (and indexed) and its @After deletes the file: forget that entry, or a
+        // second run on the same app data sees a stale "found" image (the browser, now the start page, shows it at once).
+        com.wing.folderplayer.data.artwork.ThumbnailRepository.get(Fx.ctx).invalidate(SourceRef(local, "$fx/LateCover"))
         SourcePreferences(Fx.ctx).saveDefaultViewMode("LIST")
         SourceRegistry.savedSources().filter { it.type != SourceType.SAF }.forEach { SourceRegistry.remove(it.id) }
         compose.activityRule.scenario.recreate()
@@ -216,9 +219,14 @@ class BrowserUiTest : UiTestBase() {
         Thread.sleep(3_000)
         compose.waitForIdle()
         var checked = 0
+        // Only rows fully inside the grid: a row cut off at the bottom edge (now above the mini player) shows a sliver
+        // of the tile plus whatever is drawn below it. The bounds are clipped to the grid, so a cut-off (square) tile
+        // is one that is not square.
         for (i in 150..175) {
             val name = "Folder %03d".format(i)
             if (!exists("thumb_$name")) continue
+            val b = node("thumb_$name").fetchSemanticsNode().boundsInRoot
+            if (b.height < b.width * 0.95f) continue
             val expected = Triple((i * 53) % 256, (i * 97) % 256, (i * 151) % 256)
             val got = thumbColour(name)
             assertTrue("$name shows its own image: got $got expected $expected", close(got, expected))
