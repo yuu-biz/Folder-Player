@@ -102,6 +102,13 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - The release APK on a real phone: install, and later an update over it signed with the same key. Builds handed
   out before the release key existed (0.5.0-fork.1 debug-signed, versionCode 501; 0.5.1 test-key-signed, 50199)
   cannot be updated in place: uninstall them once.
+- Casting on a real network: discovery of a real renderer (emulators sit behind NAT) and switching / stopping while
+  a renderer is slow; the ordering is covered by `CastSessionOrderTest` with a fake renderer only.
+- Japanese UI on a real phone with Japanese system language (emulators only so far), and how the longer Japanese
+  labels fit on small screens.
+- The full suites on API 26 / 33 / 36, the 16 KB-page image and ARM translation on `bf18888` (only API 34 ran all
+  suites; API 26 ran `JapaneseUiTest` and `CastCleanupTest`).
+- Real HyperOS hardware (debugging there waived for now), a NAS (postponed), SD cards.
 
 ### 5.4 First release candidate `v0.5.2-rc1` (tag at `771fd13`, docs-only after `bf18888`)
 
@@ -115,10 +122,3 @@ marked as pre-release. Checked on the downloaded draft:
 | `SHA256SUMS.txt` | `523a0793…7d5d8e` matches the APK and the checksum in the notes |
 | `ffmpeg-7.1.5.tar.xz` | SHA-256 `de668509…5d558f`, the pinned official tarball |
 | Notes | no placeholders left; certificate digest, links to FEATURES / KNOWN_ISSUES / DEPENDENCIES at the tag |
-- Casting on a real network: discovery of a real renderer (emulators sit behind NAT) and switching / stopping while
-  a renderer is slow; the ordering is covered by `CastSessionOrderTest` with a fake renderer only.
-- Japanese UI on a real phone with Japanese system language (emulators only so far), and how the longer Japanese
-  labels fit on small screens.
-- The full suites on API 26 / 33 / 36, the 16 KB-page image and ARM translation on `bf18888` (only API 34 ran all
-  suites; API 26 ran `JapaneseUiTest` and `CastCleanupTest`).
-- Real HyperOS hardware (debugging there waived for now), a NAS (postponed), SD cards.
