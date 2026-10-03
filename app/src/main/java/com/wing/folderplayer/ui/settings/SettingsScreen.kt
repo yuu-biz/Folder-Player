@@ -165,10 +165,8 @@ fun SettingsScreen(
 
                     // ---------- Language ----------
                     SectionTitle(stringResource(R.string.settings_language))
-                    val langLabels = listOf(
-                        "" to stringResource(R.string.settings_system), "en" to "English", "zh-CN" to "简体中文",
-                        "zh-TW" to "繁體中文", "fr" to "Français", "it" to "Italiano",
-                    )
+                    val systemLabel = stringResource(R.string.settings_system)
+                    val langLabels = AppLocale.LANGUAGES.map { (tag, name) -> tag to name.ifEmpty { systemLabel } }
                     ChoiceRow(langLabels, AppLocale.get(context), "lang") { onLanguageChange(it) }
 
                     // ---------- Fonts ----------

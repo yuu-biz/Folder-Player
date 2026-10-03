@@ -22,7 +22,7 @@ Releases (APK downloads): [RELEASE.md](RELEASE.md).
 | Auto-save | — | optional: a network track played to its end is downloaded completely, verified and saved to `Music/` | `PlaybackLogicTest`, `RetryExportTest` |
 | More formats | extension list only | ALAC, WMA, APE, DSF, DFF through FFmpeg 7.1.5 built from source (JNI, arm64-v8a + x86_64, 16 KB pages); DST is reported as unsupported | `NativeDecodeTest`, `scripts/check-16k.sh` |
 | Fonts | built-in | Noto Sans SC / LXGW WenKai / Sarasa UI SC download (pinned, checksum-verified), TTF/OTF import, safe fallback | `FontUiTest` |
-| Languages & display | hard-coded strings | English, Simplified/Traditional Chinese, French, Italian; grid density, background style, cover size restored | `LibraryUiTest` |
+| Languages & display | hard-coded strings | English, Simplified/Traditional Chinese, French, Italian, Japanese; grid density, background style, cover size restored | `LibraryUiTest` |
 | Network retry | — | retries transient network errors with growing delays for up to 5 minutes; not for login/not-found errors | `PlaybackLogicTest`, `RetryExportTest` |
 
 Existing behaviour (Local/WebDAV playback, LRC, CUE, playlists, sleep timer, sort memory, next-folder playback,
@@ -33,4 +33,4 @@ notification) is kept and covered by `PlaybackServiceTest` and `MigrationTest`.
 - The notification artwork is decoded in the app so SMB/FTP/SAF covers reach the system UI; notification updates are
   coalesced because Android drops bursts of updates.
 - Android 8.0 has no FLAC decoder; FLAC files show a "cannot be decoded on this Android version" message there.
-- Not included: DSF/DFF casting, DST-compressed DSD, a Japanese UI.
+- Not included: DSF/DFF casting, DST-compressed DSD.

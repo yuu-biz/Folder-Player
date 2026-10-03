@@ -10,11 +10,15 @@ import android.os.LocaleList
 import java.util.Locale
 
 /**
- * In-app language: System default, English, Simplified/Traditional Chinese, French, Italian.
+ * In-app language: System default, English, Simplified/Traditional Chinese, French, Italian, Japanese.
  * Android 13+ stores it as the per-app language; older versions wrap the activity context.
  */
 object AppLocale {
-    val TAGS = listOf("", "en", "zh-CN", "zh-TW", "fr", "it")
+    /** Languages offered in Settings: tag to its name in that language ("" = system default, labelled by the UI). */
+    val LANGUAGES = listOf(
+        "" to "", "en" to "English", "zh-CN" to "简体中文", "zh-TW" to "繁體中文", "fr" to "Français", "it" to "Italiano", "ja" to "日本語",
+    )
+    val TAGS = LANGUAGES.map { it.first }
     private const val PREFS = "ui_prefs"
     private const val KEY = "app_language"
 
