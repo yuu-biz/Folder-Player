@@ -133,6 +133,35 @@ class CastSessionOrderTest {
         assertEquals(200, httpStatus(renderer.urls.getValue(b.udn)))
     }
 
+    @Test fun connectingIsReportedUntilTheCastHasStartedFailedOrStopped() {
+        // Started: connecting from the request until the session is up.
+        val gateA = renderer.hold("setUri:uuid:A")
+        cast.cast(a, SourceRef("m", "/a.flac"), "a", null)
+        assertTrue("connecting at once", cast.state.value.connecting && cast.state.value.sessionInProgress)
+        renderer.awaitReached("setUri:uuid:A")
+        assertTrue(cast.state.value.connecting)
+        gateA.complete(Unit)
+        awaitState("A playing, no longer connecting") { it.active == a && it.lastCommand == "Play" && !it.connecting }
+        assertTrue(cast.state.value.sessionInProgress)
+        cast.stop()
+        awaitState("stopped") { it.active == null && it.lastCommand == "Stop" }
+        assertFalse(cast.state.value.sessionInProgress)
+
+        // Failed: no longer connecting, no session.
+        renderer.hold("setUri:uuid:B").completeExceptionally(IOException("renderer B went away"))
+        cast.cast(b, SourceRef("m", "/b.flac"), "b", null)
+        awaitState("B failed") { it.error != null && !it.connecting }
+        assertFalse(cast.state.value.sessionInProgress)
+
+        // Stopped while connecting.
+        val gateA2 = renderer.hold("setUri:uuid:A")
+        cast.cast(a, SourceRef("m", "/a.flac"), "a", null)
+        assertTrue(cast.state.value.connecting)
+        cast.stop()
+        gateA2.complete(Unit)
+        awaitState("stop ends connecting") { !it.connecting && it.active == null && it.lastCommand == "Stop" }
+    }
+
     @Test fun stopWhileConnectingDoesNotComeBackLater() {
         val gateA = renderer.hold("setUri:uuid:A")
         cast.cast(a, SourceRef("m", "/a.flac"), "a", null)
