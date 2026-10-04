@@ -45,6 +45,17 @@ touch them.
   scrolling; it is now written on an I/O thread, at most once per half second. Also not measured as a cause of the
   stutter.
 
+## Fixed after review (0.6.0-dev2)
+
+- Language change (activity recreation) reloaded the browser list as if permissions had changed: the list jumped back
+  to the top. Now only an actual change of the granted access reloads it (`NavigationUiTest#n12`).
+- Notification tap on a new activity without a cached track: the "show the player" request was dropped while the
+  controller was still connecting, so the player did not open. It now waits for the connection; with no track it
+  ends on the browser without playing (`OpenPlayerColdStartTest`).
+- Next / previous with nothing to move to (single track, last / first track without repeat) set the title to "Loading"
+  and waited for a track change that never came. They now do nothing; the mini player's next button is disabled then
+  (`PlayerSkipTest`).
+
 ## Navigation redesign: open points (stage 1)
 
 - Opening a folder from search results or the favourites list leaves that list; Back then goes to the folder's parent

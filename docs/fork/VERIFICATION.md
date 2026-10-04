@@ -112,6 +112,21 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign 0.6.0-dev1 on a real phone: feel of opening / closing the player and of the browser, notification
   tap, Back gesture, TalkBack (see 5.5).
 
+### 5.6 Review fixes and additions (0.6.0-dev2, 2026-10-04)
+
+App code as of `052e2d6` (`5da6bfd` only adds suites to `run-suites.sh`).
+
+| Check | Result |
+|---|---|
+| Review findings reproduced first | on the code before the fixes (test hooks and state fields only): `NavigationUiTest#n12` FAIL (scroll position lost after the language change), `OpenPlayerColdStartTest#a` FAIL (player never opened: request dropped while the delayed controller connected), `PlayerSkipTest` both FAIL (title "Loading.." after next on a single track / on the last track) |
+| `assembleDebug assembleDebugAndroidTest lintDebug testDebugUnitTest` | exit 0; lint 0 errors, 61 warnings (same count; none in the new code); JVM tests 124, 0 failures, 21 skipped (new: `PlaylistMoveTest`, `DurationFormatTest`) |
+| All instrumentation suites, API 34, default `run-suites.sh` order | 87/87 test processes passed, none skipped (22 suites; new: `PlayerSkipTest` 2, `OpenPlayerColdStartTest` 2, `NavigationUiTest` n12–n15) |
+| `RetryExportTest` order | `sameNameFiles…` passes directly after `MigrationTest` now (it switches next-folder playback off itself) |
+| Test-only issues found on the way | n13 first used `swipeLeft()`, which starts at the screen edge and was taken as the system Back gesture; `PlayerSkipTest` first let the few-second fixture tracks end and advance. Both fixed in the tests |
+| Lengths | local: `02 track.mp3` 0:30 (CBR without Xing), `01 曲 #1+%.flac` 1:00, `long.flac` 10:00, `sample.wma` 0:20 (FFmpeg); SMB: none while the SMB thumbnail switch is off, 0:30 after switching on and refreshing. APE / DSF / DFF in shared storage are not listed by the browser at all (Android media visibility), so their lengths are not tested |
+| Signed release build `-PfpVersionName=0.6.0-dev2 -PfpVersionCode=60002` | `FolderPlayerFork-0.6.0-dev2.apk`, SHA-256 `4587989cc4b0376fe7e1a639af490fa8c80b56a0b913aba741c65eef14d805b1`; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; signature v2; not debuggable; `zipalign -c -P 16` and `check-16k.sh` PASS |
+| Update 0.6.0-dev1 → dev2 (emulator API 34) | dev1 release APK with a favourite and Japanese chosen; `adb install -r` dev2: versionCode 60001 → 60002, favourite and language kept, lengths shown in the list |
+
 ### 5.5 Navigation redesign, stage 1 (`feature/player-navigation`, 2026-10-04)
 
 Browser-based navigation with mini / full player ([UI_REDESIGN.md](UI_REDESIGN.md)). App code as of `285e6a7`
