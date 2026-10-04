@@ -72,4 +72,41 @@ class PlayerSkipTest : ServiceTestBase() {
         main { vm.next() }
         waitFor(20_000, "moved to the second track") { state.currentTitle == "track 111" && state.currentMediaId?.contains("track%20111") == true }
     }
+
+    // Review: a move to another queue position holding the same track (duplicates, one track + repeat all) is a move,
+    // even though the track id stays the same.
+    @Test fun duplicateEntriesNextAndPreviousShowTheTrack() {
+        val a = file(120); val b = file(121)
+        play(listOf(a, a, b), 0)
+        main { vm.next() }   // position 1: the same track again
+        assertNothingChanged("next onto the same track", "track 120", state.currentMediaId)
+        main { vm.next() }   // position 2
+        waitFor(20_000, "third entry") { state.currentTitle == "track 121" }
+        main { vm.previous() }
+        waitFor(20_000, "back on the second entry") { state.currentTitle == "track 120" }
+        main { vm.previous() } // position 0: the same track again
+        assertNothingChanged("previous onto the same track", "track 120", state.currentMediaId)
+        main { vm.next(); }
+        assertNothingChanged("display not stuck", "track 120", state.currentMediaId)
+    }
+
+    @Test fun singleTrackWithRepeatAllNextAndPreviousShowTheTrack() {
+        play(listOf(file(122)), 0)
+        try {
+            repeat(3) {
+                if (state.repeatMode != androidx.media3.common.Player.REPEAT_MODE_ALL) { main { vm.toggleRepeatMode() }; Thread.sleep(700) }
+            }
+            assertEquals(androidx.media3.common.Player.REPEAT_MODE_ALL, state.repeatMode)
+            waitFor(5_000, "repeat all: there is a next track") { state.canSkipNext && state.canSkipPrevious }
+            val id = state.currentMediaId
+            main { vm.next() }
+            assertNothingChanged("next with repeat all", "track 122", id)
+            main { vm.previous() }
+            assertNothingChanged("previous with repeat all", "track 122", id)
+        } finally {
+            repeat(3) {
+                if (state.repeatMode != androidx.media3.common.Player.REPEAT_MODE_OFF) { main { vm.toggleRepeatMode() }; Thread.sleep(700) }
+            }
+        }
+    }
 }
