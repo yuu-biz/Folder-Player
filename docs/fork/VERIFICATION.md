@@ -112,6 +112,19 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign 0.6.0-dev1 on a real phone: feel of opening / closing the player and of the browser, notification
   tap, Back gesture, TalkBack (see 5.5).
 
+### 5.7 Second review fixes (0.6.0-dev3, 2026-10-04)
+
+App code as of `a01e191` (`08b6a1a` only adds suites to `run-suites.sh`).
+
+| Check | Result |
+|---|---|
+| Findings reproduced first (test hooks only, no fix) | `DurationRepositoryTest`: 4 of 5 FAIL (lost connection in MediaMetadataRetriever and in FFmpeg, auth / permission failures, dev2 index with a stored "unknown": no length on the next look either); `cancelledReadIsNotKept` PASSED already (a cancelled look was not stored in practice; the fix adds an explicit guard and the test stays as a regression check). `PlayerSkipTest`: duplicate entries FAIL ("Switching Track.." stays), one track + repeat all FAIL ("Loading.." stays). `PlaylistQueueTest` FAIL (reordering B moved the queue built from A). `NavigationUiTest#n16` FAIL (mini player swiped away while a cast was starting) |
+| Found while fixing | a sideways swipe on the mini player while it may not be dismissed was taken as a tap and opened the full player (seen on the emulator screen during n16; n13 did not check it); a refused dismissal left the bar slid out. Both fixed, n13 / n16 check them |
+| `assembleDebug assembleDebugAndroidTest lintDebug testDebugUnitTest` | exit 0; lint 0 errors, 61 warnings (same count); JVM 125, 0 failures, 21 skipped (new: `CastSessionOrderTest#connectingIsReportedUntilTheCastHasStartedFailedOrStopped`) |
+| All instrumentation suites, API 34, default order (24 suites) | 88 passed, 9 failed during a network outage of the emulator after the SafTest reboot (`UnknownHostException` for the fixture servers and raw.githubusercontent.com: `AiNfoUiTest` ×4, `FontUiTest` ×4, `BrowserUiTest#a18` with a half-loaded image). Network back (fixture server and internet reachable): all 9 passed when run again (`AiNfoUiTest#a22_saf` after `SafTest`, its documented precondition). New suites: `DurationRepositoryTest` 6/6, `PlaylistQueueTest` 1/1, `PlayerSkipTest` 4/4, `NavigationUiTest` 16/16 |
+| Signed release build `-PfpVersionName=0.6.0-dev3 -PfpVersionCode=60003` | `FolderPlayerFork-0.6.0-dev3.apk`, SHA-256 `e9cdc93edbbf8420dd97ff7afb9932e52d955a25c5851213a862290119a9bd00`; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; signature v2; not debuggable; `zipalign -c -P 16` and `check-16k.sh` PASS |
+| Update 0.6.0-dev2 → dev3 (emulator API 34) | dev2 with a favourite, Japanese and lengths shown; `adb install -r` dev3: versionCode 60002 → 60003, favourite, language and lengths kept |
+
 ### 5.6 Review fixes and additions (0.6.0-dev2, 2026-10-04)
 
 App code as of `052e2d6` (`5da6bfd` only adds suites to `run-suites.sh`).
