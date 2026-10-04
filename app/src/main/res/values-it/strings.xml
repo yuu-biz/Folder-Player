@@ -193,6 +193,8 @@
     <string name="player_pause">Pausa</string>
     <string name="player_open">Apri il lettore</string>
     <string name="player_collapse">Riduci il lettore</string>
+    <string name="player_dismiss">Chiudi il lettore</string>
+    <string name="playlist_reorder">Trascina per riordinare</string>
     <string name="player_next">Successivo</string>
     <string name="player_playlist_title">PLAYLIST</string>
     <string name="player_new_list">+ NUOVA LISTA</string>

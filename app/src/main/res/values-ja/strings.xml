@@ -193,6 +193,8 @@
     <string name="player_pause">一時停止</string>
     <string name="player_open">プレーヤーを開く</string>
     <string name="player_collapse">プレーヤーを最小化</string>
+    <string name="player_dismiss">プレーヤーを閉じる</string>
+    <string name="playlist_reorder">ドラッグして並べ替え</string>
     <string name="player_next">次へ</string>
     <string name="player_playlist_title">プレイリスト</string>
     <string name="player_new_list">+ 新しいリスト</string>

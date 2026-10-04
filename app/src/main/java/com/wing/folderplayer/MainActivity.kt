@@ -95,11 +95,16 @@ class MainActivity : ComponentActivity() {
 
         // Audio + images (Android 13+), optional partial photo access (14+), notifications. Denying images must not
         // affect audio playback; covers in unindexed folders are reachable through SAF sources instead.
+        // The request is sent by every new activity, also a recreated one (language change), and answered at once when
+        // nothing is asked. Only an actual change of the granted access reloads the browser (a reload resets its list
+        // position); the state before the request is the reference.
+        lastPermissionReport = PermissionDiagnostics.report(this)
         val permissionLauncher = registerForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
         ) { _ ->
-            lastPermissionReport = PermissionDiagnostics.report(this)
-            permissionEpoch.value++
+            val now = PermissionDiagnostics.report(this)
+            if (now != lastPermissionReport) permissionEpoch.value++
+            lastPermissionReport = now
         }
         permissionLauncher.launch(PermissionDiagnostics.mediaPermissions())
 

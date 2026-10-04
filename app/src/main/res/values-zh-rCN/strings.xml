@@ -193,6 +193,8 @@
     <string name="player_pause">暂停</string>
     <string name="player_open">打开播放器</string>
     <string name="player_collapse">收起播放器</string>
+    <string name="player_dismiss">关闭播放器</string>
+    <string name="playlist_reorder">拖动以调整顺序</string>
     <string name="player_next">下一首</string>
     <string name="player_playlist_title">播放列表</string>
     <string name="player_new_list">+ 新建列表</string>

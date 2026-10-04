@@ -5,11 +5,17 @@ import android.media.AudioManager
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.swipe
+import com.wing.folderplayer.data.prefs.PlaybackPreferences
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextInput
 import androidx.core.view.ViewCompat
@@ -29,6 +35,7 @@ import com.wing.folderplayer.data.source.SourceType
 import com.wing.folderplayer.service.MusicService
 import com.wing.folderplayer.ui.browser.BrowserViewModel
 import com.wing.folderplayer.ui.player.PlayerViewModel
+import com.wing.folderplayer.utils.AppLocale
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -489,5 +496,79 @@ class NavigationUiTest : UiTestBase() {
             device.setOrientationNatural()
             device.unfreezeRotation()
         }
+    }
+
+    // Review: an activity recreation (language change) must not count as a permission change and reload the list.
+    @Test fun n12_languageChangeInSettingsKeepsTheBrowserScrollPosition() {
+        open("$fx/Many")
+        scrollList(200)
+        until(5_000, "row 200") { shown("item_Folder 200") }
+        toSettings()
+        compose.onNodeWithTag("lang_ja", useUnmergedTree = true).performScrollTo()
+        click("lang_ja")
+        try {
+            until(15_000, "recreated in Japanese") { AppLocale.get(Fx.ctx) == "ja" && exists("settings_column") }
+            Thread.sleep(1_500) // the permission request is sent again by the new activity; give its answer time to arrive
+            pressBack()
+            until(10_000, "browser") { browserShown() }
+            Thread.sleep(1_500)
+            assertEquals("$fx/Many", path)
+            assertTrue("scroll position kept after the language change", shown("item_Folder 200"))
+            assertFalse(shown("item_Folder 000"))
+        } finally {
+            toSettings()
+            compose.onNodeWithTag("lang_", useUnmergedTree = true).performScrollTo()
+            click("lang_")
+            until(15_000, "system language again") { AppLocale.get(Fx.ctx) == "" }
+        }
+    }
+
+    /** Sideways swipe on the mini player starting inside it (a swipe from the screen edge is the system Back gesture). */
+    private fun sideSwipe(left: Boolean) {
+        compose.onNodeWithTag("mini_player").performTouchInput {
+            val y = centerY
+            if (left) swipe(Offset(width * 0.8f, y), Offset(width * 0.1f, y), 250) else swipe(Offset(width * 0.2f, y), Offset(width * 0.9f, y), 250)
+        }
+        compose.waitForIdle()
+    }
+
+    // Mini player: swiped away (either way) only while not playing; ends the session.
+    @Test fun n13_pausedMiniPlayerSwipedAwayEndsTheSession() {
+        toBrowser()
+        onUi { player.playCustomList(listOf(MusicFile("long.flac", "$fx/Long/long.flac", false, 0, 0, local)), 0) }
+        until(15_000, "playing") { playing("Long") }
+        until(5_000, "mini player") { exists("mini_player") }
+        // A single track: nothing to skip to.
+        if (exists("mini_next")) compose.onNodeWithTag("mini_next").assertIsNotEnabled()
+
+        // While playing a swipe does nothing.
+        sideSwipe(left = true)
+        Thread.sleep(800)
+        assertTrue("still there while playing", exists("mini_player") && ps.isPlaying)
+
+        for (dir in listOf("left", "right")) {
+            if (!ps.hasTrack) {
+                onUi { player.playFolder(SourceRef(local, "$fx/Long"), null) }
+                until(15_000, "playing again") { playing("Long") }
+                until(5_000, "mini player again") { exists("mini_player") }
+            }
+            click("mini_play_pause")
+            until(5_000, "paused") { !ps.isPlaying }
+            sideSwipe(left = dir == "left")
+            until(5_000, "mini player gone ($dir)") { !exists("mini_player") && !ps.hasTrack }
+            assertFalse(playerOpen())
+            assertTrue("queue emptied", ps.playlist.isEmpty())
+            assertEquals("nothing to restore", null, PlaybackPreferences(Fx.ctx).getLastMediaId())
+            until(10_000, "notification gone") {
+                Fx.ctx.getSystemService(android.app.NotificationManager::class.java).activeNotifications
+                    .none { it.notification.extras.containsKey("android.mediaSession") }
+            }
+        }
+        // Not restored by a recreation either; playlists are kept.
+        compose.activityRule.scenario.recreate()
+        until(10_000, "browser") { browserShown() }
+        Thread.sleep(1_500)
+        assertFalse("no mini player after recreation", exists("mini_player"))
+        assertTrue(ps.allPlaylists.any { it.id == "default" })
     }
 }
