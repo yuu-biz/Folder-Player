@@ -115,6 +115,10 @@ data class PlayerUiState(
 
     /** Set by every play request, before the track has loaded (or failed): the player must stay reachable. */
     val playRequested: Boolean = false,
+
+    /** There is a track to move to (follows repeat and shuffle). */
+    val canSkipNext: Boolean = false,
+    val canSkipPrevious: Boolean = false,
 ) {
     /** There is a track (playing, paused, loading, failed or restored from the last session) to show a player for. */
     val hasTrack: Boolean get() = currentMediaId != null || playRequested
@@ -139,6 +143,10 @@ class PlayerViewModel : ViewModel() {
     private val exceptionHandler = kotlinx.coroutines.CoroutineExceptionHandler { _, throwable ->
         android.util.Log.e("PlayerViewModel", "Coroutine failure", throwable)
     }
+
+    /** The controller connection has been handled (connected, failed, or never attempted in safe mode). */
+    private val _controllerReady = MutableStateFlow(false)
+    val controllerReady: StateFlow<Boolean> = _controllerReady.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -226,6 +234,7 @@ class PlayerViewModel : ViewModel() {
             lyricPreferences?.clear()
             // We do NOT delete the folder, user must do it manually to re-enable persistence.
             // We just skip restoration logic below.
+            _controllerReady.value = true
             return
         }
 
@@ -259,6 +268,11 @@ class PlayerViewModel : ViewModel() {
 
         val sessionToken = SessionToken(context, ComponentName(context, MusicService::class.java))
         mediaControllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
+        // Tests can delay the handling of the connection (a slow service bind) to check what the UI does meanwhile.
+        val connectDelay = controllerConnectDelayMsForTest
+        val onConnected: java.util.concurrent.Executor = if (connectDelay > 0) {
+            java.util.concurrent.Executor { r -> android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(r, connectDelay) }
+        } else MoreExecutors.directExecutor()
         mediaControllerFuture?.addListener({
             try {
                 val controller = mediaControllerFuture?.get() ?: return@addListener
@@ -285,6 +299,12 @@ class PlayerViewModel : ViewModel() {
                     }
                 }
 
+                // The current track is known from the controller at once, before its title / metadata are complete:
+                // a screen may be waiting for "is there a track" (notification tap on a new activity without cache).
+                if (playerMediaId != null && !isRestoring && _uiState.value.currentMediaId == null) {
+                    _uiState.value = _uiState.value.copy(currentMediaId = playerMediaId)
+                }
+
                 updateMetadata()
 
                 if (isRestoring) {
@@ -293,8 +313,10 @@ class PlayerViewModel : ViewModel() {
             } catch (e: Exception) {
                 android.util.Log.e("PlayerViewModel", "MediaController Init Error", e)
                 _error.value = com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_player_init)
+            } finally {
+                _controllerReady.value = true
             }
-        }, MoreExecutors.directExecutor())
+        }, onConnected)
     }
 
     /** Restore of the last session; cancelled as soon as the user starts something else. */
@@ -357,7 +379,8 @@ class PlayerViewModel : ViewModel() {
                 // When we transition to a new item, cancel any existing metadata work
                 // to prevent older song data from 'flickering' in
                 _uiState.value = _uiState.value.copy(
-                    currentTitle = "Switching Track..",
+                    // No item: the queue was emptied (session ended), not a track change.
+                    currentTitle = if (mediaItem != null) "Switching Track.." else _uiState.value.currentTitle,
                     lyrics = emptyList(),
                     translatedLyrics = emptyList(),
                     currentLyricIndex = -1,
@@ -434,6 +457,11 @@ class PlayerViewModel : ViewModel() {
                     events.contains(Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED) ||
                     events.contains(Player.EVENT_REPEAT_MODE_CHANGED)) {
                     updateMetadata()
+                }
+                // Whether next / previous have a target (also while paused).
+                if (events.containsAny(Player.EVENT_TIMELINE_CHANGED, Player.EVENT_MEDIA_ITEM_TRANSITION,
+                        Player.EVENT_REPEAT_MODE_CHANGED, Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED)) {
+                    updatePlaybackState()
                 }
             }
         })
@@ -886,6 +914,34 @@ class PlayerViewModel : ViewModel() {
 
     fun pauseLocal() { player?.pause() }
 
+    /**
+     * Ends the session (mini player swiped away; only while not playing): the queue is emptied, so the notification
+     * goes away, and nothing is restored on the next start. Playlists, including "Default", are kept.
+     */
+    fun dismissSession() {
+        val p = player
+        if (p?.isPlaying == true) return
+        cancelRestore()
+        metadataJob?.cancel()
+        aiLyricsJob?.cancel()
+        progressJob?.cancel()
+        pendingPlayIntent = null
+        p?.stop()
+        p?.clearMediaItems()
+        currentFolder = null
+        playbackPreferences?.clearSession()
+        resetSleepTimer()
+        _uiState.value = _uiState.value.copy(
+            currentTitle = PlayerTitles.NONE, currentArtist = "", currentFolderName = "", audioInfo = "",
+            coverUri = null, coverFallback = null,
+            lyrics = emptyList(), translatedLyrics = emptyList(), currentLyricIndex = -1, lyricsSource = "",
+            currentMediaId = null, playRequested = false, playlist = emptyList(),
+            isPlaying = false, isBuffering = false, playbackError = null,
+            progress = 0f, currentPosition = 0L, duration = 0L, bufferedPosition = 0L,
+            canSkipNext = false, canSkipPrevious = false,
+        )
+    }
+
     fun updatePlaybackState() {
         player?.let { p ->
             val position = p.currentPosition
@@ -899,7 +955,9 @@ class PlayerViewModel : ViewModel() {
                 progress = position.toFloat() / duration,
                 isPlaying = p.isPlaying,
                 currentLyricIndex = index,
-                bufferedPosition = p.bufferedPosition
+                bufferedPosition = p.bufferedPosition,
+                canSkipNext = p.hasNextMediaItem(),
+                canSkipPrevious = p.hasPreviousMediaItem(),
             )
 
             // Periodically save position (every 5 seconds)
@@ -916,7 +974,11 @@ class PlayerViewModel : ViewModel() {
         }
     }
 
+    // Without a track to move to (single track, first / last without repeat) next / previous do nothing: announcing a
+    // change ("Loading…" + waiting for any new track) would leave the display waiting for a change that never comes.
     fun previous() {
+        val p = player ?: return
+        if (!p.hasPreviousMediaItem()) { updatePlaybackState(); return }
         _uiState.value = _uiState.value.copy(
             currentTitle = "Loading..",
             lyrics = emptyList(),
@@ -928,6 +990,8 @@ class PlayerViewModel : ViewModel() {
     }
 
     fun next() {
+        val p = player ?: return
+        if (!p.hasNextMediaItem()) { updatePlaybackState(); return }
         _uiState.value = _uiState.value.copy(
             currentTitle = "Loading..",
             lyrics = emptyList(),
@@ -1409,6 +1473,12 @@ class PlayerViewModel : ViewModel() {
             playlistManager?.appendToPlaylist(targetPlaylistId, allItems)
             refreshPlaylists()
         }
+    }
+
+    companion object {
+        /** Instrumentation tests only: delays handling the controller connection by this many ms. */
+        @androidx.annotation.VisibleForTesting
+        @Volatile internal var controllerConnectDelayMsForTest = 0L
     }
 
     override fun onCleared() {

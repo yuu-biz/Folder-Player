@@ -49,6 +49,13 @@ class PlaybackPreferences(context: Context) {
         }
     }
 
+    /** Forgets the last session (track, position, cached title / cover / lyrics): nothing is restored on next start. */
+    fun clearSession() {
+        prefs.edit {
+            remove("folder_ref"); remove("last_media_id"); remove("last_position"); remove("cached_metadata")
+        }
+    }
+
     fun getLastFolder(): SourceRef? = SourceUris.parse(prefs.getString("folder_ref", null))
     fun getLastMediaId(): String? = prefs.getString("last_media_id", null)
     fun getLastPosition(): Long = prefs.getLong("last_position", 0L)

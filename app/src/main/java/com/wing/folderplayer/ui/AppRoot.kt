@@ -100,11 +100,25 @@ fun AppRoot(
     val entry by navController.currentBackStackEntryAsState()
     val onBrowser = entry?.destination?.route.let { it == null || it == Routes.BROWSER }
 
-    LaunchedEffect(navController, sheet) {
+    // "Show the current track" (notification tap) stays pending until it can be answered: on a new activity without a
+    // cached track the track is only known once the controller has connected. If there is still none then, the request
+    // ends on the browser; nothing is started.
+    var openPlayerPending by rememberSaveable { mutableStateOf(false) }
+    val controllerReady by playerViewModel.controllerReady.collectAsState()
+    LaunchedEffect(navController) {
         openPlayerRequests.collect {
             // Back from the player must land on the browser, not on whatever page was open.
             navController.popBackStack(Routes.BROWSER, inclusive = false)
-            if (playerViewModel.uiState.value.hasTrack) sheet.expand()
+            openPlayerPending = true
+        }
+    }
+    LaunchedEffect(openPlayerPending, hasTrack, controllerReady) {
+        if (!openPlayerPending) return@LaunchedEffect
+        if (hasTrack) {
+            sheet.expand()
+            openPlayerPending = false
+        } else if (controllerReady) {
+            openPlayerPending = false
         }
     }
 
@@ -121,6 +135,7 @@ fun AppRoot(
     }
     val openPlayer = remember(sheet) { { sheet.expand() } }
     val collapsePlayer = remember(sheet) { { sheet.collapse() } }
+    val dismissSession = remember(playerViewModel) { { playerViewModel.dismissSession() } }
 
     val fullPlayer = updateTransition(sheet.expanded, label = "fullPlayer")
     // Fully open and settled: the pages underneath are not drawn.
@@ -164,7 +179,7 @@ fun AppRoot(
                     }
                 }
             }
-            if (miniVisible) MiniPlayer(playerViewModel, onOpen = openPlayer)
+            if (miniVisible) MiniPlayer(playerViewModel, onOpen = openPlayer, onDismiss = dismissSession)
         }
 
         fullPlayer.AnimatedVisibility(

@@ -204,6 +204,8 @@
     <string name="player_pause">Pause</string>
     <string name="player_open">Open player</string>
     <string name="player_collapse">Minimize player</string>
+    <string name="player_dismiss">Close player</string>
+    <string name="playlist_reorder">Drag to reorder</string>
     <string name="player_next">Next</string>
     <string name="player_playlist_title">PLAYLIST</string>
     <string name="player_new_list">+ NEW LIST</string>

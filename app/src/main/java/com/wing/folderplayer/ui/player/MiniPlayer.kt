@@ -1,6 +1,11 @@
 package com.wing.folderplayer.ui.player
 
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -15,12 +20,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.wing.folderplayer.R
+import kotlin.math.abs
+import kotlin.math.sign
 
 /** Height of the mini player row (without the system navigation bar below it). */
 val MiniPlayerHeight = 66.dp
@@ -34,19 +46,54 @@ data class MiniPlayerState(
     val isPlaying: Boolean,
     val isBuffering: Boolean,
     val error: String?,
+    val canSkipNext: Boolean,
 )
 
-fun PlayerUiState.mini() = MiniPlayerState(currentTitle, currentArtist, coverUri, coverFallback, isPlaying, isBuffering, playbackError)
+fun PlayerUiState.mini() = MiniPlayerState(currentTitle, currentArtist, coverUri, coverFallback, isPlaying, isBuffering, playbackError, canSkipNext)
 
 /**
  * Bottom bar for the current track. Tapping it opens the full player; the buttons only control playback.
  * It reads the same [PlayerUiState] (title mode, resolved cover) as the full player and never reloads anything itself.
  */
 @Composable
-fun MiniPlayer(viewModel: PlayerViewModel, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+fun MiniPlayer(viewModel: PlayerViewModel, onOpen: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val state by viewModel.miniState.collectAsState()
 
-    Surface(color = MaterialTheme.colorScheme.surfaceVariant, tonalElevation = 3.dp, modifier = modifier.fillMaxWidth()) {
+    // Swiping sideways (either way) ends the session, but only while nothing plays or loads.
+    val dismissable = !state.isPlaying && !state.isBuffering
+    var dragX by remember { mutableFloatStateOf(0f) }
+    var widthPx by remember { mutableIntStateOf(1) }
+    LaunchedEffect(dismissable) { if (!dismissable) dragX = 0f }
+    val dismissLabel = stringResource(R.string.player_dismiss)
+
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 3.dp,
+        modifier = modifier
+            .fillMaxWidth()
+            .onSizeChanged { widthPx = it.width.coerceAtLeast(1) }
+            .graphicsLayer {
+                translationX = dragX
+                alpha = 1f - (abs(dragX) / widthPx).coerceIn(0f, 1f) * 0.8f
+            }
+            .draggable(
+                orientation = Orientation.Horizontal,
+                enabled = dismissable,
+                state = rememberDraggableState { delta -> dragX += delta },
+                onDragStopped = { velocity ->
+                    val flung = abs(velocity) > 2_000f && sign(velocity) == sign(dragX)
+                    if (abs(dragX) > widthPx * 0.35f || flung) {
+                        animate(dragX, sign(dragX) * widthPx, animationSpec = tween(150)) { v, _ -> dragX = v }
+                        onDismiss()
+                    } else {
+                        animate(dragX, 0f, animationSpec = tween(150)) { v, _ -> dragX = v }
+                    }
+                },
+            )
+            .semantics {
+                if (dismissable) customActions = listOf(CustomAccessibilityAction(dismissLabel) { onDismiss(); true })
+            },
+    ) {
         // The bar is the bottom-most element: its background runs under the navigation bar, its content stays above it
         // and clear of a side cutout (landscape).
         Column(Modifier.navigationBarsPadding().windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))) {
@@ -101,7 +148,7 @@ fun MiniPlayer(viewModel: PlayerViewModel, onOpen: () -> Unit, modifier: Modifie
                         }
                     }
                     if (showNext) {
-                        IconButton(onClick = { viewModel.next() }, modifier = Modifier.size(48.dp).testTag("mini_next")) {
+                        IconButton(onClick = { viewModel.next() }, enabled = state.canSkipNext, modifier = Modifier.size(48.dp).testTag("mini_next")) {
                             Icon(Icons.Default.SkipNext, contentDescription = stringResource(R.string.player_next))
                         }
                     }
