@@ -545,6 +545,7 @@ class NavigationUiTest : UiTestBase() {
         sideSwipe(left = true)
         Thread.sleep(800)
         assertTrue("still there while playing", exists("mini_player") && ps.isPlaying)
+        assertFalse("a sideways swipe is not a tap: the player did not open", playerOpen())
 
         for (dir in listOf("left", "right")) {
             if (!ps.hasTrack) {
@@ -658,6 +659,78 @@ class NavigationUiTest : UiTestBase() {
             thumbs.setThumbnailsEnabled(SourceType.SMB, false)
             thumbs.wifiOnly = true
             SourceRegistry.remove(smb.id)
+        }
+    }
+
+    /** Renderer that answers at once, except that SetAVTransportURI waits for [uriGate] (the "connecting" phase). */
+    private class FakeRenderer : com.wing.folderplayer.cast.RendererControl {
+        val renderer = com.wing.folderplayer.cast.Renderer(udn = "uuid:nav-fake", name = "fake", model = "", address = "127.0.0.1")
+        val uriGate = java.util.concurrent.CountDownLatch(1)
+        @Volatile var playing = false
+        override var onChange: (() -> Unit)? = null
+        override fun start() = Unit
+        override fun search() = Unit
+        override fun renderers() = listOf(renderer)
+        override fun setUri(udn: String, url: String, didl: String) { uriGate.await(30, java.util.concurrent.TimeUnit.SECONDS) }
+        override fun play(udn: String) { playing = true }
+        override fun pause(udn: String) { playing = false }
+        override fun stop(udn: String) { playing = false }
+        override fun seek(udn: String, positionMs: Long) = Unit
+        override fun transportState(udn: String) = if (playing) "PLAYING" else "STOPPED"
+        override fun progress(udn: String) = -1L to -1L
+        override fun shutdown() = Unit
+    }
+
+    private object NoLocks : com.wing.folderplayer.cast.CastLocks {
+        override fun acquireDiscovery() = Unit
+        override fun releaseDiscovery() = Unit
+        override fun acquireSession() = Unit
+        override fun releaseSession() = Unit
+    }
+
+    // Review: casting pauses the phone, so "not playing" alone would let the mini player be swiped away while the
+    // renderer plays — while a cast is starting or running it stays.
+    @Test fun n16_miniPlayerStaysWhileCasting() {
+        val fake = FakeRenderer()
+        val cast = com.wing.folderplayer.cast.CastController({ true }, fake, { ref -> SourceRegistry.fileSystem(ref) }, NoLocks)
+        com.wing.folderplayer.cast.CastController.replaceInstanceForTest(cast)
+        try {
+            toBrowser()
+            onUi { player.playFolder(SourceRef(local, "$fx/Long"), null) }
+            until(15_000, "playing") { playing("Long") }
+            until(5_000, "mini player") { exists("mini_player") }
+            // What the cast dialog does: pause here, cast there.
+            onUi { player.pauseLocal() }
+            cast.cast(fake.renderer, SourceRef(local, "$fx/Long/long.flac"), "long", null)
+            until(5_000, "paused locally") { !ps.isPlaying }
+
+            // Connecting (renderer not answered yet).
+            Thread.sleep(500)
+            sideSwipe(left = true)
+            Thread.sleep(800)
+            assertTrue("stays while the cast is starting", exists("mini_player") && ps.hasTrack)
+            assertFalse("a sideways swipe is not a tap", playerOpen())
+
+            // Session running on the renderer.
+            fake.uriGate.countDown()
+            until(10_000, "cast active") { cast.state.value.active != null && fake.playing }
+            sideSwipe(left = false)
+            Thread.sleep(800)
+            assertTrue("stays while casting", exists("mini_player") && ps.hasTrack)
+            assertFalse(playerOpen())
+            onUi { player.dismissSession() }
+            Thread.sleep(500)
+            assertTrue("the session is not ended under a running cast", ps.hasTrack)
+
+            // Cast stopped: the paused mini player can be swiped away again.
+            cast.stop()
+            until(10_000, "cast stopped") { cast.state.value.active == null }
+            sideSwipe(left = true)
+            until(5_000, "mini player gone after the cast") { !exists("mini_player") && !ps.hasTrack }
+        } finally {
+            fake.uriGate.countDown()
+            cast.shutdown()
+            com.wing.folderplayer.cast.CastController.replaceInstanceForTest(null)
         }
     }
 }

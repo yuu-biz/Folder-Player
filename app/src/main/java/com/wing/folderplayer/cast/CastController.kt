@@ -39,7 +39,12 @@ data class CastState(
     /** False when the renderer does not report positions; the UI then shows only the last command. */
     val progressAvailable: Boolean = false,
     val error: String? = null,
-)
+    /** A cast was requested and has not finished starting (or failed) yet. */
+    val connecting: Boolean = false,
+) {
+    /** A cast is starting or running: playback is (about to be) on the renderer. */
+    val sessionInProgress: Boolean get() = active != null || connecting
+}
 
 /** Wi-Fi multicast lock for discovery; Wi-Fi + wake lock while a session is active. */
 interface CastLocks {
@@ -137,41 +142,47 @@ class CastController internal constructor(
     /** Casts [ref] to [renderer]; credentials stay on the phone, the renderer only sees the relay URL. */
     fun cast(renderer: Renderer, ref: SourceRef, title: String, artist: String?) {
         val gen = generation.incrementAndGet()
+        _state.update { it.copy(connecting = true) }
         scope.launch {
             session.withLock {
                 if (gen != generation.get()) return@withLock
-                var uriSent = false
                 try {
-                    poll?.cancel()
-                    // The previous session's renderer would keep requesting a revoked URL.
-                    _state.value.active?.takeIf { it.udn != renderer.udn }?.let { prev -> runCatching { cp.stop(prev.udn) } }
-                    locks.acquireSession()
-                    relay.revokeAll()
-                    val port = relay.start()
-                    val path = relay.register(ref)
-                    val st = resolve(ref).stat(ref.path)
-                    val url = "http://${localAddressFor(renderer)}:$port$path"
-                    val mime = HttpRange.mimeFor(ref.name)
-                    ensureCurrent(gen)
-                    cp.setUri(renderer.udn, url, DlnaControlPoint.didl(title, artist, url, mime, st?.size ?: -1))
-                    uriSent = true
-                    ensureCurrent(gen)
-                    _state.update { it.copy(active = renderer, title = title, lastCommand = "SetAVTransportURI", error = null) }
-                    cp.play(renderer.udn)
-                    ensureCurrent(gen)
-                    _state.update { it.copy(lastCommand = "Play") }
-                    startPolling(renderer, gen)
-                } catch (e: Superseded) {
-                    // The newer operation owns the relay, the locks and the state.
-                    if (uriSent) runCatching { cp.stop(renderer.udn) }
-                } catch (e: Exception) {
-                    if (gen == generation.get()) {
-                        // A half-started session must not keep the relay, its tokens or the locks alive.
-                        endSession(renderer.udn.takeIf { uriSent || _state.value.active?.udn == it })
-                        _state.update { it.copy(error = e.message ?: e.javaClass.simpleName) }
-                    } else if (uriSent) {
-                        runCatching { cp.stop(renderer.udn) }
+                    var uriSent = false
+                    try {
+                        poll?.cancel()
+                        // The previous session's renderer would keep requesting a revoked URL.
+                        _state.value.active?.takeIf { it.udn != renderer.udn }?.let { prev -> runCatching { cp.stop(prev.udn) } }
+                        locks.acquireSession()
+                        relay.revokeAll()
+                        val port = relay.start()
+                        val path = relay.register(ref)
+                        val st = resolve(ref).stat(ref.path)
+                        val url = "http://${localAddressFor(renderer)}:$port$path"
+                        val mime = HttpRange.mimeFor(ref.name)
+                        ensureCurrent(gen)
+                        cp.setUri(renderer.udn, url, DlnaControlPoint.didl(title, artist, url, mime, st?.size ?: -1))
+                        uriSent = true
+                        ensureCurrent(gen)
+                        _state.update { it.copy(active = renderer, title = title, lastCommand = "SetAVTransportURI", error = null) }
+                        cp.play(renderer.udn)
+                        ensureCurrent(gen)
+                        _state.update { it.copy(lastCommand = "Play") }
+                        startPolling(renderer, gen)
+                    } catch (e: Superseded) {
+                        // The newer operation owns the relay, the locks and the state.
+                        if (uriSent) runCatching { cp.stop(renderer.udn) }
+                    } catch (e: Exception) {
+                        if (gen == generation.get()) {
+                            // A half-started session must not keep the relay, its tokens or the locks alive.
+                            endSession(renderer.udn.takeIf { uriSent || _state.value.active?.udn == it })
+                            _state.update { it.copy(error = e.message ?: e.javaClass.simpleName) }
+                        } else if (uriSent) {
+                            runCatching { cp.stop(renderer.udn) }
+                        }
                     }
+                } finally {
+                    // The latest operation decides; a superseded one leaves the flag to it.
+                    if (gen == generation.get()) _state.update { it.copy(connecting = false) }
                 }
             }
         }
@@ -210,7 +221,7 @@ class CastController internal constructor(
             session.withLock {
                 if (gen != generation.get()) return@withLock
                 endSession(_state.value.active?.udn)
-                _state.update { it.copy(lastCommand = "Stop") }
+                _state.update { it.copy(lastCommand = "Stop", connecting = false) }
             }
         }
     }
@@ -269,6 +280,10 @@ class CastController internal constructor(
         // Holds only the application context, which lives as long as the process.
         @android.annotation.SuppressLint("StaticFieldLeak")
         @Volatile private var instance: CastController? = null
+        /** Instrumentation tests only: replaces the shared controller (e.g. one with a fake renderer); null restores it. */
+        @androidx.annotation.VisibleForTesting
+        internal fun replaceInstanceForTest(controller: CastController?) { instance = controller }
+
         fun get(context: Context): CastController = instance ?: synchronized(this) {
             instance ?: context.applicationContext.let { app ->
                 CastController({ CastSettings(app).enabled }, DlnaControlPoint(), { ref -> SourceRegistry.fileSystem(ref) }, AndroidCastLocks(app))

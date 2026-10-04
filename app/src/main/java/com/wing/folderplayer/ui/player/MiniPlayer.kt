@@ -58,9 +58,12 @@ fun PlayerUiState.mini() = MiniPlayerState(currentTitle, currentArtist, coverUri
 @Composable
 fun MiniPlayer(viewModel: PlayerViewModel, onOpen: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val state by viewModel.miniState.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val cast by com.wing.folderplayer.cast.CastController.get(context).state.collectAsState()
 
-    // Swiping sideways (either way) ends the session, but only while nothing plays or loads.
-    val dismissable = !state.isPlaying && !state.isBuffering
+    // Swiping sideways (either way) ends the session, but only while nothing plays or loads, here or on a renderer
+    // (casting pauses the phone).
+    val dismissable = !state.isPlaying && !state.isBuffering && !cast.sessionInProgress
     var dragX by remember { mutableFloatStateOf(0f) }
     var widthPx by remember { mutableIntStateOf(1) }
     LaunchedEffect(dismissable) { if (!dismissable) dragX = 0f }
@@ -76,15 +79,21 @@ fun MiniPlayer(viewModel: PlayerViewModel, onOpen: () -> Unit, onDismiss: () -> 
                 translationX = dragX
                 alpha = 1f - (abs(dragX) / widthPx).coerceIn(0f, 1f) * 0.8f
             }
+            // Always takes sideways drags (so a swipe is never a tap that opens the player); when the session may not end
+            // the bar only gives a little and springs back.
             .draggable(
                 orientation = Orientation.Horizontal,
-                enabled = dismissable,
-                state = rememberDraggableState { delta -> dragX += delta },
+                state = rememberDraggableState { delta ->
+                    dragX = if (dismissable) dragX + delta else (dragX + delta * 0.25f).coerceIn(-widthPx * 0.08f, widthPx * 0.08f)
+                },
                 onDragStopped = { velocity ->
                     val flung = abs(velocity) > 2_000f && sign(velocity) == sign(dragX)
-                    if (abs(dragX) > widthPx * 0.35f || flung) {
+                    if (dismissable && (abs(dragX) > widthPx * 0.35f || flung)) {
                         animate(dragX, sign(dragX) * widthPx, animationSpec = tween(150)) { v, _ -> dragX = v }
                         onDismiss()
+                        // Still here: the session was not ended (e.g. a cast started meanwhile); never stay slid out.
+                        kotlinx.coroutines.delay(300)
+                        animate(dragX, 0f, animationSpec = tween(150)) { v, _ -> dragX = v }
                     } else {
                         animate(dragX, 0f, animationSpec = tween(150)) { v, _ -> dragX = v }
                     }
