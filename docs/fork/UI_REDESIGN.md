@@ -45,7 +45,8 @@ MainActivity                     ViewModels (activity scope), controller connect
 | Mini player | play / pause (next on wide screens) | only that; the player does not open |
 | Full player | ⌄ button or Back | back to the browser exactly as it was; music keeps playing |
 | Settings | ← or Back | back to the browser as it was |
-| Notification / lock screen | tap | the running activity (singleTop) comes forward, Settings is closed, full player opens; Back → browser |
+| Mini player (paused / stopped) | swipe sideways, either way | ends the session: queue emptied, notification gone, nothing restored on the next start; playlists kept (TalkBack action "Close player") |
+| Notification / lock screen | tap | the running activity (singleTop) comes forward, Settings is closed, full player opens; Back → browser. On a new activity without a cached track the request waits until the controller connection is handled; with no track at all it ends on the browser and nothing plays |
 
 ### Back order
 
@@ -78,10 +79,25 @@ not reloaded when coming back from the player or Settings; the list only scrolls
 ## Mini player
 
 Cover (same resolved cover as the full player; no extra lookup), title (same title mode as the player), artist when
-there is one, play / pause, next when the bar is at least 360 dp wide, a thin progress line. Loading is a ring around
+there is one, play / pause, next when the bar is at least 360 dp wide (disabled when there is no next track), a thin
+progress line. Loading is a ring around
 the play button, an error replaces the artist line; neither hides the bar, and pause does not hide it either. It sits
 below the list (the last row is never covered), runs under the navigation bar and respects side cutouts.
 TalkBack labels: "Open player", "Play" / "Pause", "Next".
+
+## Additions after the first device check (0.6.0-dev2)
+
+- Mini player swipe to end the session (above).
+- Playlist (full player, portrait sheet and landscape overlay share one list): drag the handle on the right, or
+  long-press a row and drag, to move an entry. Stored on release; if the list is the current queue, the queue moves
+  the same way and the current track keeps playing. TalkBack: "Move up" / "Move down".
+- Browser list: track length after size and type (`DurationRepository`): read from the file headers for rows on screen,
+  kept by source / path / size / mtime; local and SAF always, network sources follow the thumbnail switches (per
+  protocol, Wi-Fi only); refresh looks again. APE / DSF / DFF in shared storage are not listed at all (Android shows
+  apps only files it indexes as audio); through a SAF source they are listed, and their length would come from the
+  FFmpeg decoder (the FFmpeg path is tested with WMA; APE / DSF / DFF lengths are not tested).
+- Review fixes: an activity recreation (language change) no longer counts as a permission change (it reloaded the list
+  and lost the scroll position); next / previous without a target change nothing (they showed "Loading" and waited).
 
 ## Stage 1 status
 
