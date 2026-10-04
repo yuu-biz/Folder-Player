@@ -458,6 +458,10 @@ class PlayerViewModel : ViewModel() {
                     events.contains(Player.EVENT_REPEAT_MODE_CHANGED)) {
                     updateMetadata()
                 }
+                // The queue changed (moved / removed entries): keep the shown queue in step.
+                if (events.contains(Player.EVENT_TIMELINE_CHANGED)) {
+                    _uiState.value = _uiState.value.copy(playlist = (0 until player.mediaItemCount).map { player.getMediaItemAt(it) })
+                }
                 // Whether next / previous have a target (also while paused).
                 if (events.containsAny(Player.EVENT_TIMELINE_CHANGED, Player.EVENT_MEDIA_ITEM_TRANSITION,
                         Player.EVENT_REPEAT_MODE_CHANGED, Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED)) {
@@ -1438,6 +1442,23 @@ class PlayerViewModel : ViewModel() {
         }
 
         playlistManager?.removeFromPlaylist(currentId, index)
+        refreshPlaylists()
+    }
+
+    /**
+     * Moves an entry of the shown playlist (drag). When that list is what the player is playing (same entries in the
+     * same order), the queue moves the same way; the current track keeps playing.
+     */
+    fun moveInActivePlaylist(from: Int, to: Int) {
+        val manager = playlistManager ?: return
+        val id = _uiState.value.activePlaylistId
+        val items = manager.getPlaylist(id)?.items ?: return
+        if (from == to || from !in items.indices || to !in items.indices) return
+        val p = player
+        if (p != null && p.mediaItemCount == items.size && items.indices.all { items[it].matchesMediaId(p.getMediaItemAt(it).mediaId) }) {
+            p.moveMediaItem(from, to)
+        }
+        manager.moveInPlaylist(id, from, to)
         refreshPlaylists()
     }
 
