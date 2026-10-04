@@ -286,6 +286,7 @@ fun BrowserScreen(
                                 files = files,
                                 currentlyPlaying = uiState.currentlyPlayingMediaId,
                                 thumbnail = viewModel::folderThumbnail,
+                                duration = viewModel::trackDuration,
                                 showSourcePath = uiState.search.active || uiState.showingFavorites,
                                 onFileClick = onClick,
                                 onFileLongClick = onLong,
@@ -554,6 +555,7 @@ fun FileList(
     files: List<MusicFile>,
     currentlyPlaying: String?,
     thumbnail: suspend (SourceRef) -> ArtworkResult,
+    duration: suspend (MusicFile) -> Long?,
     showSourcePath: Boolean,
     onFileClick: (MusicFile) -> Unit,
     onFileLongClick: (MusicFile) -> Unit = {},
@@ -586,11 +588,21 @@ fun FileList(
                             )
                         },
                         supportingContent = {
+                            // Track length, read only while the row is on screen (and kept); appended when known.
+                            // Refresh (revision) looks again, e.g. after network lengths were switched on.
+                            val length by produceState<Long?>(null, file.sourceId, file.path, file.size, file.lastModified, LocalThumbnailRevision.current) {
+                                if (MediaTypes.isAudio(file.name)) {
+                                    value = runCatching { duration(file) }.getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it else null }
+                                }
+                            }
+                            val lengthText = length?.let { " • " + com.wing.folderplayer.data.metadata.DurationFormat.format(it) } ?: ""
                             when {
-                                showSourcePath -> Text(SourcePath.parent(file.path) ?: "/", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                showSourcePath -> Text((SourcePath.parent(file.path) ?: "/") + lengthText, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.testTag("info_${file.name}"))
                                 !file.isDirectory -> Text(
-                                    "${formatSize(file.size)} • ${file.extension.uppercase()}",
-                                    color = if (isUnsupported) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f) else Color.Unspecified
+                                    "${formatSize(file.size)} • ${file.extension.uppercase()}$lengthText",
+                                    color = if (isUnsupported) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f) else Color.Unspecified,
+                                    modifier = Modifier.testTag("info_${file.name}")
                                 )
                             }
                         },

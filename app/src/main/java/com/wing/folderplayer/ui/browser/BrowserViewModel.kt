@@ -94,6 +94,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     private val sourcePreferences: SourcePreferences
     private val thumbnails: ThumbnailRepository
+    private val durations = com.wing.folderplayer.data.metadata.DurationRepository.get(application)
     val favoritesRepository: FavoritesRepository
     private val searchRepository = SearchRepository({ ref -> SourceRegistry.fileSystem(ref).list(ref.path) })
     private var loadJob: Job? = null
@@ -409,6 +410,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     // ---------------- thumbnails ----------------
 
     suspend fun folderThumbnail(folder: SourceRef): ArtworkResult = thumbnails.folderThumbnail(folder)
+
+    /** Track length in ms for the list (null: not shown). */
+    suspend fun trackDuration(file: MusicFile): Long? = durations.duration(file)
 
     private fun bumpThumbnails() {
         _uiState.value = _uiState.value.copy(thumbnailRevision = _uiState.value.thumbnailRevision + 1)
