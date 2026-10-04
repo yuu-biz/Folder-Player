@@ -56,6 +56,23 @@ touch them.
   and waited for a track change that never came. They now do nothing; the mini player's next button is disabled then
   (`PlayerSkipTest`).
 
+## Fixed after the second review (0.6.0-dev3)
+
+- Track lengths: a failed read (lost connection, authentication, permission, cancellation; in the FFmpeg decoder or
+  inside MediaMetadataRetriever) was stored as "length unknown" for good. Only parsed results are kept now; files that
+  are read but cannot be parsed are kept as unknown and looked at again after 7 days or on refresh; dev2's stored
+  unknowns are dropped (`DurationRepositoryTest`).
+- Next / previous onto another queue position holding the same track (the same song twice in the queue, one song with
+  repeat all) left "Switching track…" / "Loading…" on screen: completion was judged by a changed track id. It is now
+  judged by the queue position (`PlayerSkipTest`).
+- Moving (and removing) entries of a playlist changed the playing queue whenever the shown list had the same entries,
+  even if the queue came from another list. Only the list the queue was built from changes it now
+  (`PlaylistQueueTest`).
+- The mini player could be swiped away while casting (casting pauses the phone), leaving the renderer playing without
+  a player on the phone. It stays while a cast is starting or running (`NavigationUiTest#n16`). Found on the way: a
+  sideways swipe on the mini player while it may not be dismissed (playing) opened the full player, and a refused
+  dismissal left the bar slid out of view; both fixed.
+
 ## Navigation redesign: open points (stage 1)
 
 - Opening a folder from search results or the favourites list leaves that list; Back then goes to the folder's parent

@@ -45,7 +45,7 @@ MainActivity                     ViewModels (activity scope), controller connect
 | Mini player | play / pause (next on wide screens) | only that; the player does not open |
 | Full player | ⌄ button or Back | back to the browser exactly as it was; music keeps playing |
 | Settings | ← or Back | back to the browser as it was |
-| Mini player (paused / stopped) | swipe sideways, either way | ends the session: queue emptied, notification gone, nothing restored on the next start; playlists kept (TalkBack action "Close player") |
+| Mini player (paused / stopped, no cast) | swipe sideways, either way | ends the session: queue emptied, notification gone, nothing restored on the next start; playlists kept (TalkBack action "Close player"). While playing, loading or casting the bar only gives a little and springs back; a sideways swipe never opens the player |
 | Notification / lock screen | tap | the running activity (singleTop) comes forward, Settings is closed, full player opens; Back → browser. On a new activity without a cached track the request waits until the controller connection is handled; with no track at all it ends on the browser and nothing plays |
 
 ### Back order
@@ -89,10 +89,12 @@ TalkBack labels: "Open player", "Play" / "Pause", "Next".
 
 - Mini player swipe to end the session (above).
 - Playlist (full player, portrait sheet and landscape overlay share one list): drag the handle on the right, or
-  long-press a row and drag, to move an entry. Stored on release; if the list is the current queue, the queue moves
-  the same way and the current track keeps playing. TalkBack: "Move up" / "Move down".
+  long-press a row and drag, to move an entry. Stored on release; if the queue was built from this list (and still
+  holds it), the queue moves the same way and the current track keeps playing. Another list with the same entries, or
+  Default while the queue came from a playlist, is not the queue. TalkBack: "Move up" / "Move down".
 - Browser list: track length after size and type (`DurationRepository`): read from the file headers for rows on screen,
-  kept by source / path / size / mtime; local and SAF always, network sources follow the thumbnail switches (per
+  kept by source / path / size / mtime (only parsed results; read failures are looked at again, unparsable files after
+  7 days or on refresh); local and SAF always, network sources follow the thumbnail switches (per
   protocol, Wi-Fi only); refresh looks again. APE / DSF / DFF in shared storage are not listed at all (Android shows
   apps only files it indexes as audio); through a SAF source they are listed, and their length would come from the
   FFmpeg decoder (the FFmpeg path is tested with WMA; APE / DSF / DFF lengths are not tested).
