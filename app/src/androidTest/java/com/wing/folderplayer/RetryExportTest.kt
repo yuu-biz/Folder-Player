@@ -15,6 +15,7 @@ import com.wing.folderplayer.playback.ExportStatus
 import com.wing.folderplayer.playback.NetworkRetryController
 import com.wing.folderplayer.playback.PlaybackExportManager
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -32,6 +33,14 @@ class RetryExportTest : ServiceTestBase() {
         if (on) waitFor(90_000, "network back") {
             runCatching { java.net.Socket().use { it.connect(java.net.InetSocketAddress("webdav", 80), 2_000) } }.isSuccess
         }
+    }
+
+    /**
+     * Next-folder playback off, whatever an earlier suite left (MigrationTest migrates data with it on): these tests
+     * wait for the export of one track, and playback must not move on to other folders meanwhile.
+     */
+    @Before fun nextFolderOff() {
+        main { if (vm.uiState.value.autoNextFolder) vm.toggleAutoNextFolder() }
     }
 
     @After fun networkBack() { network(true); ExportSettings(Fx.ctx).enabled = false }
