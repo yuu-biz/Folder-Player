@@ -622,4 +622,42 @@ class NavigationUiTest : UiTestBase() {
         assertEquals(afterLongPress, titles())
         assertTrue("long press is not a tap", playing("Long"))
     }
+
+    private fun info(name: String) = runCatching { text("info_$name") }.getOrDefault("")
+
+    // Browser list: track length after size and type; local always (also the FFmpeg formats), network per switch.
+    @Test fun n15_listShowsTrackLengths() {
+        open("$fx/Album-A")
+        until(10_000, "lengths in Album-A: ${info("02 track.mp3")}") { info("02 track.mp3").endsWith(" • 0:30") }
+        until(10_000, "flac length: ${info("01 曲 #1+%.flac")}") { info("01 曲 #1+%.flac").endsWith(" • 1:00") }
+        assertFalse("no length for a cover image", info("cover.jpg").contains(":"))
+        open("$fx/Long")
+        until(10_000, "10 minutes: ${info("long.flac")}") { info("long.flac").endsWith(" • 10:00") }
+        open("$fx/Formats")
+        until(15_000, "WMA (FFmpeg): ${info("sample.wma")}") { info("sample.wma").endsWith(" • 0:20") }
+        // (APE / DSF / DFF in shared storage are not listed at all: Android shows the app only files it indexes as
+        // audio. WMA takes the same FFmpeg path.)
+
+        // Network: follows the SMB thumbnail switch (off by default).
+        Fx.require("smb_host")
+        val thumbs = com.wing.folderplayer.data.artwork.ThumbnailRepository.get(Fx.ctx).settings
+        val smb = SourceConfig(name = "smb-lengths", type = SourceType.SMB, host = Fx.arg("smb_host")!!, share = "music", path = "/fixture", username = "alice")
+        SourceRegistry.upsert(smb, "alicepass")
+        try {
+            thumbs.setThumbnailsEnabled(SourceType.SMB, false)
+            onUi { browser.loadFolder(SourceRef(smb.id, "/Album-A")) }
+            until(15_000, "SMB folder") { path == "/Album-A" && !bs.isLoading && exists("info_02 track.mp3") }
+            Thread.sleep(3_000)
+            assertFalse("switched off: no length (${info("02 track.mp3")})", info("02 track.mp3").contains(":"))
+            thumbs.setThumbnailsEnabled(SourceType.SMB, true)
+            thumbs.wifiOnly = false
+            click("btn_refresh") // refresh looks again with the new setting
+            runCatching { until(20_000, "SMB length") { info("02 track.mp3").endsWith(" • 0:30") } }
+                .onFailure { throw AssertionError("SMB length: '${info("02 track.mp3")}'", it) }
+        } finally {
+            thumbs.setThumbnailsEnabled(SourceType.SMB, false)
+            thumbs.wifiOnly = true
+            SourceRegistry.remove(smb.id)
+        }
+    }
 }
