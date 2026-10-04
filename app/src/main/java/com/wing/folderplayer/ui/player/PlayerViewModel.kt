@@ -169,6 +169,13 @@ class PlayerViewModel : ViewModel() {
     private var lyricPreferences: com.wing.folderplayer.data.prefs.LyricPreferences? = null
     private var isRestoring = false
     private var pendingPlayIntent: String? = null
+    /**
+     * Playlist the player queue was built from ("default" for folder / list / CUE playback, the playlist's id when
+     * played from a playlist), or null when unknown. Only edits of that list apply to the queue.
+     */
+    private var queuePlaylistId: String? = null
+    /** Queue position a next / previous / play-at is moving to; metadata of other positions is not shown meanwhile. */
+    private var pendingQueueIndex: Int? = null
     private var lastMediaIdBeforeIntent: String? = null
     private var playlistManager: PlaylistManager? = null
     private val audioInfoCache = mutableMapOf<String, String>()
@@ -366,6 +373,9 @@ class PlayerViewModel : ViewModel() {
                 } else {
                     playFolderInternal(folder, SourceUris.parse(mediaId)?.path, prefs.getLastPosition(), playWhenReady = false)
                 }
+                queuePlaylistId = null
+                val defaultItems = playlistManager?.getPlaylist("default")?.items
+                if (defaultItems != null && queueHolds(defaultItems)) queuePlaylistId = "default"
             } catch (e: Exception) {
                 android.util.Log.e("PlayerViewModel", "restore failed: ${e.message}")
                 isRestoring = false
@@ -542,6 +552,10 @@ class PlayerViewModel : ViewModel() {
         val titleFromMetadata = (metadata.title ?: metadata.displayTitle ?: currentMediaItem.mediaMetadata.displayTitle)?.toString()
 
         // Protection against metadata updates for the OLD song during transitions
+        pendingQueueIndex?.let { target ->
+            if (p.currentMediaItemIndex != target) return // still at the old position
+            pendingQueueIndex = null
+        }
         val pending = pendingPlayIntent
         if (pending != null) {
             val isChangeDetected = if (pending == "ANY_NEW") {
@@ -925,11 +939,15 @@ class PlayerViewModel : ViewModel() {
     fun dismissSession() {
         val p = player
         if (p?.isPlaying == true) return
+        // Casting pauses the phone: the session goes on on the renderer and must keep its controls here.
+        if (appContext?.let { com.wing.folderplayer.cast.CastController.get(it).state.value.sessionInProgress } == true) return
         cancelRestore()
         metadataJob?.cancel()
         aiLyricsJob?.cancel()
         progressJob?.cancel()
         pendingPlayIntent = null
+        pendingQueueIndex = null
+        queuePlaylistId = null
         p?.stop()
         p?.clearMediaItems()
         currentFolder = null
@@ -979,31 +997,40 @@ class PlayerViewModel : ViewModel() {
     }
 
     // Without a track to move to (single track, first / last without repeat) next / previous do nothing: announcing a
-    // change ("Loading…" + waiting for any new track) would leave the display waiting for a change that never comes.
+    // change ("Loading…") would leave the display waiting for a change that never comes.
     fun previous() {
         val p = player ?: return
-        if (!p.hasPreviousMediaItem()) { updatePlaybackState(); return }
-        _uiState.value = _uiState.value.copy(
-            currentTitle = "Loading..",
-            lyrics = emptyList(),
-            currentLyricIndex = -1
-        )
-        lastMediaIdBeforeIntent = player?.currentMediaItem?.mediaId
-        pendingPlayIntent = "ANY_NEW"
-        player?.seekToPreviousMediaItem()
+        val target = p.previousMediaItemIndex
+        if (target == androidx.media3.common.C.INDEX_UNSET) { updatePlaybackState(); return }
+        skipTo(p, target) { p.seekToPreviousMediaItem() }
     }
 
     fun next() {
         val p = player ?: return
-        if (!p.hasNextMediaItem()) { updatePlaybackState(); return }
+        val target = p.nextMediaItemIndex
+        if (target == androidx.media3.common.C.INDEX_UNSET) { updatePlaybackState(); return }
+        skipTo(p, target) { p.seekToNextMediaItem() }
+    }
+
+    /**
+     * Moves to queue position [target]. The move is complete when the player is at that position, not when the track id
+     * changes: the queue can hold the same track more than once. Moving to the position already playing (one track with
+     * repeat all) only starts it again; nothing changes on screen.
+     */
+    private fun skipTo(p: Player, target: Int, seek: () -> Unit) {
+        if (target == p.currentMediaItemIndex) {
+            seek()
+            updatePlaybackState()
+            return
+        }
         _uiState.value = _uiState.value.copy(
             currentTitle = "Loading..",
             lyrics = emptyList(),
             currentLyricIndex = -1
         )
-        lastMediaIdBeforeIntent = player?.currentMediaItem?.mediaId
-        pendingPlayIntent = "ANY_NEW"
-        player?.seekToNextMediaItem()
+        pendingPlayIntent = null
+        pendingQueueIndex = target
+        seek()
     }
 
     fun seekTo(positionMs: Long) {
@@ -1023,15 +1050,10 @@ class PlayerViewModel : ViewModel() {
 
     fun playAt(index: Int) {
         isRestoring = false
-        _uiState.value = _uiState.value.copy(
-            currentTitle = "Loading..",
-            lyrics = emptyList(),
-            currentLyricIndex = -1
-        )
-        lastMediaIdBeforeIntent = player?.currentMediaItem?.mediaId
-        pendingPlayIntent = "ANY_NEW"
-        player?.seekTo(index, 0L)
-        player?.play()
+        val p = player ?: return
+        if (index !in 0 until p.mediaItemCount) return
+        skipTo(p, index) { p.seekTo(index, 0L) }
+        p.play()
     }
 
     /** Plays a folder, optionally starting at [startPath] (source-relative path of a file in it). */
@@ -1051,6 +1073,7 @@ class PlayerViewModel : ViewModel() {
             playRequested = true,
         )
         lastMediaIdBeforeIntent = player?.currentMediaItem?.mediaId
+        pendingQueueIndex = null
         pendingPlayIntent = startPath?.let { SourceUris.toUri(folder.sourceId, it) } ?: "ANY_NEW"
 
         viewModelScope.launch(exceptionHandler) {
@@ -1083,6 +1106,7 @@ class PlayerViewModel : ViewModel() {
             awaitPlayer()
             currentFolder = firstFile.ref.parent
             lastMediaIdBeforeIntent = player?.currentMediaItem?.mediaId
+            pendingQueueIndex = null
             pendingPlayIntent = firstFile.ref.toUriString()
 
             val mediaItems = repo().mediaItemsFor(files)
@@ -1098,6 +1122,7 @@ class PlayerViewModel : ViewModel() {
             // Sync to "Default" playlist
             val playlistItems = files.mapIndexed { i, file -> playlistItemFor(file, mediaItems.getOrNull(i)) }
             playlistManager?.savePlaylist(Playlist("default", "Default", playlistItems))
+            queuePlaylistId = "default"
 
             _uiState.value = _uiState.value.copy(
                 activePlaylistId = "default",
@@ -1135,6 +1160,7 @@ class PlayerViewModel : ViewModel() {
             playRequested = true,
         )
         lastMediaIdBeforeIntent = player?.currentMediaItem?.mediaId
+        pendingQueueIndex = null
         pendingPlayIntent = "ANY_NEW"
 
         viewModelScope.launch(exceptionHandler) {
@@ -1178,6 +1204,7 @@ class PlayerViewModel : ViewModel() {
             val index = mediaItems.indexOfFirst { it.mediaId == clicked }.coerceAtLeast(0)
 
             player?.setMediaItems(mediaItems)
+            queuePlaylistId = playlistId
             player?.seekTo(index, 0L)
             player?.prepare()
             player?.play()
@@ -1253,6 +1280,7 @@ class PlayerViewModel : ViewModel() {
                 )
             }
             playlistManager?.savePlaylist(Playlist("default", "Default", playlistItems))
+            queuePlaylistId = "default"
 
             _uiState.value = _uiState.value.copy(
                 activePlaylistId = "default",
@@ -1311,6 +1339,7 @@ class PlayerViewModel : ViewModel() {
                 )
             }
             playlistManager?.savePlaylist(Playlist("default", "Default", playlistItems))
+            queuePlaylistId = "default"
 
             _uiState.value = _uiState.value.copy(
                 activePlaylistId = "default",
@@ -1426,6 +1455,7 @@ class PlayerViewModel : ViewModel() {
     fun deletePlaylist(id: String) {
         if (id == "default") return
         playlistManager?.deletePlaylist(id)
+        if (id == queuePlaylistId) queuePlaylistId = null
         if (id == _uiState.value.activePlaylistId) {
             switchPlaylist("default")
         } else {
@@ -1435,29 +1465,32 @@ class PlayerViewModel : ViewModel() {
 
     fun removeFromActivePlaylist(index: Int) {
         val currentId = _uiState.value.activePlaylistId
-
-        // If it's the default list, we also need to remove it from the PLAYER queue
-        if (currentId == "default") {
-            player?.removeMediaItem(index)
-        }
-
+        val items = playlistManager?.getPlaylist(currentId)?.items ?: return
+        // Removed from the queue as well only when the queue was built from this list (not merely because it is shown).
+        if (index in items.indices && queueFollows(currentId, items)) player?.removeMediaItem(index)
         playlistManager?.removeFromPlaylist(currentId, index)
         refreshPlaylists()
     }
 
+    /** The queue was built from playlist [id] and still holds exactly its entries: its edits apply to the queue. */
+    private fun queueFollows(id: String, items: List<PlaylistItem>): Boolean = id == queuePlaylistId && queueHolds(items)
+
+    /** The player queue holds exactly [items], in this order. */
+    private fun queueHolds(items: List<PlaylistItem>): Boolean {
+        val p = player ?: return false
+        return p.mediaItemCount == items.size && items.indices.all { items[it].matchesMediaId(p.getMediaItemAt(it).mediaId) }
+    }
+
     /**
-     * Moves an entry of the shown playlist (drag). When that list is what the player is playing (same entries in the
-     * same order), the queue moves the same way; the current track keeps playing.
+     * Moves an entry of the shown playlist (drag). When the queue was built from this list (and still holds it), the
+     * queue moves the same way; the current track keeps playing. Another list with the same entries is not the queue.
      */
     fun moveInActivePlaylist(from: Int, to: Int) {
         val manager = playlistManager ?: return
         val id = _uiState.value.activePlaylistId
         val items = manager.getPlaylist(id)?.items ?: return
         if (from == to || from !in items.indices || to !in items.indices) return
-        val p = player
-        if (p != null && p.mediaItemCount == items.size && items.indices.all { items[it].matchesMediaId(p.getMediaItemAt(it).mediaId) }) {
-            p.moveMediaItem(from, to)
-        }
+        if (queueFollows(id, items)) player?.moveMediaItem(from, to)
         manager.moveInPlaylist(id, from, to)
         refreshPlaylists()
     }
