@@ -144,6 +144,13 @@ class PlaylistStore(private val context: Context) {
         }
     }
 
+    /** Moves the item at [from] to [to] (indices before the move), e.g. after a drag in the playlist. */
+    fun moveInPlaylist(id: String, from: Int, to: Int) {
+        val p = getPlaylist(id) ?: return
+        val moved = p.items.moved(from, to) ?: return
+        savePlaylist(p.copy(items = moved))
+    }
+
     /**
      * Rewrites schema-1 playlist files (a bare JSON array with absolute paths / URLs) to [VERSION] with
      * sourceId-based paths. Each file and each item is converted independently.
@@ -174,3 +181,10 @@ class PlaylistStore(private val context: Context) {
 }
 
 typealias PlaylistManager = PlaylistStore
+
+/** This list with the element at [from] moved to [to]; null when either index is outside the list. */
+fun <T> List<T>.moved(from: Int, to: Int): List<T>? {
+    if (from !in indices || to !in indices) return null
+    if (from == to) return this
+    return toMutableList().apply { add(to, removeAt(from)) }
+}

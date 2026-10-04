@@ -571,4 +571,55 @@ class NavigationUiTest : UiTestBase() {
         assertFalse("no mini player after recreation", exists("mini_player"))
         assertTrue(ps.allPlaylists.any { it.id == "default" })
     }
+
+    /** Drags [tag] (a playlist row or its handle) by [rows] rows; with [longPress] it is held first. */
+    private fun dragPlaylistEntry(tag: String, rows: Float, longPress: Boolean) {
+        val tops = ps.activePlaylistItems.take(2).map { node("playlist_row_${it.title}").fetchSemanticsNode().boundsInRoot.top }
+        val pitch = tops[1] - tops[0]
+        compose.onNodeWithTag(tag, useUnmergedTree = true).performTouchInput {
+            down(center)
+            if (longPress) advanceEventTime(viewConfiguration.longPressTimeoutMillis + 150)
+            val steps = 24
+            repeat(steps) { moveBy(Offset(0f, rows * pitch / steps)) }
+            up()
+        }
+        compose.waitForIdle()
+    }
+
+    private fun titles() = ps.activePlaylistItems.map { it.title }
+    private fun queueNames() = ps.playlist.map { it.mediaId.substringAfterLast('/').substringBeforeLast('.').replace("%20", " ") }
+
+    // Playlist: entries moved with the handle or by long-press and drag; the queue follows, the track keeps playing.
+    @Test fun n14_playlistEntriesAreReorderedByDragAndTheQueueFollows() {
+        toBrowser()
+        val files = listOf(MusicFile("long.flac", "$fx/Long/long.flac", false, 0, 0, local)) +
+            (100..103).map { i -> MusicFile("track %03d.flac".format(i), "$fx/Many/Folder %03d/track %03d.flac".format(i, i), false, 0, 0, local) }
+        onUi { player.playCustomList(files, 0) }
+        until(15_000, "playing") { playing("Long") }
+        until(10_000, "queue") { ps.playlist.size == 5 }
+        toPlayer()
+        compose.onNodeWithTag("player_full").performTouchInput { swipe(Offset(centerX, height * 0.75f), Offset(centerX, height * 0.35f), 200) }
+        until(5_000, "playlist") { exists("playlist_list") && exists("playlist_handle_track 100") }
+        assertEquals(listOf("long", "track 100", "track 101", "track 102", "track 103"), titles())
+
+        dragPlaylistEntry("playlist_handle_track 100", 2f, longPress = false)
+        val afterHandle = listOf("long", "track 101", "track 102", "track 100", "track 103")
+        until(5_000, "moved with the handle: ${titles()}") { titles() == afterHandle }
+        until(5_000, "queue follows: ${queueNames()}") { queueNames() == afterHandle }
+        assertTrue("current track still playing", playing("Long"))
+
+        dragPlaylistEntry("playlist_row_track 103", -4f, longPress = true)
+        val afterLongPress = listOf("track 103", "long", "track 101", "track 102", "track 100")
+        until(5_000, "moved by long press: ${titles()}") { titles() == afterLongPress }
+        until(5_000, "queue follows: ${queueNames()}") { queueNames() == afterLongPress }
+        assertTrue(playing("Long"))
+
+        // Held without moving: neither a move nor a tap (the current track does not change).
+        compose.onNodeWithTag("playlist_row_track 101", useUnmergedTree = true).performTouchInput {
+            down(center); advanceEventTime(viewConfiguration.longPressTimeoutMillis + 150); up()
+        }
+        Thread.sleep(1_000)
+        assertEquals(afterLongPress, titles())
+        assertTrue("long press is not a tap", playing("Long"))
+    }
 }
