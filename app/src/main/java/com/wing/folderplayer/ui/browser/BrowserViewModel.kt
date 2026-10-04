@@ -199,6 +199,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun refresh() {
         val folder = _uiState.value.currentFolder ?: return
         directoryCache.remove(folder.toUriString())
+        durations.forgetUnknown()
         thumbnails.invalidate(folder)
         _uiState.value.files.filter { it.isDirectory }.forEach { thumbnails.invalidate(it.ref) }
         thumbnails.invalidateNegatives()
