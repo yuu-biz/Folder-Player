@@ -160,8 +160,8 @@ Found on the way:
   consumed down. The drag now waits for the down to pass the children first.
 - Landscape seek bar used the length of the first track it was shown with (`s09`, fixed code only).
 
-Not checked at dev4 (both covered in 5.9): reduced motion (`ValueAnimator.areAnimatorsEnabled()` false → jump); Back from
-the landscape playlist overlay during a drag; other API levels; a real phone (feel of the drag, smoothness of the
+Not checked at dev4: reduced motion (`ValueAnimator.areAnimatorsEnabled()` false → jump) and Back from
+the landscape playlist overlay during a drag (both covered in 5.9); other API levels; a real phone (feel of the drag, smoothness of the
 cover on a NAS album, BLUR on a real GPU, TalkBack).
 
 ### 5.7 Second review fixes (0.6.0-dev3, 2026-10-04)
