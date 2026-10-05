@@ -105,14 +105,16 @@ fun CoverImage(
 @Composable
 fun FullCover(uiState: PlayerUiState, transition: PlayerTransition, modifier: Modifier = Modifier) {
     val key = uiState.coverUri to uiState.coverFallback
-    DisposableEffect(key) {
-        transition.fullCoverReady = false
-        onDispose { transition.fullCoverReady = false }
-    }
+    // Which cover the thumbnail shows. A memory-cache hit can report "shown" before this composition's effects run,
+    // so readiness is derived from the shown cover rather than set and reset by events.
+    var thumbShownFor by remember { mutableStateOf<Any?>(null) }
+    val ready = thumbShownFor == key
+    SideEffect { transition.fullCoverReady = ready }
+    DisposableEffect(transition) { onDispose { transition.fullCoverReady = false } }
     Box(modifier) {
         CoverImage(
             uiState.coverUri, uiState.coverFallback, Modifier.fillMaxSize(), tag = "player_cover_thumb",
-            requestPx = transition.thumbPx, crossfade = false, onShown = { transition.fullCoverReady = true },
+            requestPx = transition.thumbPx, crossfade = false, onShown = { thumbShownFor = key },
         )
         CoverImage(
             uiState.coverUri, uiState.coverFallback, Modifier.fillMaxSize(),

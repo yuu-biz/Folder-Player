@@ -33,6 +33,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -214,6 +215,8 @@ private fun PortraitPlayerLayout(
 
                 Box(
                     modifier = Modifier
+                        // Above its siblings: while moving, the cover passes over the (fading) texts below it.
+                        .zIndex(1f)
                         .width(maxCoverSize * coverWidthFraction) // Dynamically resize the container!
                         .padding(top = animatedTopPadding, bottom = animatedBottomPadding)
                         .padding(horizontal = horizontalPadding),

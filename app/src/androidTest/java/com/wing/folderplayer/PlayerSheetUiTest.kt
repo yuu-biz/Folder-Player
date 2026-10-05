@@ -3,7 +3,9 @@ package com.wing.folderplayer
 import android.content.Intent
 import android.media.AudioManager
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.TouchInjectionScope
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
@@ -112,6 +114,15 @@ class PlayerSheetUiTest : UiTestBase() {
             advanceEventTime(ms / steps)
             moveBy(Offset(by.x / steps, by.y / steps))
         }
+    }
+
+    /** The full player's cover, as drawn on screen (moved / scaled), shows the red fixture picture. */
+    private fun coverIsRed(): Boolean {
+        val bmp = node("player_cover").captureToImage().asAndroidBitmap()
+        val c = bmp.getPixel(bmp.width / 2, bmp.height * 2 / 3)
+        val r = (c shr 16) and 0xff; val g = (c shr 8) and 0xff; val b = c and 0xff
+        Fx.log("cover pixel $r,$g,$b (${bmp.width}x${bmp.height})")
+        return r > 180 && g < 70 && b < 70
     }
 
     private fun lift(tag: String) {
@@ -247,8 +258,16 @@ class PlayerSheetUiTest : UiTestBase() {
         onUi { player.playFolder(SourceRef(local, "$fx/Album-A"), "$fx/Album-A/01 曲 #1+%.flac") }
         until(15_000, "playing") { ps.isPlaying && ps.currentMediaId?.contains("Album-A") == true }
         until(10_000, "lyrics") { ps.lyrics.isNotEmpty() }
+        // The moving cover is drawn (Album-A's cover.jpg is red): held part-way up, then fully open.
+        toBrowser()
+        until(5_000, "mini") { exists("mini_player") }
+        drag("mini_player", 0.5f, -0.4f * range(), 800, release = false)
+        until(5_000, "cover drawn while held part-way") { coverIsRed() }
+        lift("mini_player")
+        assertSettled(false, "released")
         toPlayer()
         assertSettled(true, "open")
+        until(5_000, "cover drawn when open") { coverIsRed() }
 
         // Seek bar, sideways: seeks, the player stays.
         val before = ps.currentPosition
