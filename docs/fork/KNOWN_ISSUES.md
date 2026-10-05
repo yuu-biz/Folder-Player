@@ -73,6 +73,13 @@ touch them.
   sideways swipe on the mini player while it may not be dismissed (playing) opened the full player, and a refused
   dismissal left the bar slid out of view; both fixed.
 
+## Fixed in 0.6.0-dev5
+
+- Player drag (up / down) and the mini player's sideways swipe: a short fast move, then the finger held still, then
+  released, still counted as a fling (the release speed came from the earlier moves), so the player opened / closed
+  or the session ended unintentionally. A finger still for more than 80 ms at the lift now counts as stopped;
+  immediate flicks are unchanged (`PlayerSheetUiTest#s10`, which failed on dev4 and passes now).
+
 ## Fixed in 0.6.0-dev4
 
 - Landscape full player: the seek bar kept the length of the track it was first shown with, so after a track change a

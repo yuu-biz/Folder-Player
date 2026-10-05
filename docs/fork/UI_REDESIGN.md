@@ -122,11 +122,13 @@ A recreation saves only `expanded`: a move interrupted by it always lands at an 
 **Motion.**
 - Tap on the mini player (or a song tap, the notification): animates to full. ⌄ / Back: animates to mini.
 - Drag: the panel's top edge follows the finger 1:1 (finger travel = distance from the mini player's top to the screen
-  top). On release a fling (≥ 600 dp/s) goes in its direction, otherwise the nearer end wins; the spring has no
+  top). On release a fling (≥ 600 dp/s) goes in its direction, otherwise the nearer end wins; a finger that stood
+  still for more than 80 ms before lifting is no fling (the speed of the earlier move is dropped). The spring has no
   bounce and the fraction is clamped, so the player never overshoots. Reversing mid-way is followed.
 - A touch while the player moves on its own takes it over at once (it can be dragged from there); a touch that does
   not move lets it go on to where it was going. Buttons of the fading full player get nothing while it moves.
-- "Remove animations" (animator scale 0): jumps instead of animating.
+- "Remove animations" (animator scale 0): jumps instead of animating (tap, drag release, Back); the cover is still
+  drawn moving with the finger.
 
 **What moves.**
 - Cover: the full player's cover itself is moved and scaled (`graphicsLayer`) from the mini player's cover place to

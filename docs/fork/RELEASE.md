@@ -36,7 +36,8 @@ versionCode depends only on the tag: `((MAJOR*100 + MINOR)*100 + PATCH)*100 + N`
 Prototype APKs built locally for trying out a version before its release (no tag) use the same formula with a
 `dev` label: `-PfpVersionName=0.6.0-dev1 -PfpVersionCode=60001`, then `dev2` = 60002, and so on. They install over
 0.5.2-rc1 (50201) and are replaced by the final `v0.6.0` (60099). A pre-release tag of the same version must use a
-number above the last dev build (after `0.6.0-dev4`, tag `v0.6.0-rc5` or later), so the code never goes down.
+number above the last dev build (after `0.6.0-dev5`, tag `v0.6.0-rc6` or later), so the code never goes down. `v0.6.0-rc1` (60001) is
+therefore not used; the plan is the final `v0.6.0` (60099) directly.
 
 The real-server protocol tests and the emulator suites need the Docker fixtures and are run locally before tagging
 (see [VERIFICATION.md](VERIFICATION.md)).

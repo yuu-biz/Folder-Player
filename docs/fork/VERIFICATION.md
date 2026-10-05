@@ -112,6 +112,26 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign (0.6.0-dev1 … dev4) on a real phone: feel of the mini ⇄ full drag and of the moving cover, the
   browser, notification tap, Back gesture, TalkBack (see 5.5 and 5.8).
 
+### 5.9 Release speed after a pause, reduced motion, landscape playlist Back (0.6.0-dev5, 2026-10-05)
+
+App code as of `2399ee8`. Emulator API 34; suites run one at a time (no full-suite run), the emulator restarted
+between groups. "First run" is the first result on that code; reruns are listed separately.
+
+| Check | Result |
+|---|---|
+| Reproduced first (dev4 code, new tests only) | `PlayerSheetUiTest#s10` FAIL (fast move up 12 %, finger held 1 s, released → the player opened); `s11` (animations off) PASS already; `s12` FAIL, a test fault (it expected the 2-second `Many` track to still be playing; the queue now starts with `long.flac`) |
+| `PlayerSheetUiTest`, first run on the fixed code | s01–s04, s06, s09–s12 PASS; s05, s07, s08 FAIL: the animator scale was still 0 from the earlier `s11` run, whose restore had *deleted* the setting — the window manager then keeps the last value (0) instead of the default. `s11` now restores explicit values; device reset to 1 |
+| `PlayerSheetUiTest`, second run (restore fixed) | 12/12 PASS: s10 held flicks stay (up from mini, down from full, sideways both ways on the paused mini player), immediate flicks still fling / swipe away; s11 with animator scale 0: tap / Back jump (clock held), drag follows and settles, the cover is drawn held part-way and open; s12 landscape playlist overlay: Back closes it (also while an entry is being moved: nothing moved, player stays open), then Back folds the player |
+| Test helper | `moveInSteps` added `moveBy`'s default 16 ms per step to the intended duration (a "60 ms" flick took about 160 ms); durations are now exact. All `PlayerSheetUiTest` cases pass with it |
+| `NavigationUiTest` | first run 15/16: `n15` (WMA length via FFmpeg, untouched code) FAIL "timed out waiting for WMA"; rerun alone PASS |
+| `PlayerSkipTest`, `OpenPlayerColdStartTest`, `PlaylistQueueTest`, `NotificationSwitchTest` | first run 4/4, 2/2, 1/1, 2/2 PASS |
+| `BrowserUiTest` (fresh emulator) | first run 5/5 PASS (incl. `a13` player cover pixels) |
+| `assembleDebug assembleDebugAndroidTest lintDebug testDebugUnitTest` | exit 0; lint 0 errors, 61 warnings (same count); JVM 125, 0 failures, 21 skipped |
+| Signed release build `-PfpVersionName=0.6.0-dev5 -PfpVersionCode=60005` | `FolderPlayerFork-0.6.0-dev5.apk`, SHA-256 `1b6eeda0c6987ad234fb528582c98b9e335171ba3e5bbffa2cbd6c00ed8fe122`; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; signature v2; not debuggable; arm64-v8a + x86_64; `zipalign -c -P 16` (35.0.0) and `check-16k.sh` PASS |
+| Update 0.6.0-dev4 → dev5 (emulator API 34, release APKs) | dev4 with Japanese, one favourite, a track played; `adb install -r` dev5: versionCode 60004 → 60005, language, favourite (1), folder and last track kept. On dev5: `input motionevent` down → fast move up → 1 s still → up: stays mini; `input swipe` 260 px in 40 ms: opens |
+
+Not checked: a real phone; other API levels.
+
 ### 5.8 Mini ⇄ full player, stage 2 (0.6.0-dev4, 2026-10-05)
 
 App code as of `a910768` ([UI_REDESIGN.md](UI_REDESIGN.md), "Mini ⇄ full"). Emulator API 34, animator scale at its
@@ -140,7 +160,7 @@ Found on the way:
   consumed down. The drag now waits for the down to pass the children first.
 - Landscape seek bar used the length of the first track it was shown with (`s09`, fixed code only).
 
-Not checked: reduced motion (`ValueAnimator.areAnimatorsEnabled()` false → jump) is not exercised by a test; Back from
+Not checked at dev4 (both covered in 5.9): reduced motion (`ValueAnimator.areAnimatorsEnabled()` false → jump); Back from
 the landscape playlist overlay during a drag; other API levels; a real phone (feel of the drag, smoothness of the
 cover on a NAS album, BLUR on a real GPU, TalkBack).
 
