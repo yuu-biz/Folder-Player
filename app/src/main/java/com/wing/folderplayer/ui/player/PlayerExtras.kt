@@ -31,21 +31,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.ui.composed
+import androidx.compose.ui.input.pointer.pointerInput
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.wing.folderplayer.R
 import com.wing.folderplayer.cast.CastController
+import kotlin.math.abs
 
-/** Folder image first; if it cannot be loaded the embedded picture; otherwise the placeholder. */
-@Composable
-fun CoverImage(
-    uiState: PlayerUiState,
-    modifier: Modifier = Modifier,
-    contentScale: ContentScale = ContentScale.Crop,
-    tag: String = "player_cover",
-    placeholderIconSize: Dp = 80.dp,
-) = CoverImage(uiState.coverUri, uiState.coverFallback, modifier, contentScale, tag, placeholderIconSize)
-
+/**
+ * Folder image first; if it cannot be loaded the embedded picture; otherwise the placeholder.
+ * [requestPx]: fixed request size. Views of the same picture that use the same size share one memory-cache entry,
+ * and a view that is scaled (not resized) while it moves never requests the picture again.
+ * [onShown]: the picture, the fallback or the placeholder is there (not called while loading).
+ */
 @Composable
 fun CoverImage(
     primary: Any?,
@@ -54,29 +57,68 @@ fun CoverImage(
     contentScale: ContentScale = ContentScale.Crop,
     tag: String = "player_cover",
     placeholderIconSize: Dp = 80.dp,
+    requestPx: Int? = null,
+    crossfade: Boolean = true,
+    onShown: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val shown by rememberUpdatedState(onShown)
     if (primary == null && fallback == null) {
         CoverPlaceholder(modifier, placeholderIconSize)
+        LaunchedEffect(Unit) { shown?.invoke() }
         return
     }
+    fun request(data: Any) = ImageRequest.Builder(context).data(data).crossfade(crossfade)
+        .apply { if (requestPx != null) size(requestPx) }.build()
     SubcomposeAsyncImage(
-        model = ImageRequest.Builder(context).data(primary ?: fallback).crossfade(true).build(),
+        model = request(primary ?: fallback!!),
         contentDescription = stringResource(R.string.player_cover),
         contentScale = contentScale,
         modifier = modifier.testTag(tag),
+        onSuccess = { shown?.invoke() },
         error = {
             if (fallback != null && primary != null) {
                 SubcomposeAsyncImage(
-                    model = ImageRequest.Builder(context).data(fallback).build(),
+                    model = request(fallback),
                     contentDescription = null,
                     contentScale = contentScale,
-                    error = { CoverPlaceholder(Modifier.fillMaxSize(), placeholderIconSize) },
+                    onSuccess = { shown?.invoke() },
+                    error = {
+                        CoverPlaceholder(Modifier.fillMaxSize(), placeholderIconSize)
+                        LaunchedEffect(Unit) { shown?.invoke() }
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
-            } else CoverPlaceholder(Modifier.fillMaxSize(), placeholderIconSize)
+            } else {
+                CoverPlaceholder(Modifier.fillMaxSize(), placeholderIconSize)
+                LaunchedEffect(Unit) { shown?.invoke() }
+            }
         },
     )
+}
+
+/**
+ * The full player's cover: the thumbnail the mini player shows (same request, so it is there at once) under the large
+ * picture. The large one is requested only here and only once per cover ([PlayerTransition.largeLoadedFor]); the
+ * blurred background waits for it and then takes it from the memory cache.
+ */
+@Composable
+fun FullCover(uiState: PlayerUiState, transition: PlayerTransition, modifier: Modifier = Modifier) {
+    val key = uiState.coverUri to uiState.coverFallback
+    DisposableEffect(key) {
+        transition.fullCoverReady = false
+        onDispose { transition.fullCoverReady = false }
+    }
+    Box(modifier) {
+        CoverImage(
+            uiState.coverUri, uiState.coverFallback, Modifier.fillMaxSize(), tag = "player_cover_thumb",
+            requestPx = transition.thumbPx, crossfade = false, onShown = { transition.fullCoverReady = true },
+        )
+        CoverImage(
+            uiState.coverUri, uiState.coverFallback, Modifier.fillMaxSize(),
+            requestPx = transition.largePx, onShown = { transition.largeLoadedFor = key },
+        )
+    }
 }
 
 @Composable
@@ -89,15 +131,25 @@ fun CoverPlaceholder(modifier: Modifier, iconSize: Dp = 80.dp) {
     }
 }
 
-/** Player background: public-main gradient (default), blurred cover, or black. */
+/**
+ * Player background: public-main gradient (default), blurred cover, or black.
+ * The blurred picture is requested at [requestPx] (the full cover's size, from the memory cache) once [pictureAllowed].
+ */
 @Composable
-fun PlayerBackground(uiState: PlayerUiState, modifier: Modifier = Modifier) {
-    when (uiState.backgroundStyle) {
+fun PlayerBackground(
+    style: String,
+    cover: Any?,
+    fallback: ByteArray?,
+    requestPx: Int,
+    pictureAllowed: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    when (style) {
         "BLACK" -> Box(modifier.fillMaxSize().background(Color.Black))
         "BLUR" -> Box(modifier.fillMaxSize().background(Color.Black)) {
-            if (uiState.coverUri != null || uiState.coverFallback != null) {
+            if ((cover != null || fallback != null) && pictureAllowed) {
                 val blurMod = if (Build.VERSION.SDK_INT >= 31) Modifier.blur(48.dp) else Modifier
-                CoverImage(uiState, Modifier.fillMaxSize().then(blurMod))
+                CoverImage(cover, fallback, Modifier.fillMaxSize().then(blurMod), tag = "player_background", requestPx = requestPx)
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = if (Build.VERSION.SDK_INT >= 31) 0.45f else 0.75f)))
             }
         }
@@ -106,6 +158,46 @@ fun PlayerBackground(uiState: PlayerUiState, modifier: Modifier = Modifier) {
                 Brush.verticalGradient(listOf(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f), Color(0xFF0F0F0F)))
             )
         )
+    }
+}
+
+/**
+ * Seek bar touch: a tap seeks; a drag that starts sideways moves the thumb ([onPreview]) and seeks on release; a drag
+ * that starts vertically is taken and ignored, so it neither seeks nor moves the player or opens the playlist.
+ */
+fun Modifier.seekGestures(onPreview: (Float) -> Unit, onSeek: (Float) -> Unit): Modifier = composed {
+    val preview by rememberUpdatedState(onPreview)
+    val seek by rememberUpdatedState(onSeek)
+    pointerInput(Unit) {
+        fun at(x: Float) = (x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+        awaitEachGesture {
+            val down = awaitFirstDown()
+            var sideways = false
+            val start = awaitTouchSlopOrCancellation(down.id) { change, over ->
+                change.consume()
+                sideways = abs(over.x) >= abs(over.y)
+            }
+            if (start == null) {
+                val up = currentEvent.changes.firstOrNull { it.id == down.id }
+                if (up != null && !up.pressed && !up.isConsumed) {
+                    up.consume()
+                    seek(at(up.position.x))
+                }
+                return@awaitEachGesture
+            }
+            if (sideways) {
+                var last = at(start.position.x)
+                preview(last)
+                val lifted = drag(start.id) { c ->
+                    c.consume()
+                    last = at(c.position.x)
+                    preview(last)
+                }
+                if (lifted) seek(last)
+            } else {
+                drag(start.id) { it.consume() }
+            }
+        }
     }
 }
 

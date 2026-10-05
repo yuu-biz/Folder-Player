@@ -138,6 +138,10 @@ class PlayerViewModel : ViewModel() {
     val coverDisplaySize: StateFlow<String> = part { it.coverDisplaySize }
     val backgroundStyle: StateFlow<String> = part { it.backgroundStyle }
     val miniState: StateFlow<MiniPlayerState> = part { it.mini() }
+    /** Folder image / embedded picture of the current track (the player panel's background). */
+    val cover: StateFlow<Pair<Any?, ByteArray?>> = part { it.coverUri to it.coverFallback }
+    /** Position of the current track in the queue (-1: none); tells next from previous for the track-change motion. */
+    val queuePosition: StateFlow<Int> = part { s -> s.playlist.indexOfFirst { it.mediaId == s.currentMediaId } }
     val progressFraction: StateFlow<Float> = part { if (it.duration > 1) (it.currentPosition.toFloat() / it.duration).coerceIn(0f, 1f) else 0f }
 
     private val exceptionHandler = kotlinx.coroutines.CoroutineExceptionHandler { _, throwable ->
