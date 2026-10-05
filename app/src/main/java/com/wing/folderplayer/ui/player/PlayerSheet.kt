@@ -468,6 +468,13 @@ fun PlayerSheetHost(
     }
 }
 
+/** Same cover: the same folder image, and the same embedded picture also when it is held by another array instance. */
+private fun sameCover(loaded: Any?, cover: Pair<Any?, ByteArray?>): Boolean {
+    val l = loaded as? Pair<*, *> ?: return false
+    val bytes = l.second as? ByteArray
+    return l.first == cover.first && (bytes === cover.second || (bytes != null && cover.second?.contentEquals(bytes) == true))
+}
+
 /** Back folds the full player, also while a finger holds it part-way (own scope: drag start / end recompose only this). */
 @Composable
 private fun SheetBackHandler(sheet: PlayerSheetState) {
@@ -504,7 +511,7 @@ private fun PanelBackground(transition: PlayerTransition, style: String, cover: 
             requestPx = transition.largePx,
             // The blurred picture waits for the cover's large picture, then comes from the memory cache (a second
             // request at the same time would fetch it from the source twice).
-            pictureAllowed = transition.largeLoadedFor == cover,
+            pictureAllowed = sameCover(transition.largeLoadedFor, cover),
             modifier = Modifier.graphicsLayer { alpha = (transition.sheet.fraction / 0.6f).coerceIn(0f, 1f) },
         )
     }
