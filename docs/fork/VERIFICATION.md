@@ -112,6 +112,23 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.10 First stable release `v0.6.0` (draft, 2026-10-05)
+
+Tag `v0.6.0` at `7b661ca` (app code identical to 0.6.0-dev5, `2399ee8`; later commits change docs and the release
+notes only). The user checked dev5 on a real phone beforehand (no major problems). `FP_PUBLISH_RELEASES` checked
+unset before tagging (no repository variables, personal account, no environments). Release workflow run 37282807912:
+every step passed (FFmpeg, `testDebugUnitTest lintDebug`, license notices, build and sign, verify APK, draft
+release). Checked on the files downloaded from the draft:
+
+| Check | Result |
+|---|---|
+| Draft | `Folder Player Fork 0.6.0`, draft, not a pre-release; assets `FolderPlayerFork-0.6.0.apk`, `SHA256SUMS.txt`, `ffmpeg-7.1.5.tar.xz` |
+| APK | versionCode 60099, versionName 0.6.0; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; signature v2; not debuggable; arm64-v8a + x86_64; `zipalign -c -P 16` (35.0.0) and `check-16k.sh` PASS (LOAD 0x4000) |
+| `SHA256SUMS.txt` | `cc5add0f3539f56d22f6ba04dc77dca6ddefbee98e4b575502e612848b6749e9` matches the APK (`sha256sum -c`) and the checksum in the notes |
+| `ffmpeg-7.1.5.tar.xz` | SHA-256 `de668509…5d558f`, the pinned official tarball (`native/build-ffmpeg.sh`) |
+| Notices | `assets/licenses/third_party_notices.txt` in the APK (1147 lines) with the FFmpeg LGPL-2.1-or-later notice and source reference; license gate in CI and locally: 161 artifacts covered, asset up to date |
+| Notes | no placeholders left; certificate digest, checksum, links to FEATURES / KNOWN_ISSUES / DEPENDENCIES at the tag |
+
 ### 5.9 Release speed after a pause, reduced motion, landscape playlist Back (0.6.0-dev5, 2026-10-05)
 
 App code as of `2399ee8`. Emulator API 34; suites run one at a time (no full-suite run), the emulator restarted
