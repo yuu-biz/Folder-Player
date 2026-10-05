@@ -1,6 +1,6 @@
 # Known issues
 
-Open issues that do not block the first (private) release. Each is to be fixed in a later version.
+Open issues that did not block the first public release (0.6.0). Each is to be fixed in a later version.
 
 ## Cast: Play / Pause / Seek outside the session ordering
 
