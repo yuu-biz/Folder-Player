@@ -1,32 +1,28 @@
 package com.wing.folderplayer.ui
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -41,9 +37,10 @@ import com.wing.folderplayer.data.source.MusicFile
 import com.wing.folderplayer.data.source.SourceRef
 import com.wing.folderplayer.ui.browser.BrowserScreen
 import com.wing.folderplayer.ui.browser.BrowserViewModel
-import com.wing.folderplayer.ui.player.MainPlayerScreen
-import com.wing.folderplayer.ui.player.MiniPlayer
+import com.wing.folderplayer.ui.player.MiniPlayerHeight
+import com.wing.folderplayer.ui.player.PlayerSheetHost
 import com.wing.folderplayer.ui.player.PlayerViewModel
+import com.wing.folderplayer.ui.player.rememberPlayerSheetState
 import kotlinx.coroutines.flow.Flow
 
 /** Pages of the app. The player is not a page: it is shown over them (mini ⇄ full). */
@@ -53,27 +50,9 @@ object Routes {
 }
 
 /**
- * Whether the full player is open — the only place this is kept. Mini / full / nothing follow from it and from
- * whether there is a track. (Stage 2 replaces the boolean with an expansion fraction driven by drag.)
- */
-@Stable
-class PlayerSheetState(expanded: Boolean) {
-    var expanded by mutableStateOf(expanded)
-        private set
-
-    fun expand() { expanded = true }
-    fun collapse() { expanded = false }
-
-    companion object {
-        val Saver: Saver<PlayerSheetState, Boolean> = Saver(save = { it.expanded }, restore = { PlayerSheetState(it) })
-    }
-}
-
-@Composable
-fun rememberPlayerSheetState(): PlayerSheetState = rememberSaveable(saver = PlayerSheetState.Saver) { PlayerSheetState(false) }
-
-/**
- * Browser-based app shell: Browser / Settings pages, the mini player under the browser and the full player over both.
+ * Browser-based app shell: Browser / Settings pages and, over them, the player that grows from the mini player into
+ * the full player ([PlayerSheetHost]). Whether the player is open is kept in one place, the saveable
+ * [com.wing.folderplayer.ui.player.PlayerSheetState] (its logical state; the fraction only follows it).
  * The ViewModels are the activity's (tests and the settings screen share them); playback lives in MusicService and is
  * never started, stopped or re-queued by opening or closing anything here.
  */
@@ -129,29 +108,27 @@ fun AppRoot(
     val onAddToPlaylist = remember(playerViewModel) { { id: String, files: List<MusicFile> -> playerViewModel.addFilesToPlaylist(id, files) } }
     val openSettings = remember(navController, sheet) {
         {
-            sheet.collapse()
+            // No folding animation: Settings slides in at the same moment.
+            sheet.snapTo(false)
             navController.navigate(Routes.SETTINGS) { launchSingleTop = true }
         }
     }
-    val openPlayer = remember(sheet) { { sheet.expand() } }
-    val collapsePlayer = remember(sheet) { { sheet.collapse() } }
     val dismissSession = remember(playerViewModel) { { playerViewModel.dismissSession() } }
 
-    val fullPlayer = updateTransition(sheet.expanded, label = "fullPlayer")
-    // Fully open and settled: the pages underneath are not drawn.
-    val covered = fullPlayer.currentState && fullPlayer.targetState && !fullPlayer.isRunning
     val miniVisible = hasTrack && onBrowser
 
     Box(Modifier.fillMaxSize()) {
         Column(
             Modifier
                 .fillMaxSize()
-                .graphicsLayer { alpha = if (covered) 0f else 1f }
+                // Fully open and at rest: the pages underneath are not drawn (read while drawing, not composing).
+                .graphicsLayer { alpha = if (sheet.isSettledFull) 0f else 1f }
                 .testTag("app_pages")
                 // Hidden from TalkBack while the full player is in front.
                 .then(if (sheet.expanded) Modifier.clearAndSetSemantics { } else Modifier)
         ) {
-            // The mini player sits below the pages (never over the last list row) and takes the navigation bar inset.
+            // The mini player (drawn by the player host) sits below the pages, never over the last list row: its place
+            // is kept here, with the navigation bar inset it takes.
             Box(Modifier.weight(1f).fillMaxWidth().then(if (miniVisible) Modifier.consumeWindowInsets(WindowInsets.navigationBars) else Modifier)) {
                 NavHost(
                     navController = navController,
@@ -179,18 +156,9 @@ fun AppRoot(
                     }
                 }
             }
-            if (miniVisible) MiniPlayer(playerViewModel, onOpen = openPlayer, onDismiss = dismissSession)
+            if (miniVisible) Spacer(Modifier.fillMaxWidth().navigationBarsPadding().height(MiniPlayerHeight))
         }
 
-        fullPlayer.AnimatedVisibility(
-            visible = { it },
-            enter = slideInVertically(tween(250)) { it / 4 } + fadeIn(tween(200)),
-            exit = slideOutVertically(tween(220)) { it / 4 } + fadeOut(tween(180)),
-        ) {
-            // Composed only while open, so it is registered after (and takes precedence over) the page handlers;
-            // the browser's handler is also disabled while the player is open.
-            BackHandler(enabled = sheet.expanded) { sheet.collapse() }
-            MainPlayerScreen(viewModel = playerViewModel, onCollapse = collapsePlayer)
-        }
+        PlayerSheetHost(sheet = sheet, viewModel = playerViewModel, miniAllowed = miniVisible, onDismiss = dismissSession)
     }
 }

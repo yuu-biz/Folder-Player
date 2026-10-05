@@ -49,12 +49,14 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 
 @Composable
 fun LandscapePlayerLayout(
     viewModel: PlayerViewModel,
     uiState: PlayerUiState,
-    onCollapse: () -> Unit = {},
+    onCollapse: () -> Unit,
+    transition: PlayerTransition,
 ) {
     val configuration = LocalConfiguration.current
     val screenRatio = configuration.screenWidthDp.toFloat() / configuration.screenHeightDp.toFloat()
@@ -72,39 +74,35 @@ fun LandscapePlayerLayout(
     // The playlist overlay is not a window: Back closes it before it folds the player.
     androidx.activity.compose.BackHandler(enabled = showPlaylist) { showPlaylist = false }
 
+    // Transparent: the player panel behind paints the background (it grows with the fraction).
     Surface(
-        color = Color.Black,
+        color = Color.Transparent,
         modifier = Modifier.fillMaxSize()
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                // Down anywhere (outside the lyrics list and the playlist overlay) folds the player; no playlist here.
+                .playerSheetDrag(transition.sheet)
         ) {
-            PlayerBackground(uiState)
             Row(
                 modifier = Modifier
                     .fillMaxSize()
             ) {
-                // Left Panel: Controls + Swipe Gesture for Playlist
+                // Left Panel: Controls + Swipe Gesture for Playlist (up), fold (down)
                 Box(
                     modifier = Modifier
                         .weight(leftPanelWeight)
                         .fillMaxHeight()
                         .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Left))
-                        .pointerInput(Unit) {
-                            detectVerticalDragGestures { _, dragAmount ->
-                                // Detect upward swipe to show playlist, similar to portrait
-                                if (dragAmount < -30) {
-                                    showPlaylist = true
-                                }
-                            }
-                        }
+                        .playerSheetDrag(transition.sheet) { showPlaylist = true }
                         .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     LandscapeLeftControlPanel(
                         uiState = uiState,
                         viewModel = viewModel,
+                        transition = transition,
                         onAlbumClick = {
                             showAlbumInfo = true
                             viewModel.fetchAlbumInfo()
@@ -119,6 +117,7 @@ fun LandscapePlayerLayout(
                         .fillMaxHeight()
                         .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Right))
                         .padding(top = 16.dp, bottom = 16.dp, end = 24.dp)
+                        .fullPlayerContent(transition)
                 ) {
                     LandscapeLyricsPanel(
                         uiState = uiState,
@@ -163,10 +162,11 @@ fun LandscapePlayerLayout(
             if (showAlbumInfo) {
                 AlbumInfoDialog(uiState, viewModel) { showAlbumInfo = false }
             }
-            Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) { CastAction(viewModel) }
+            Box(Modifier.align(Alignment.TopEnd).padding(4.dp).fullPlayerContent(transition)) { CastAction(viewModel) }
             CollapsePlayerButton(
                 onCollapse,
                 Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Left)).padding(4.dp)
+                    .fullPlayerContent(transition)
             )
         }
     }
@@ -176,8 +176,11 @@ fun LandscapePlayerLayout(
 fun LandscapeLeftControlPanel(
     uiState: PlayerUiState,
     viewModel: PlayerViewModel,
+    transition: PlayerTransition,
     onAlbumClick: () -> Unit
 ) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val direction by rememberTrackDirection(viewModel)
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -190,28 +193,31 @@ fun LandscapeLeftControlPanel(
             contentAlignment = Alignment.Center
         ) {
             val size = minOf(maxHeight, maxWidth)
-            
-            Card(
+
+            // The cover is the one picture that moves between the mini and the full player.
+            Box(
                 modifier = Modifier
                     .size(size)
-                    .aspectRatio(1f),
-                shape = RoundedCornerShape(12.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+                    .aspectRatio(1f)
+                    .coverChange(uiState.coverUri to uiState.coverFallback) { direction }
+                    .sharedCover(transition, cornerPx = { with(density) { 12.dp.toPx() } }, elevationPx = { with(density) { 12.dp.toPx() } })
             ) {
-                CoverImage(uiState, Modifier.fillMaxSize())
+                FullCover(uiState, transition, Modifier.fillMaxSize())
             }
         }
-        
+
         Spacer(modifier = Modifier.height(12.dp))
 
         // 2. Info - Compact
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-             TextCompressed(
-                text = displayTitle(uiState.currentTitle),
-                style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fullPlayerContent(transition)) {
+            TrackText(uiState.currentTitle, direction) { title ->
+                TextCompressed(
+                    text = displayTitle(title),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
             if (uiState.currentFolderName.isNotEmpty()) {
                 TextCompressed(
                     text = uiState.currentFolderName,
@@ -233,7 +239,7 @@ fun LandscapeLeftControlPanel(
         Spacer(modifier = Modifier.height(12.dp))
 
         // 3. Progress
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth().fullPlayerContent(transition)) {
              var sliderPosition by remember { mutableStateOf(0f) }
              val actualPosition = if (uiState.duration > 0) uiState.currentPosition.toFloat() / uiState.duration else 0f
              val bufferedFraction = if (uiState.duration > 0) uiState.bufferedPosition.toFloat() / uiState.duration else 0f
@@ -266,25 +272,15 @@ fun LandscapeLeftControlPanel(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(24.dp)
-                        .pointerInput(Unit) {
-                            detectTapGestures { offset ->
-                                val newPos = (offset.x / size.width).coerceIn(0f, 1f)
-                                sliderPosition = newPos
-                                val newPosition = (newPos * uiState.duration).toLong()
-                                viewModel.seekTo(newPosition)
-                            }
-                        }
-                        .pointerInput(Unit) {
-                            detectHorizontalDragGestures(
-                                onDragEnd = {
-                                    val newPosition = (sliderPosition * uiState.duration).toLong()
-                                    viewModel.seekTo(newPosition)
-                                }
-                            ) { change, _ ->
-                                val newPos = (change.position.x / size.width).coerceIn(0f, 1f)
-                                sliderPosition = newPos
-                            }
-                        }
+                        .testTag("seek_bar")
+                        // (The callbacks are kept up to date: the duration is the current track's, not the first one's.)
+                        .seekGestures(
+                            onPreview = { sliderPosition = it },
+                            onSeek = {
+                                sliderPosition = it
+                                viewModel.seekTo((it * uiState.duration).toLong())
+                            },
+                        )
                 ) {
                     val thumbSize = if (uiState.isBuffering) 16.dp else 12.dp
                     val availableWidth = maxWidth - thumbSize
@@ -320,7 +316,7 @@ fun LandscapeLeftControlPanel(
 
         // 4. Controls
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).fullPlayerContent(transition),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -336,12 +332,7 @@ fun LandscapeLeftControlPanel(
                 shadowElevation = 8.dp
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = if (uiState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        tint = Color.Black,
-                        modifier = Modifier.size(40.dp)
-                    )
+                    PlayPauseIcon(uiState.isPlaying, { null }, Color.Black, Modifier.size(40.dp))
                 }
             }
 

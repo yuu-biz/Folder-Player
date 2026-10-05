@@ -2,6 +2,7 @@ package com.wing.folderplayer.ui.player
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -65,20 +66,25 @@ import android.content.res.Configuration
 
 import androidx.compose.ui.platform.LocalConfiguration
 
+/**
+ * The full player. It is drawn over the player panel (which paints the background) and follows the panel's fraction:
+ * its cover moves from the mini player's cover ([sharedCover]), the rest fades in ([fullPlayerContent]).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainPlayerScreen(
-    viewModel: PlayerViewModel = viewModel(),
-    onCollapse: () -> Unit = {},
+    viewModel: PlayerViewModel,
+    onCollapse: () -> Unit,
+    transition: PlayerTransition,
 ) {
     // The controller is connected once by MainActivity; opening or closing this screen never touches it.
     val configuration = LocalConfiguration.current
     Box(Modifier.fillMaxSize().testTag("player_full")) {
         if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
             val uiState by viewModel.uiState.collectAsState()
-            LandscapePlayerLayout(viewModel = viewModel, uiState = uiState, onCollapse = onCollapse)
+            LandscapePlayerLayout(viewModel = viewModel, uiState = uiState, onCollapse = onCollapse, transition = transition)
         } else {
-            PortraitPlayerLayout(viewModel, onCollapse)
+            PortraitPlayerLayout(viewModel, onCollapse, transition)
         }
     }
 }
@@ -105,8 +111,11 @@ fun CollapsePlayerButton(onCollapse: () -> Unit, modifier: Modifier = Modifier) 
 private fun PortraitPlayerLayout(
     viewModel: PlayerViewModel,
     onCollapse: () -> Unit,
+    transition: PlayerTransition,
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val direction by rememberTrackDirection(viewModel)
     var showPlaylist by remember { mutableStateOf(false) }
     var lyricsExpanded by remember { mutableStateOf(false) }
     var showAlbumInfo by remember { mutableStateOf(false) }
@@ -140,24 +149,18 @@ private fun PortraitPlayerLayout(
         animationSpec = androidx.compose.animation.core.tween(durationMillis = 500)
     )
 
+    // Transparent: the player panel behind paints the background (it grows with the fraction).
     Surface(
-        color = Color.Black,
+        color = Color.Transparent,
         modifier = Modifier.fillMaxSize()
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectVerticalDragGestures { _, dragAmount ->
-                        // Detect upward swipe with a threshold
-                        if (dragAmount < -30) {
-                            showPlaylist = true
-                        }
-                    }
-                }
+                // Down: fold into the mini player (follows the finger). Up: playlist, as before.
+                .playerSheetDrag(transition.sheet) { showPlaylist = true }
         ) {
-            PlayerBackground(uiState)
-            Box(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(4.dp)) { CastAction(viewModel) }
+            Box(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(4.dp).fullPlayerContent(transition)) { CastAction(viewModel) }
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -223,20 +226,29 @@ private fun PortraitPlayerLayout(
                                 .fillMaxWidth()
                                 .aspectRatio(1f)
                                 .padding(12.dp) // Slight offset for shadow effect
+                                .fullPlayerContent(transition, offset = false)
                                 .clip(RoundedCornerShape(animatedCornerSize))
                                 .background(Color.White.copy(alpha = 0.05f))
                         )
                     }
-                    
-                    Card(
+
+                    // The cover is the one picture that moves between the mini and the full player.
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(1f),
-                        shape = RoundedCornerShape(animatedCornerSize),
-                        elevation = CardDefaults.cardElevation(defaultElevation = animatedElevation),
-                        border = if (animatedBorderAlpha > 0.01f) androidx.compose.foundation.BorderStroke(2.dp, Color.White.copy(alpha = animatedBorderAlpha)) else null
+                            .aspectRatio(1f)
+                            .coverChange(uiState.coverUri to uiState.coverFallback) { direction }
+                            .sharedCover(
+                                transition,
+                                cornerPx = { with(density) { animatedCornerSize.toPx() } },
+                                elevationPx = { with(density) { animatedElevation.toPx() } },
+                            )
+                            .then(
+                                if (animatedBorderAlpha > 0.01f) Modifier.border(2.dp, Color.White.copy(alpha = animatedBorderAlpha), RoundedCornerShape(animatedCornerSize))
+                                else Modifier
+                            )
                     ) {
-                        CoverImage(uiState, Modifier.fillMaxSize())
+                        FullCover(uiState, transition, Modifier.fillMaxSize())
                     }
                 }
 
@@ -245,6 +257,7 @@ private fun PortraitPlayerLayout(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
+                        .fullPlayerContent(transition)
                         .padding(horizontal = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -253,12 +266,14 @@ private fun PortraitPlayerLayout(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.padding(bottom = 0.dp)
                     ) {
-                        TextCompressed(
-                            text = displayTitle(uiState.currentTitle),
-                            style = if (lyricsExpanded) MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineMedium,
-                            color = Color.White,
-                            fontWeight = FontWeight.ExtraBold,
-                        )
+                        TrackText(uiState.currentTitle, direction) { title ->
+                            TextCompressed(
+                                text = displayTitle(title),
+                                style = if (lyricsExpanded) MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineMedium,
+                                color = Color.White,
+                                fontWeight = FontWeight.ExtraBold,
+                            )
+                        }
                         
                         if (uiState.currentFolderName.isNotEmpty()) {
                             TextCompressed(
@@ -318,7 +333,7 @@ private fun PortraitPlayerLayout(
                             
                             LazyColumn(
                                 state = listState,
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier.fillMaxSize().testTag("lyrics_list"),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 contentPadding = PaddingValues(vertical = (viewHeight / 2 - 16.dp).coerceAtLeast(0.dp)) 
                             ) {
@@ -392,14 +407,17 @@ private fun PortraitPlayerLayout(
                     }
                 }
 
-                if (!lyricsExpanded) LyricsFooter(uiState) { regen -> viewModel.requestAiLyrics(regen) }
-                PlaybackErrorBanner(uiState)
+                Column(Modifier.fillMaxWidth().fullPlayerContent(transition), horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (!lyricsExpanded) LyricsFooter(uiState) { regen -> viewModel.requestAiLyrics(regen) }
+                    PlaybackErrorBanner(uiState)
+                }
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Progress Bar
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .fullPlayerContent(transition)
                         .padding(horizontal = 24.dp)
                 ) {
                     var sliderPosition by remember { mutableStateOf(0f) }
@@ -460,25 +478,14 @@ private fun PortraitPlayerLayout(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(24.dp)
-                                .pointerInput(Unit) {
-                                    detectTapGestures { offset ->
-                                        val newPos = (offset.x / size.width).coerceIn(0f, 1f)
-                                        sliderPosition = newPos
-                                        val newPosition = (newPos * uiState.duration).toLong()
-                                        viewModel.seekTo(newPosition)
-                                    }
-                                }
-                                .pointerInput(Unit) {
-                                    detectHorizontalDragGestures(
-                                        onDragEnd = {
-                                            val newPosition = (sliderPosition * uiState.duration).toLong()
-                                            viewModel.seekTo(newPosition)
-                                        }
-                                    ) { change, _ ->
-                                        val newPos = (change.position.x / size.width).coerceIn(0f, 1f)
-                                        sliderPosition = newPos
-                                    }
-                                }
+                                .testTag("seek_bar")
+                                .seekGestures(
+                                    onPreview = { sliderPosition = it },
+                                    onSeek = {
+                                        sliderPosition = it
+                                        viewModel.seekTo((it * uiState.duration).toLong())
+                                    },
+                                )
                         ) {
                             val thumbSize = if (uiState.isBuffering) 24.dp else 12.dp
                             val availableWidth = maxWidth - thumbSize
@@ -554,6 +561,7 @@ private fun PortraitPlayerLayout(
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp)
                         .padding(bottom = controlsPaddingBottom)
+                        .fullPlayerContent(transition)
                         .graphicsLayer {
                             scaleX = controlsScale
                             scaleY = controlsScale
@@ -574,16 +582,12 @@ private fun PortraitPlayerLayout(
                         onClick = { viewModel.playPause() },
                         shape = CircleShape,
                         color = Color.White,
-                        modifier = Modifier.size(80.dp),
+                        modifier = Modifier.size(80.dp).testTag("btn_play_pause"),
                         shadowElevation = 8.dp
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = if (uiState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_play_pause),
-                                tint = Color.Black,
-                                modifier = Modifier.size(44.dp)
-                            )
+                            val label = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_play_pause)
+                            PlayPauseIcon(uiState.isPlaying, { label }, Color.Black, Modifier.size(44.dp))
                         }
                     }
 
@@ -597,7 +601,7 @@ private fun PortraitPlayerLayout(
                     }
                 }
             }
-            CollapsePlayerButton(onCollapse, Modifier.align(Alignment.TopStart).statusBarsPadding().padding(4.dp))
+            CollapsePlayerButton(onCollapse, Modifier.align(Alignment.TopStart).statusBarsPadding().padding(4.dp).fullPlayerContent(transition))
         }
 
         // Playlist BottomSheet

@@ -73,11 +73,20 @@ touch them.
   sideways swipe on the mini player while it may not be dismissed (playing) opened the full player, and a refused
   dismissal left the bar slid out of view; both fixed.
 
-## Navigation redesign: open points (stage 1)
+## Fixed in 0.6.0-dev4
+
+- Landscape full player: the seek bar kept the length of the track it was first shown with, so after a track change a
+  tap or drag sought to the wrong place (found while moving the seek gesture; `PlayerSheetUiTest#s09` covers the
+  fixed code, the old build was not run against it).
+
+## Navigation redesign: open points
 
 - Opening a folder from search results or the favourites list leaves that list; Back then goes to the folder's parent
   instead of back to the results (as before the redesign).
 - Settings shows no mini player.
-- No drag gestures between mini and full player yet (stage 2, see [UI_REDESIGN.md](UI_REDESIGN.md)).
-- How the new navigation feels on a real phone (smoothness, reachability) has not been checked yet; the earlier
-  report of stutter when swiping between pages is not explained, so it is not claimed to be fixed.
+- Mini ⇄ full (stage 2): a vertical drag that starts on the seek bar now does nothing (before, an upward one opened the
+  playlist); while the player moves (about 0.3 s) a touch anywhere is taken by the player. See
+  [UI_REDESIGN.md](UI_REDESIGN.md).
+- How the new navigation feels on a real phone (smoothness of the drag and of the cover's move, reachability) has not
+  been checked yet; the earlier report of stutter when swiping between pages is not explained, so it is not claimed to
+  be fixed.

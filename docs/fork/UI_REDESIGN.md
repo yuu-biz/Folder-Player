@@ -1,7 +1,8 @@
 # UI redesign: browser-based navigation and mini player
 
 Replaces the three pages Player / Browser / Settings that were switched by swiping sideways (`HorizontalPager`).
-Stage 1 is implemented on `feature/player-navigation`; stage 2 waits for feedback from a real device.
+Stage 1 (browser + mini / full player) and stage 2 (one player that grows from the mini into the full player) are
+implemented on `feature/player-navigation`.
 
 ## Structure
 
@@ -10,13 +11,17 @@ MainActivity                     ViewModels (activity scope), controller connect
 └─ AppRoot (ui/AppRoot.kt)
    ├─ Column  "app_pages"
    │  ├─ NavHost: browser (start) | settings
-   │  └─ MiniPlayer               only on the browser page and only when there is a track
-   └─ Full player (MainPlayerScreen) over everything, AnimatedVisibility
+   │  └─ place kept for the mini player (only on the browser page and only when there is a track)
+   └─ PlayerSheetHost (ui/player/PlayerSheet.kt), over the pages
+      ├─ panel background        only while open: scrim above it, mini colour → BLACK / BLUR / GRADIENT
+      ├─ MiniPlayer              static at the bottom, fades out while the player opens
+      └─ full player (MainPlayerScreen), only while open; clipped to the panel
 ```
 
-- The player is **not** a navigation destination. Its open / closed state is one saveable value
-  (`PlayerSheetState.expanded`); mini / full / nothing follow from it, from whether there is a track
-  (`PlayerUiState.hasTrack`) and from the current page. No second set of flags.
+- The player is **not** a navigation destination. Its state is one saveable value, `PlayerSheetState.expanded`
+  (where the player is or is going); the expansion `fraction` (0 = mini, 1 = full) only follows it and is never saved.
+  Mini / full / nothing follow from it, from whether there is a track (`PlayerUiState.hasTrack`) and from the current
+  page. No second set of flags.
 - One `PlayerViewModel`, one `MediaController` per activity. `initializeController` is called in
   `MainActivity.onCreate` (before any UI) and nowhere else; opening, closing or recreating the screen does not connect
   again, re-queue, seek or pause. A song tapped right after a cold start waits for the controller (`awaitPlayer`),
@@ -41,7 +46,9 @@ MainActivity                     ViewModels (activity scope), controller connect
 | Browser | tap a song (folder, search result, favourite, CUE) or Shuffle | play request, full player opens at once (loading / error shown there) |
 | Browser | long-press → add to playlist / favourite | no player |
 | Browser, any level (sources, source root, folder, search, favourites) | ⋮ → Settings | Settings |
-| Mini player | tap | full player |
+| Mini player | tap, or drag up | full player (a drag follows the finger, see "Mini ⇄ full") |
+| Full player | drag down (outside the seek bar, the lyrics list and the playlist) | mini player, following the finger |
+| Full player | swipe up (portrait: anywhere outside seek bar / lyrics list; landscape: left panel) | playlist, as before |
 | Mini player | play / pause (next on wide screens) | only that; the player does not open |
 | Full player | ⌄ button or Back | back to the browser exactly as it was; music keeps playing |
 | Settings | ← or Back | back to the browser as it was |
@@ -52,7 +59,8 @@ MainActivity                     ViewModels (activity scope), controller connect
 
 1. Dialogs, menus and bottom sheets (their own windows) close first; the keyboard is closed by the system.
 2. Landscape playlist overlay in the full player (not a window): closed by Back.
-3. Full player → folded into the mini player (browser underneath).
+3. Full player (also while a finger holds it part-way) → folded into the mini player (browser underneath). Once it
+   is folding, the next Back goes to the browser.
 4. Settings → browser.
 5. Browser: search → closed (back to the list it was opened from); favourites → source list;
    folder → parent folder; source root → source list.
@@ -101,28 +109,63 @@ TalkBack labels: "Open player", "Play" / "Pause", "Next".
 - Review fixes: an activity recreation (language change) no longer counts as a permission change (it reloaded the list
   and lost the scroll position); next / previous without a target change nothing (they showed "Loading" and waited).
 
-## Stage 1 status
+## Mini ⇄ full (stage 2, 0.6.0-dev4)
 
-Implemented: everything above. Simple transitions only: the full player slides up / fades (250 ms), Settings
-slides in from the side.
+One panel grows from the mini player into the full player and back (own implementation in Compose; general UX ideas
+only, no code, assets or layout values taken from other players).
 
-Not in stage 1 / known limits:
-- No continuous mini → full expansion, no drag to open or close (stage 2).
+**State.** `PlayerSheetState`: `fraction` 0..1, `expanded` (logical end), `isDragging`, `isAnimating`. The fraction
+is read only in draw / layout lambdas (`graphicsLayer`, `drawWithContent`) or through `derivedStateOf` thresholds, so
+moving the player recomposes nothing per frame; it is not part of `PlayerUiState` and the browser never sees it.
+A recreation saves only `expanded`: a move interrupted by it always lands at an end.
+
+**Motion.**
+- Tap on the mini player (or a song tap, the notification): animates to full. ⌄ / Back: animates to mini.
+- Drag: the panel's top edge follows the finger 1:1 (finger travel = distance from the mini player's top to the screen
+  top). On release a fling (≥ 600 dp/s) goes in its direction, otherwise the nearer end wins; the spring has no
+  bounce and the fraction is clamped, so the player never overshoots. Reversing mid-way is followed.
+- A touch while the player moves on its own takes it over at once (it can be dragged from there); a touch that does
+  not move lets it go on to where it was going. Buttons of the fading full player get nothing while it moves.
+- "Remove animations" (animator scale 0): jumps instead of animating.
+
+**What moves.**
+- Cover: the full player's cover itself is moved and scaled (`graphicsLayer`) from the mini player's cover place to
+  its own place, corners going from the mini's to the full player's; at fraction 1 the transform is the identity, so
+  the full player's own animations (large lyrics mode, cover size setting) are untouched. The mini player's cover
+  steps aside as soon as the full player's cover shows the picture — both show the same thumbnail request, so the
+  hand-over at fraction 0 is not visible. Pictures are never requested again while moving: the moving view keeps its
+  size, the thumbnail is one request (disk-cached), the large picture is requested once per cover when the player
+  opens, and the blurred background waits for it and then takes it from the memory cache.
+- Panel: the background rises with the top edge, from the mini player's colour to the chosen background
+  (BLACK / BLUR / GRADIENT unchanged; no colour taken from the artwork), with rounded top corners while moving and a
+  scrim over the pages above it.
+- Mini player: does not move; its texts and buttons fade out in the first 30 %.
+- Full player's texts, lyrics, seek bar, buttons: fade in and rise slightly in the second half.
+
+**Gestures kept apart.**
+- Mini player: up = open; sideways = end the session (paused only, unchanged); tap = open. Each gesture claims only
+  its own axis after the touch slop.
+- Full player: down = fold; up = playlist (unchanged entry point; landscape: left panel only, the lyrics panel has no
+  swipe as before). The lyrics list scrolls (never folds); the seek bar takes sideways drags as seeks and swallows
+  vertical ones (neither seek nor fold); the playlist sheet (its own window) and the landscape overlay keep their own
+  drag / reorder.
+
+**Track change.** The cover (when the picture changes) and the title slide in briefly from the side of the change
+(next: right, previous: left, from the queue position); play / pause swaps with a short scale and fade.
+
+**Performance rules.** No per-frame writes to the ViewModel; the shell collects only narrow flows (`hasTrack`,
+`cover`, `backgroundStyle`, …); the full player is composed only while open and leaves composition at fraction 0;
+no new MediaController or listener for opening or closing; pages under the settled full player are not drawn.
+
+## Status and limits
+
+Implemented: everything above. Settings slides in from the side.
+
+Known limits:
 - Settings has no mini player.
 - Opening a folder from search results or favourites leaves that list: Back then goes to the folder's parent, not back
   to the results (unchanged from before).
-- The full player keeps its own gesture: swipe up opens the playlist (portrait sheet / landscape overlay).
-- The pages under the open full player stay composed (needed for stage 2); they are only skipped when drawing.
-
-## Stage 2 (after device feedback)
-
-- Replace `PlayerSheetState.expanded` by an expansion fraction (anchored drag): mini → full with the cover moving and
-  growing continuously, title / background / controls following the fraction; drag up on the mini player, drag down
-  on the full player; settle to the nearer end, reversible mid-way.
-- Keep drag areas away from the seek bar, lyrics scrolling and the queue; move "swipe up for playlist" to an explicit
-  button if it conflicts.
-- Small transitions on track change (cover, text, background colour); background colour from the artwork must keep
-  the BLACK / gradient / blur setting.
-- Back, repeated taps, track changes and rotation during the animation must never leave a half-open player or an
-  invisible layer taking touches; reduced-motion settings must still work.
-- Check on the device where it still stutters before optimising anything.
+- The pages under the open full player stay composed; they are only skipped when drawing.
+- While the player moves, a touch anywhere on screen (also above the panel) is taken by the player; the move takes
+  about 0.3 s.
+- Smoothness on a real phone not checked yet.

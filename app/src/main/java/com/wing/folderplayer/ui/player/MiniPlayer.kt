@@ -3,9 +3,15 @@ package com.wing.folderplayer.ui.player
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
+import androidx.compose.ui.composed
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -19,9 +25,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -49,17 +60,20 @@ data class MiniPlayerState(
     val canSkipNext: Boolean,
 )
 
-fun PlayerUiState.mini() = MiniPlayerState(currentTitle, currentArtist, coverUri, coverFallback, isPlaying, isBuffering, playbackError, canSkipNext)
+fun PlayerUiState.mini() =MiniPlayerState(currentTitle, currentArtist, coverUri, coverFallback, isPlaying, isBuffering, playbackError, canSkipNext)
 
 /**
- * Bottom bar for the current track. Tapping it opens the full player; the buttons only control playback.
- * It reads the same [PlayerUiState] (title mode, resolved cover) as the full player and never reloads anything itself.
+ * Bottom bar for the current track. Tapping it or dragging it up opens the full player; the buttons only control
+ * playback. It reads the same [PlayerUiState] (title mode, resolved cover) as the full player and never reloads anything
+ * itself. It does not move while the player opens: its texts and buttons fade out and the full player's cover takes
+ * over from its cover (same thumbnail request).
  */
 @Composable
-fun MiniPlayer(viewModel: PlayerViewModel, onOpen: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+fun MiniPlayer(viewModel: PlayerViewModel, transition: PlayerTransition, onOpen: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val state by viewModel.miniState.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     val cast by com.wing.folderplayer.cast.CastController.get(context).state.collectAsState()
+    val sheet = transition.sheet
 
     // Swiping sideways (either way) ends the session, but only while nothing plays or loads, here or on a renderer
     // (casting pauses the phone).
@@ -68,6 +82,16 @@ fun MiniPlayer(viewModel: PlayerViewModel, onOpen: () -> Unit, onDismiss: () -> 
     var widthPx by remember { mutableIntStateOf(1) }
     LaunchedEffect(dismissable) { if (!dismissable) dragX = 0f }
     val dismissLabel = stringResource(R.string.player_dismiss)
+    val playLabel = stringResource(R.string.player_play)
+    val pauseLabel = stringResource(R.string.player_pause)
+    val direction by rememberTrackDirection(viewModel)
+    // While the full player is (partly) in front, the bar is not reachable (TalkBack, tests).
+    val covered by remember(sheet) { derivedStateOf { sheet.isOpen } }
+
+    val scope = rememberCoroutineScope()
+    val canDismiss by rememberUpdatedState(dismissable)
+    val dismiss by rememberUpdatedState(onDismiss)
+    var settle by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -75,33 +99,43 @@ fun MiniPlayer(viewModel: PlayerViewModel, onOpen: () -> Unit, onDismiss: () -> 
         modifier = modifier
             .fillMaxWidth()
             .onSizeChanged { widthPx = it.width.coerceAtLeast(1) }
-            .graphicsLayer {
-                translationX = dragX
-                alpha = 1f - (abs(dragX) / widthPx).coerceIn(0f, 1f) * 0.8f
-            }
+            // Before the layer: the bar's place without the sideways swipe.
+            .onGloballyPositioned { transition.miniTop = it.positionInRoot().y }
+            // Both gestures sit outside the layer that slides the bar, so the finger is measured on a still frame, and
+            // each claims only its own axis: up opens the full player (following the finger), sideways is the swipe.
+            .playerSheetDrag(sheet)
             // Always takes sideways drags (so a swipe is never a tap that opens the player); when the session may not end
             // the bar only gives a little and springs back.
-            .draggable(
-                orientation = Orientation.Horizontal,
-                state = rememberDraggableState { delta ->
-                    dragX = if (dismissable) dragX + delta else (dragX + delta * 0.25f).coerceIn(-widthPx * 0.08f, widthPx * 0.08f)
+            .horizontalSwipe(
+                onStart = { settle?.cancel() },
+                onDelta = { delta ->
+                    dragX = if (canDismiss) dragX + delta else (dragX + delta * 0.25f).coerceIn(-widthPx * 0.08f, widthPx * 0.08f)
                 },
-                onDragStopped = { velocity ->
-                    val flung = abs(velocity) > 2_000f && sign(velocity) == sign(dragX)
-                    if (dismissable && (abs(dragX) > widthPx * 0.35f || flung)) {
-                        animate(dragX, sign(dragX) * widthPx, animationSpec = tween(150)) { v, _ -> dragX = v }
-                        onDismiss()
-                        // Still here: the session was not ended (e.g. a cast started meanwhile); never stay slid out.
-                        kotlinx.coroutines.delay(300)
-                        animate(dragX, 0f, animationSpec = tween(150)) { v, _ -> dragX = v }
-                    } else {
-                        animate(dragX, 0f, animationSpec = tween(150)) { v, _ -> dragX = v }
+                onStop = { velocity ->
+                    settle = scope.launch {
+                        val flung = abs(velocity) > 2_000f && sign(velocity) == sign(dragX)
+                        if (canDismiss && (abs(dragX) > widthPx * 0.35f || flung)) {
+                            animate(dragX, sign(dragX) * widthPx, animationSpec = tween(150)) { v, _ -> dragX = v }
+                            dismiss()
+                            // Still here: the session was not ended (e.g. a cast started meanwhile); never stay slid out.
+                            kotlinx.coroutines.delay(300)
+                            animate(dragX, 0f, animationSpec = tween(150)) { v, _ -> dragX = v }
+                        } else {
+                            animate(dragX, 0f, animationSpec = tween(150)) { v, _ -> dragX = v }
+                        }
                     }
                 },
             )
+            .graphicsLayer {
+                translationX = dragX
+                alpha = (1f - (abs(dragX) / widthPx).coerceIn(0f, 1f) * 0.8f) * transition.miniAlpha()
+            }
             .semantics {
-                if (dismissable) customActions = listOf(CustomAccessibilityAction(dismissLabel) { onDismiss(); true })
-            },
+                if (dismissable && !covered) customActions = listOf(CustomAccessibilityAction(dismissLabel) { onDismiss(); true })
+            }
+            // Last in the chain: inserting it must not shift (and so restart) the gesture modifiers above while a
+            // finger is opening the player.
+            .then(if (covered) Modifier.clearAndSetSemantics { } else Modifier),
     ) {
         // The bar is the bottom-most element: its background runs under the navigation bar, its content stays above it
         // and clear of a side cutout (landscape).
@@ -119,37 +153,48 @@ fun MiniPlayer(viewModel: PlayerViewModel, onOpen: () -> Unit, onDismiss: () -> 
                         .padding(start = 8.dp, end = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(Modifier.size(48.dp).clip(RoundedCornerShape(6.dp))) {
-                        CoverImage(state.coverUri, state.coverFallback, Modifier.fillMaxSize(), tag = "mini_cover", placeholderIconSize = 24.dp)
+                    Box(
+                        Modifier
+                            .size(MiniCoverSize)
+                            .onGloballyPositioned { if (dragX == 0f) transition.miniCover = Rect(it.positionInRoot(), it.size.toSize()) }
+                            // Hidden once the full player's cover (the same picture) is there and moving.
+                            .graphicsLayer { alpha = if (transition.fullCoverShown()) 0f else 1f }
+                            .coverChange(state.coverUri to state.coverFallback) { direction }
+                            .clip(RoundedCornerShape(6.dp))
+                    ) {
+                        CoverImage(
+                            state.coverUri, state.coverFallback, Modifier.fillMaxSize(), tag = "mini_cover", placeholderIconSize = 24.dp,
+                            requestPx = transition.thumbPx,
+                        )
                     }
                     Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            displayTitle(state.title),
-                            style = MaterialTheme.typography.titleSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.testTag("mini_title"),
-                        )
-                        val error = state.error
-                        if (error != null) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("mini_error"))
+                    // A new title slides in; the line under it follows the current state.
+                    TrackText(state.title, direction, Modifier.weight(1f)) { title ->
+                        Column(Modifier.fillMaxWidth()) {
+                            Text(
+                                displayTitle(title),
+                                style = MaterialTheme.typography.titleSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.testTag("mini_title"),
+                            )
+                            val error = state.error
+                            if (error != null) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("mini_error"))
+                                }
+                            } else if (state.artist.isNotBlank()) {
+                                Text(state.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("mini_artist"))
                             }
-                        } else if (state.artist.isNotBlank()) {
-                            Text(state.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("mini_artist"))
                         }
                     }
                     Box(contentAlignment = Alignment.Center) {
                         IconButton(onClick = { viewModel.playPause() }, modifier = Modifier.size(48.dp).testTag("mini_play_pause")) {
-                            Icon(
-                                if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = stringResource(if (state.isPlaying) R.string.player_pause else R.string.player_play),
-                            )
+                            PlayPauseIcon(state.isPlaying, { if (it) pauseLabel else playLabel }, LocalContentColor.current)
                         }
                         // Loading is shown around the button, not as "paused".
                         if (state.isBuffering) {
@@ -163,6 +208,33 @@ fun MiniPlayer(viewModel: PlayerViewModel, onOpen: () -> Unit, onDismiss: () -> 
                     }
                 }
             }
+        }
+    }
+}
+
+/** Sideways drag, claimed only once the finger has moved sideways by the touch slop (vertical moves are left alone). */
+private fun Modifier.horizontalSwipe(onStart: () -> Unit, onDelta: (Float) -> Unit, onStop: (velocity: Float) -> Unit): Modifier = composed {
+    val start by rememberUpdatedState(onStart)
+    val delta by rememberUpdatedState(onDelta)
+    val stop by rememberUpdatedState(onStop)
+    pointerInput(Unit) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            var over = 0f
+            val first = awaitHorizontalTouchSlopOrCancellation(down.id) { change, o ->
+                change.consume()
+                over = o
+            } ?: return@awaitEachGesture
+            start()
+            val tracker = VelocityTracker()
+            tracker.addPosition(first.uptimeMillis, first.position)
+            delta(over)
+            val lifted = horizontalDrag(first.id) { change ->
+                delta(change.positionChange().x)
+                tracker.addPosition(change.uptimeMillis, change.position)
+                change.consume()
+            }
+            stop(if (lifted) tracker.calculateVelocity().x else 0f)
         }
     }
 }
