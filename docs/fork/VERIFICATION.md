@@ -109,8 +109,8 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - The full suites on API 26 / 33 / 36, the 16 KB-page image and ARM translation on `bf18888` (only API 34 ran all
   suites; API 26 ran `JapaneseUiTest` and `CastCleanupTest`).
 - Real HyperOS hardware (debugging there waived for now), a NAS (postponed), SD cards.
-- Navigation redesign (0.6.0-dev1 … dev4) on a real phone: feel of the mini ⇄ full drag and of the moving cover, the
-  browser, notification tap, Back gesture, TalkBack (see 5.5 and 5.8).
+- Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
+  order and other devices are not checked (see 5.5, 5.8, 5.9).
 
 ### 5.9 Release speed after a pause, reduced motion, landscape playlist Back (0.6.0-dev5, 2026-10-05)
 
