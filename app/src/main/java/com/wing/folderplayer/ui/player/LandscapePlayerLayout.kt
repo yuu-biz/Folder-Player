@@ -20,6 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -189,7 +190,9 @@ fun LandscapeLeftControlPanel(
         BoxWithConstraints(
             modifier = Modifier
                 .weight(1f) // Take all available space
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                // Above its siblings: while moving, the cover passes over the (fading) texts below it.
+                .zIndex(1f),
             contentAlignment = Alignment.Center
         ) {
             val size = minOf(maxHeight, maxWidth)
