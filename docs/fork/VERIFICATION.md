@@ -109,8 +109,40 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - The full suites on API 26 / 33 / 36, the 16 KB-page image and ARM translation on `bf18888` (only API 34 ran all
   suites; API 26 ran `JapaneseUiTest` and `CastCleanupTest`).
 - Real HyperOS hardware (debugging there waived for now), a NAS (postponed), SD cards.
-- Navigation redesign 0.6.0-dev1 on a real phone: feel of opening / closing the player and of the browser, notification
-  tap, Back gesture, TalkBack (see 5.5).
+- Navigation redesign (0.6.0-dev1 … dev4) on a real phone: feel of the mini ⇄ full drag and of the moving cover, the
+  browser, notification tap, Back gesture, TalkBack (see 5.5 and 5.8).
+
+### 5.8 Mini ⇄ full player, stage 2 (0.6.0-dev4, 2026-10-05)
+
+App code as of `a910768` ([UI_REDESIGN.md](UI_REDESIGN.md), "Mini ⇄ full"). Emulator API 34, animator scale at its
+default (1), so the animation path is exercised, not the reduced-motion jump.
+
+| Check | Result |
+|---|---|
+| `assembleDebug assembleDebugAndroidTest lintDebug testDebugUnitTest` (at `2982f61`; `a910768` only changes one comparison, built and run in the rows below) | exit 0; lint 0 errors, 61 warnings (same count; the hits in the player files are unchanged lines); JVM 125, 0 failures, 21 skipped (fixture-server tests) |
+| All instrumentation suites, API 34, default order (25 suites; `PlayerSheetUiTest` added; a first run was cut off when the WSL VM ran out of memory, this is a complete second run on a fresh emulator) | 105 of 106 test processes passed; `BrowserUiTest#a14` (folder-image refresh, untouched code) failed once and passed when run again. New `PlayerSheetUiTest` 9/9, `NavigationUiTest` 16/16, `PlayerSkipTest` 4/4, `OpenPlayerColdStartTest` 2/2, `PlaylistQueueTest` 1/1. An earlier full run on the same code had `NavigationUiTest#n02` fail once ("still playing" right after a shuffle over the 2-second `Many` tracks); it passed in this run and in the runs before |
+| `PlayerSheetUiTest` | s01 tap / Back / ⌄; s02 slow drag follows the finger (held at ~30 %: fraction 0.2–0.4), release below / above half, full → down, reversed mid-way; s03 short flicks both ways, a flick against the position wins; s04 Back from full, Back while a finger holds the player, Back from mini goes to the browser; s05 next while dragging and while folding (clock held mid-animation); s06 drawn cover pixels (held part-way, open), seek sideways seeks and the player stays, flings down on the seek bar and on the lyrics list leave it open, swipe up still opens the playlist, reordering there leaves it, Back closes the playlist first; s07 recreation while opening / folding lands at the logical end, turning while opening ends open in landscape, landscape drag down folds; s08 a fading button tapped mid-move does nothing, Back / taps / expand / collapse in quick succession end at an end, caught mid-move and pulled down, repeated taps; s09 landscape seek length |
+| Idle rendering (`dumpsys gfxinfo`, paused, 10 s) | 0 frames with the mini player and 0 with the full player open |
+| Screenshots (emulator) | slow drag up / down: the cover grows from the mini player's place into the full player and back, the panel edge follows the finger; BLUR + LARGE cover at rest and mid-drag |
+| Signed release build `-PfpVersionName=0.6.0-dev4 -PfpVersionCode=60004` | `FolderPlayerFork-0.6.0-dev4.apk`, SHA-256 `1da9f114edccb8819e2d7c86b937fd9b8ae3c3039edbec383ac9cefa3163d443`; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; signature v2; not debuggable; arm64-v8a + x86_64; `zipalign -c -P 16` (35.0.0) and `check-16k.sh` PASS |
+| Update 0.6.0-dev3 → dev4 (emulator API 34) | dev3 release APK, Japanese, one favourite, a track played; `adb install -r` dev4: versionCode 60003 → 60004, language, favourite (1), folder and last track kept; drag up opens the player |
+
+Found on the way:
+- The full player's cover was not drawn at all (neither moving nor open) while every suite passed: Coil reported the
+  memory-cached thumbnail before `FullCover`'s reset effect ran, and the reset won. Found by screenshots of a slow drag
+  on the emulator, fixed by deriving readiness from the shown cover. `PlayerSheetUiTest#s06` now checks the drawn
+  cover's pixels (held part-way up, and open); that check was added after the fix and was not run against the broken
+  build.
+- `s06` hung in teardown in suite order: the test held a finger on the short lyrics list past its top, the stretch
+  overscroll redraws every frame while held, so `ActivityScenario.close` never saw an idle main looper. Test artefact;
+  the lyrics and seek-bar checks are now released fast flings (a fling the player took would fold it).
+- A drag starting on the mini player never moved it: its `clickable` consumes the down, and the slop check saw that
+  consumed down. The drag now waits for the down to pass the children first.
+- Landscape seek bar used the length of the first track it was shown with (`s09`, fixed code only).
+
+Not checked: reduced motion (`ValueAnimator.areAnimatorsEnabled()` false → jump) is not exercised by a test; Back from
+the landscape playlist overlay during a drag; other API levels; a real phone (feel of the drag, smoothness of the
+cover on a NAS album, BLUR on a real GPU, TalkBack).
 
 ### 5.7 Second review fixes (0.6.0-dev3, 2026-10-04)
 
