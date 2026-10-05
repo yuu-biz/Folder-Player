@@ -94,6 +94,5 @@ touch them.
 - Mini ⇄ full (stage 2): a vertical drag that starts on the seek bar now does nothing (before, an upward one opened the
   playlist); while the player moves (about 0.3 s) a touch anywhere is taken by the player. See
   [UI_REDESIGN.md](UI_REDESIGN.md).
-- How the new navigation feels on a real phone (smoothness of the drag and of the cover's move, reachability) has not
-  been checked yet; the earlier report of stutter when swiping between pages is not explained, so it is not claimed to
-  be fixed.
+- On a real phone the user checked 0.6.0-dev5 (no major problems reported); other phones, and the earlier report of
+  stutter when swiping between pages (never explained), are not checked further.
