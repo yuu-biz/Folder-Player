@@ -1,14 +1,17 @@
-Folder Player Fork {VERSION} — the first stable release of an unofficial personal fork of
-[Folder Player](https://github.com/wyvern3000/Folder-Player). Details of every addition:
-[docs/fork/FEATURES.md]({REPO}/blob/{VERSION_TAG}/docs/fork/FEATURES.md).
+Folder Player Fork {VERSION} — an unofficial personal fork of
+[Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000. It is not affiliated with the original
+project.
 
-- Installs as a separate app (`com.wing.folderplayer.fork`, "Folder Player Fork") next to the original app.
-- Android 8.0 or newer; native decoders for arm64-v8a and x86_64.
-- Signed with the fork's release key, certificate SHA-256 `{CERT_SHA256}`. Updates install only over builds signed
-  with that certificate (0.5.2-rc1 and the 0.6.0-dev builds update in place; 0.5.0-fork.1 and 0.5.1 must be
-  uninstalled once).
+## Install
 
-## Main features
+- Download `FolderPlayerFork-{VERSION}.apk` below and install it (Android 8.0 or newer; arm64-v8a and x86_64). Your
+  browser or file manager may ask for permission to install apps.
+- It installs as a separate app, **Folder Player Fork** (`com.wing.folderplayer.fork`), next to the original
+  Folder Player. Settings, sources and playlists are its own; nothing is taken over from the original app.
+- Signed with the fork's release key, certificate SHA-256 `{CERT_SHA256}`. Later versions install over this one
+  only when they are signed with the same certificate. The APK's SHA-256 is at the end of these notes.
+
+## What this fork adds
 
 - **Sources**: local storage, SAF folders, WebDAV, SMB 2/3, FTP / FTPS; passwords per source in the Android Keystore;
   a connection test that names the failure.
@@ -20,9 +23,11 @@ Folder Player Fork {VERSION} — the first stable release of an unofficial perso
   reordering, track lengths in the list.
 - **Formats**: ALAC, WMA, APE, DSF and DFF through FFmpeg 7.1.5 (DST-compressed DSD is not supported).
 - **Lyrics and info**: LRC, embedded lyrics, CUE sheets, `Info.nfo` album info; optional AI album info, lyrics and
-  translation (off by default).
+  translation (off by default; needs your own OpenAI-compatible endpoint).
 - **More**: DLNA casting (off by default), optional saving of network tracks played to the end, retries of short
   network outages, fonts, languages: English, 日本語, 简体中文, 繁體中文, Français, Italiano.
+
+Details: [docs/fork/FEATURES.md]({REPO}/blob/{VERSION_TAG}/docs/fork/FEATURES.md).
 
 ## Known limitations
 
@@ -32,7 +37,7 @@ Folder Player Fork {VERSION} — the first stable release of an unofficial perso
 - Opening a folder from search results or favourites leaves that list (Back goes to the folder's parent).
 - Settings shows no mini player.
 - Android 8.0 cannot decode FLAC (no platform decoder); DSF / DFF cannot be cast.
-- Tested mainly on emulators (Android 8.0 to 16) and on one phone; not tested with a NAS or on HyperOS devices.
+- Tested on emulators (Android 8.0 to 16) and on one phone; not yet with a NAS or on HyperOS devices.
 
 Full list: [docs/fork/KNOWN_ISSUES.md]({REPO}/blob/{VERSION_TAG}/docs/fork/KNOWN_ISSUES.md).
 
@@ -47,3 +52,4 @@ Full list: [docs/fork/KNOWN_ISSUES.md]({REPO}/blob/{VERSION_TAG}/docs/fork/KNOWN
   [docs/fork/DEPENDENCIES.md]({REPO}/blob/{VERSION_TAG}/docs/fork/DEPENDENCIES.md).
 
 ## SHA-256
+
