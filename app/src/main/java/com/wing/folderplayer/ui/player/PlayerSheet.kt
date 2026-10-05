@@ -58,6 +58,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import kotlinx.coroutines.CoroutineScope
@@ -318,22 +319,22 @@ fun Modifier.playerSheetDrag(sheet: PlayerSheetState, onSwipeUpWhenFull: (() -> 
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             var token = -1
             var moved = false
-            val tracker = VelocityTracker()
+            val velocity = ReleaseVelocity()
             try {
                 if (sheet.isAnimating) {
                     // An outer handler took it already (landscape: root and panel both carry this).
                     if (down.isConsumed) return@awaitEachGesture
                     down.consume()
                     token = sheet.beginDrag()
-                    tracker.addPosition(down.uptimeMillis, down.position)
+                    velocity.moved(down)
                     var travelled = 0f
-                    val lifted = follow(down.id, PointerEventPass.Initial) { change, dy ->
+                    val upAt = follow(down.id, PointerEventPass.Initial) { change, dy ->
                         travelled += abs(dy)
                         if (travelled > viewConfiguration.touchSlop / 2) moved = true
                         sheet.dragBy(token, dy)
-                        tracker.addPosition(change.uptimeMillis, change.position)
+                        velocity.moved(change)
                     }
-                    sheet.endDrag(token, if (lifted) tracker.calculateVelocity().y else 0f, moved)
+                    sheet.endDrag(token, velocity.atRelease(upAt).y, moved)
                     token = -1
                     return@awaitEachGesture
                 }
@@ -360,13 +361,13 @@ fun Modifier.playerSheetDrag(sheet: PlayerSheetState, onSwipeUpWhenFull: (() -> 
 
                 token = sheet.beginDrag()
                 moved = true
-                tracker.addPosition(start.uptimeMillis, start.position)
+                velocity.moved(start)
                 sheet.dragBy(token, over)
-                val lifted = follow(start.id, PointerEventPass.Main) { change, dy ->
+                val upAt = follow(start.id, PointerEventPass.Main) { change, dy ->
                     sheet.dragBy(token, dy)
-                    tracker.addPosition(change.uptimeMillis, change.position)
+                    velocity.moved(change)
                 }
-                sheet.endDrag(token, if (lifted) tracker.calculateVelocity().y else 0f, true)
+                sheet.endDrag(token, velocity.atRelease(upAt).y, true)
                 token = -1
             } finally {
                 // Cancelled (the node left, e.g. the track ended): never stay half-open.
@@ -377,19 +378,43 @@ fun Modifier.playerSheetDrag(sheet: PlayerSheetState, onSwipeUpWhenFull: (() -> 
 }
 
 /**
- * Follows pointer [id] until it is lifted (true) or taken by someone else / gone (false), consuming its moves.
- * In the Main pass a move already consumed by a child ends it.
+ * Release speed of a drag. Moves are recorded as they come; at the release a finger that has not moved for
+ * [StillMillis] counts as stopped (speed 0): the speed of a move the finger has paused after is not a fling.
+ */
+internal class ReleaseVelocity {
+    private val tracker = VelocityTracker()
+    private var lastMoveMillis = 0L
+
+    /** The finger is at [change]'s position (call it for the start and for every actual move). */
+    fun moved(change: PointerInputChange) {
+        tracker.addPosition(change.uptimeMillis, change.position)
+        lastMoveMillis = change.uptimeMillis
+    }
+
+    /** Speed (px/s) at a release at [upMillis]; zero after a pause, and when the gesture did not end with a release (null). */
+    fun atRelease(upMillis: Long?): Velocity =
+        if (upMillis == null || upMillis - lastMoveMillis > StillMillis) Velocity.Zero else tracker.calculateVelocity()
+
+    companion object {
+        /** Longer than the gap between the last move and the lift of a flick (a frame or two). */
+        const val StillMillis = 80L
+    }
+}
+
+/**
+ * Follows pointer [id] until it is lifted (returns the release time) or taken by someone else / gone (null), consuming
+ * its moves. [onDelta] gets only actual moves. In the Main pass a move already consumed by a child ends it.
  */
 private suspend fun AwaitPointerEventScope.follow(
     id: PointerId,
     pass: PointerEventPass,
     onDelta: (PointerInputChange, Float) -> Unit,
-): Boolean {
+): Long? {
     while (true) {
         val event = awaitPointerEvent(pass)
-        val change = event.changes.firstOrNull { it.id == id } ?: return false
-        if (!change.pressed) return true
-        if (pass == PointerEventPass.Main && change.isConsumed) return false
+        val change = event.changes.firstOrNull { it.id == id } ?: return null
+        if (!change.pressed) return change.uptimeMillis
+        if (pass == PointerEventPass.Main && change.isConsumed) return null
         val dy = change.position.y - change.previousPosition.y
         change.consume()
         if (dy != 0f) onDelta(change, dy)

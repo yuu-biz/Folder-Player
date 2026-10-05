@@ -109,11 +109,9 @@ class PlayerSheetUiTest : UiTestBase() {
         compose.waitForIdle()
     }
 
+    /** Moves by [by] in [steps] events spread over [ms] (moveBy's own default delay would add 16 ms per step). */
     private fun TouchInjectionScope.moveInSteps(by: Offset, ms: Long, steps: Int) {
-        repeat(steps) {
-            advanceEventTime(ms / steps)
-            moveBy(Offset(by.x / steps, by.y / steps))
-        }
+        repeat(steps) { moveBy(Offset(by.x / steps, by.y / steps), delayMillis = ms / steps) }
     }
 
     /** The full player's cover, as drawn on screen (moved / scaled), shows the red fixture picture. */
@@ -435,5 +433,133 @@ class PlayerSheetUiTest : UiTestBase() {
         pressBack()
         assertSettled(false, "Back")
         assertTrue("browser reachable after all this", browserShown())
+    }
+
+    /** A short fast move on [tag] by [by] px, then the finger held still for [holdMs] before it is lifted. */
+    private fun flickThenHold(tag: String, start: (Float, Float) -> Offset, by: Offset, holdMs: Long) {
+        compose.onNodeWithTag(tag, useUnmergedTree = true).performTouchInput {
+            down(start(width.toFloat(), height.toFloat()))
+            moveInSteps(by, 60, 6)
+            if (holdMs > 0) advanceEventTime(holdMs)
+            up()
+        }
+        compose.waitForIdle()
+    }
+
+    // Review: the speed of a move the finger has stopped after must not count as a fling at the release.
+    @Test fun s10_aFlickFollowedByAPauseIsNotAFling() {
+        playLong()
+        val r = range()
+        flickThenHold("mini_player", { w, h -> Offset(w / 2, h / 2) }, Offset(0f, -0.12f * r), 1_000)
+        assertSettled(false, "fast up 12 %, held 1 s, released")
+        flickThenHold("mini_player", { w, h -> Offset(w / 2, h / 2) }, Offset(0f, -0.12f * r), 0)
+        assertSettled(true, "fast up 12 %, released at once (fling)")
+        flickThenHold("player_full", { w, h -> Offset(w / 2, h * 0.2f) }, Offset(0f, 0.12f * r), 1_000)
+        assertSettled(true, "fast down 12 %, held 1 s, released")
+        flickThenHold("player_full", { w, h -> Offset(w / 2, h * 0.2f) }, Offset(0f, 0.12f * r), 0)
+        assertSettled(false, "fast down 12 %, released at once (fling)")
+
+        // Sideways on the paused mini player: a held flick is not a swipe away, an immediate one is.
+        click("mini_play_pause")
+        until(5_000, "paused") { !ps.isPlaying }
+        for (dir in listOf(1f, -1f)) {
+            flickThenHold("mini_player", { w, h -> Offset(w / 2, h / 2) }, Offset(dir * 0.15f * node("mini_player").fetchSemanticsNode().size.width, 0f), 1_000)
+            Thread.sleep(800)
+            assertTrue("held sideways flick ($dir) did not end the session", exists("mini_player") && ps.hasTrack)
+        }
+        flickThenHold("mini_player", { w, h -> Offset(w / 2, h / 2) }, Offset(-0.15f * node("mini_player").fetchSemanticsNode().size.width, 0f), 0)
+        until(5_000, "immediate sideways flick ends the session") { !exists("mini_player") && !ps.hasTrack }
+    }
+
+    // Reduced motion: with animations off the player jumps (tap, drag release, Back) and the cover is still drawn.
+    @Test fun s11_withAnimationsOffThePlayerJumpsAndShowsTheCover() {
+        val scales = listOf("animator_duration_scale", "transition_animation_scale", "window_animation_scale")
+        val before = scales.associateWith { Fx.shell("settings get global $it").trim() }
+        try {
+            scales.forEach { Fx.shell("settings put global $it 0") }
+            until(5_000, "animators off in the app") { !onUi { android.animation.ValueAnimator.areAnimatorsEnabled() } }
+            toBrowser()
+            onUi { player.playFolder(SourceRef(local, "$fx/Album-A"), "$fx/Album-A/01 曲 #1+%.flac") }
+            until(15_000, "playing") { ps.isPlaying && ps.currentMediaId?.contains("Album-A") == true }
+            until(5_000, "mini") { exists("mini_player") }
+
+            // Tap: open at once (clock held: nothing animates).
+            compose.mainClock.autoAdvance = false
+            click("mini_player")
+            assertEquals("open at once", 1f, fraction)
+            assertTrue(onSheet { expanded && !isAnimating })
+            compose.mainClock.autoAdvance = true
+            assertSettled(true, "tap")
+            until(5_000, "cover drawn") { coverIsRed() }
+
+            // Back: closed at once.
+            compose.mainClock.autoAdvance = false
+            pressBack()
+            assertEquals("closed at once", 0f, fraction)
+            compose.mainClock.autoAdvance = true
+            assertSettled(false, "Back")
+
+            // Drag: follows the finger, the cover is drawn while held; released below half → mini at once.
+            val r = range()
+            drag("mini_player", 0.5f, -0.35f * r, 800, release = false)
+            assertTrue("follows the finger: $fraction", fraction in 0.25f..0.45f)
+            until(5_000, "cover drawn while held") { coverIsRed() }
+            lift("mini_player")
+            assertSettled(false, "slow release below half")
+            drag("mini_player", 0.5f, -0.7f * r, 800)
+            assertSettled(true, "slow release above half")
+            until(5_000, "cover drawn") { coverIsRed() }
+            pressBack()
+            assertSettled(false, "Back")
+        } finally {
+            compose.mainClock.autoAdvance = true
+            // Explicit values: after a delete the window manager keeps the last scale (0) instead of the default.
+            before.forEach { (k, v) -> Fx.shell("settings put global $k ${if (v == "null" || v.isEmpty()) "1" else v}") }
+        }
+    }
+
+    // Landscape playlist overlay: Back closes it (also in the middle of moving an entry) before it folds the player.
+    @Test fun s12_landscapePlaylistBackClosesTheOverlayFirst() {
+        toBrowser()
+        val files = listOf(MusicFile("long.flac", "$fx/Long/long.flac", false, 0, 0, local)) +
+            (100..102).map { i -> MusicFile("track %03d.flac".format(i), "$fx/Many/Folder %03d/track %03d.flac".format(i, i), false, 0, 0, local) }
+        onUi { player.playCustomList(files, 0) }
+        until(15_000, "playing") { playing("Long") }
+        until(10_000, "queue") { ps.playlist.size == 4 }
+        device.setOrientationLeft()
+        until(10_000, "landscape") { compose.activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE }
+        toPlayer()
+        assertSettled(true, "open in landscape")
+
+        fun openOverlay() {
+            // Swipe up on the left panel.
+            compose.onNodeWithTag("player_full").performTouchInput { swipe(Offset(width * 0.2f, height * 0.85f), Offset(width * 0.2f, height * 0.45f), 200) }
+            until(5_000, "playlist overlay") { exists("playlist_list") && exists("playlist_handle_track 101") }
+            assertSettled(true, "overlay opened")
+        }
+        openOverlay()
+        pressBack()
+        until(5_000, "overlay closed by Back") { !exists("playlist_list") }
+        assertSettled(true, "player still open after the overlay's Back")
+
+        // Back while an entry is being moved: the overlay closes, nothing is moved, the player stays open.
+        openOverlay()
+        val order = ps.activePlaylistItems.map { it.title }
+        val tops = order.take(2).map { node("playlist_row_$it").fetchSemanticsNode().boundsInRoot.top }
+        compose.onNodeWithTag("playlist_handle_track 101", useUnmergedTree = true).performTouchInput {
+            down(center)
+            moveInSteps(Offset(0f, (tops[1] - tops[0]) * 1.5f), 400, 12)
+        }
+        compose.waitForIdle()
+        pressBack()
+        until(5_000, "overlay closed during the move") { !exists("playlist_list") }
+        compose.onNodeWithTag("player_full").performTouchInput { up() }
+        compose.waitForIdle()
+        assertSettled(true, "player still open")
+        assertEquals("no entry moved by a cancelled move", order, ps.activePlaylistItems.map { it.title })
+        assertTrue("current track untouched", playing("Long"))
+
+        pressBack()
+        assertSettled(false, "then Back folds the player")
     }
 }

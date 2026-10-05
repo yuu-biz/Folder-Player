@@ -10,7 +10,6 @@ import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.ui.composed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.ui.input.pointer.util.VelocityTracker
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -226,15 +225,17 @@ private fun Modifier.horizontalSwipe(onStart: () -> Unit, onDelta: (Float) -> Un
                 over = o
             } ?: return@awaitEachGesture
             start()
-            val tracker = VelocityTracker()
-            tracker.addPosition(first.uptimeMillis, first.position)
+            val velocity = ReleaseVelocity()
+            velocity.moved(first)
             delta(over)
+            // Called for sideways moves only; a pause before the lift is no fling (see ReleaseVelocity).
             val lifted = horizontalDrag(first.id) { change ->
                 delta(change.positionChange().x)
-                tracker.addPosition(change.uptimeMillis, change.position)
+                velocity.moved(change)
                 change.consume()
             }
-            stop(if (lifted) tracker.calculateVelocity().x else 0f)
+            val upAt = if (lifted) currentEvent.changes.firstOrNull { !it.pressed }?.uptimeMillis else null
+            stop(velocity.atRelease(upAt).x)
         }
     }
 }
