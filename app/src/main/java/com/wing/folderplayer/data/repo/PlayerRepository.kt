@@ -13,6 +13,7 @@ import com.wing.folderplayer.data.source.SourcePath
 import com.wing.folderplayer.data.source.SourceRef
 import com.wing.folderplayer.data.source.SourceRegistry
 import com.wing.folderplayer.data.source.SourceUris
+import com.wing.folderplayer.data.source.sortMusicFiles
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 
@@ -32,15 +33,8 @@ class PlayerRepository(private val context: Context) {
         SourceRegistry.fileSystem(folder).list(folder.path)
     }
 
-    fun sortFiles(files: List<MusicFile>, field: String?, ascending: Boolean): List<MusicFile> {
-        val sorted = when (field) {
-            "DATE" -> files.sortedBy { it.lastModified }
-            "CREATED" -> files.sortedBy { it.createdOrModified }
-            "SIZE" -> files.sortedBy { it.size }
-            else -> files.sortedBy { it.name.lowercase() }
-        }
-        return if (ascending) sorted else sorted.reversed()
-    }
+    fun sortFiles(files: List<MusicFile>, field: String?, ascending: Boolean): List<MusicFile> =
+        sortMusicFiles(files, field, ascending)
 
     /** Folder image URI for the player/notification (independent of thumbnail switches). */
     suspend fun coverFor(folder: SourceRef, known: List<MusicFile>? = null): String? =

@@ -19,3 +19,19 @@ data class MusicFile(
     val ref: SourceRef get() = SourceRef(sourceId, path)
     val extension: String get() = SourcePath.extension(name)
 }
+
+/**
+ * The one sort order of the browser list and of the playback queue built from a folder. Equal keys (the rule for
+ * "Created": an album copied in one go has the same second for every file) fall back to the name, in the same
+ * direction for both, so the queue always follows the list. Folders first is the caller's business.
+ */
+fun sortMusicFiles(files: List<MusicFile>, field: String?, ascending: Boolean): List<MusicFile> {
+    val byName = compareBy<MusicFile>({ it.name.lowercase() }, { it.name })
+    val primary: Comparator<MusicFile> = when (field) {
+        "DATE" -> compareBy { it.lastModified }
+        "CREATED" -> compareBy { it.createdOrModified }
+        "SIZE" -> compareBy { it.size }
+        else -> byName
+    }
+    return files.sortedWith((if (ascending) primary else primary.reversed()).then(byName))
+}

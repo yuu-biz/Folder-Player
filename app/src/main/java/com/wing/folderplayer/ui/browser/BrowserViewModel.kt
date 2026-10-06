@@ -16,6 +16,7 @@ import com.wing.folderplayer.data.search.SearchRepository
 import com.wing.folderplayer.data.source.ConnectionTestResult
 import com.wing.folderplayer.data.source.MediaTypes
 import com.wing.folderplayer.data.source.MusicFile
+import com.wing.folderplayer.data.source.sortMusicFiles
 import com.wing.folderplayer.data.source.SourceConfig
 import com.wing.folderplayer.data.source.SourcePath
 import com.wing.folderplayer.data.source.SourceRef
@@ -296,14 +297,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         // ALWAYS put folders first
         val (folders, files) = list.partition { it.isDirectory }
 
-        fun sort(l: List<MusicFile>) = when (by) {
-            "NAME" -> if (ascending) l.sortedBy { it.name.lowercase() } else l.sortedByDescending { it.name.lowercase() }
-            "DATE" -> if (ascending) l.sortedBy { it.lastModified } else l.sortedByDescending { it.lastModified }
-            "CREATED" -> if (ascending) l.sortedBy { it.createdOrModified } else l.sortedByDescending { it.createdOrModified }
-            "SIZE" -> if (ascending) l.sortedBy { it.size } else l.sortedByDescending { it.size }
-            else -> l
-        }
-        return sort(folders) + sort(files)
+        return sortMusicFiles(folders, by, ascending) + sortMusicFiles(files, by, ascending)
     }
 
     fun updateCurrentlyPlaying(mediaId: String?) {
