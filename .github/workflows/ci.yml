@@ -1,0 +1,94 @@
+name: CI
+
+# Checks for pushes to main, pull requests and manual runs: debug build, JVM unit tests, lint and the license notices.
+# It needs no secrets, never signs anything and never creates a release (permissions: read-only). Releases are made by
+# release.yml from a tag. The emulator suites and the protocol tests against Docker fixture servers are not run here
+# (see docs/fork/VERIFICATION.md); the JVM tests include the string-resource parity test (StringResourcesParityTest)
+# and skip the protocol tests that need the fixture servers.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch / pull request replaces a running check of the older one.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# The toolchain is the one release.yml uses (same JDK tarball, build-tools, NDK, FFmpeg cache key); keep them in step.
+env:
+  NDK_VERSION: 28.2.13676358
+  BUILD_TOOLS: 35.0.0
+  JBR_TARBALL: jbrsdk-21.0.11-linux-x64-b1163.116.tar.gz
+  JBR_SHA256: 097bf328b5bf5a236c095b8c8e5204c0eda91e5baa06b37383a7754b10671d8b
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JetBrains JDK 21
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/jbr.tar.gz" "https://cache-redirector.jetbrains.com/intellij-jbr/$JBR_TARBALL"
+          echo "$JBR_SHA256  $RUNNER_TEMP/jbr.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/jbr"
+          tar -xzf "$RUNNER_TEMP/jbr.tar.gz" -C "$RUNNER_TEMP/jbr" --strip-components=1
+          echo "FP_JBR_HOME=$RUNNER_TEMP/jbr" >> "$GITHUB_ENV"
+
+      - name: Android SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            "platforms;android-34" "build-tools;$BUILD_TOOLS" "ndk;$NDK_VERSION" "cmake;3.22.1" > /dev/null
+
+      # Same key as release.yml: a cache saved from main is also found by pull requests and by release runs.
+      - name: Cache FFmpeg build
+        uses: actions/cache@v4
+        with:
+          path: |
+            native/out
+            native/src-cache
+          key: ffmpeg-${{ hashFiles('native/build-ffmpeg.sh') }}
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', '**/*.gradle.kts') }}
+          restore-keys: gradle-
+
+      - name: FFmpeg (LGPL, from the pinned source tarball)
+        run: bash native/build-ffmpeg.sh
+
+      # --continue: one run reports every failing task (build, tests, lint) instead of stopping at the first.
+      - name: Build, unit tests and lint
+        run: |
+          chmod +x gradlew
+          bash scripts/wsl-gradle.sh --no-daemon --continue assembleDebug testDebugUnitTest lintDebug
+
+      # Every resolved runtime library has a notice in the app, and the notices asset is current.
+      - name: License notices
+        run: |
+          bash scripts/wsl-gradle.sh --no-daemon -q :app:dependencies --configuration releaseRuntimeClasspath > deps.txt
+          bash scripts/wsl-gradle.sh --no-daemon -q :app:dependencies --configuration coreLibraryDesugaring >> deps.txt
+          python3 scripts/licenses/gen_notices.py --check deps.txt
+          python3 scripts/licenses/gen_notices.py --verify
+          rm -f deps.txt
+
+      - name: Test and lint reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-${{ github.run_number }}
+          path: |
+            app/build/reports
+            app/build/test-results
+          if-no-files-found: ignore
