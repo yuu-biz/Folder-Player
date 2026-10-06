@@ -114,6 +114,19 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.14 Settings two-pane height (1.0.0-dev4, 2026-10-06)
+
+One fix after the dev3 review: Settings used two panes from 600 dp of width alone, so a phone in landscape (about
+720 × 360 dp) got two panes while the rest of the app stays narrow. Now 600 × 480 dp of the Settings window.
+Emulator API 34 only; only the related tests were run.
+
+| Check | Result |
+|---|---|
+| `SettingsLayoutTest#s05_wideButLowWindowKeepsSettingsInOnePane` (new: 720 × 360 dp → one pane, content opens as a page and Back returns to the list; 780 × 600 dp → two panes; back to 720 × 360 → one pane) | on the unchanged code FAIL ("no content pane beside the list"); after the fix PASS |
+| Related tests after the fix | `SettingsLayoutTest` 5/5 (s01 phone navigation, s02 wide two panes, s03 320 dp + font 2.0, s04 keyboard, s05), `AdaptiveLayoutTest#a05` (Back in the wide layout, incl. Settings) PASS |
+| Regular CI on `d690f95` | [run 37462349772](https://github.com/yuu-biz/Folder-Player/actions/runs/37462349772): first attempt FAILED in `SearchRepositoryTest#eachFolderListedOnce` (code not touched by this change: the test counts calls with a plain `listCalls++` while the search lists folders in parallel, so the count can be off by one); the re-run of the same commit succeeded. The previous commit's run (`eb2562b`) was green. Not fixed here |
+| Signed release build `-PfpVersionName=1.0.0-dev4 -PfpVersionCode=1000004` | `FolderPlayerFork-1.0.0-dev4.apk` (not committed; no tag, no release), SHA-256 `18b55b99888fb30b782668d2591d51ab7f218bd2a220d4227e24fc6eef0aea50`; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; not debuggable; arm64-v8a + x86_64; `zipalign -c -P 16` and `check-16k.sh` PASS. Installed on API 34: starts, stays alive after a window change to a wide size, no crash in the log; uninstalled afterwards. `1.0.0-dev3` is superseded |
+
 ### 5.13 UI polish and wide windows toward 1.0.0 (1.0.0-dev3, 2026-10-06)
 
 Branch `feature/ui-adaptive-polish` from `1e8bd4b` (main after the quality hardening). Emulator API 34 only (phone
