@@ -5,6 +5,8 @@ How the fork is built and tested. Commands run from the repository root in WSL U
 
 ## 1. Build, lint, JVM tests
 
+(`.github/workflows/ci.yml` runs the same on every push to main and pull request.)
+
 ```
 bash scripts/wsl-gradle.sh assembleDebug lintDebug testDebugUnitTest
 ```
@@ -111,6 +113,46 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Real HyperOS hardware (debugging there waived for now), a NAS (postponed), SD cards.
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
+
+### 5.12 Quality hardening toward 1.0.0 (1.0.0-dev2, 2026-10-06)
+
+Branch `feature/quality-hardening` from `e022aa0` (main after the stability hardening). Bugs: a failing test on the
+unchanged code first, then the fix. Efficiency: counts / files measured on the unchanged code first (the APKs of that
+state were kept and installed for the "before" run), then again after. Emulator API 34 only; suites one method per
+process. Only the suites related to the change were run (a full run is left to the CI and release checks). Behaviour
+changes: [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+
+| Check | Before | After |
+|---|---|---|
+| Cast: `CastSessionOrderTest` (JVM; fake renderer whose calls wait at a gate) — 9 new tests: command in flight when Stop / another cast is requested (late success and late failure), commands queued behind it, a command pressed while the Stop is talking to the renderer, order of commands, a failing current command | 6 of the 9 FAIL (late "Pause" / error written over the Stop / the new session; queued Play / Seek still sent to the old renderer; Pause sent during the Stop). 3 passed already: current-session commands and their error (guards) and one race that depended on timing | 16/16 PASS (7 existing + 9 new) |
+| Language: `AppLocaleOsTest` (API 34; `cmd locale set-app-locales` as the system settings, texts via `Strings.get`, highlighted choice in Settings › Language) | system-settings direction FAIL (the app kept showing the old language: `AppLocale.get` read its own copy); in-app direction PASS | 2/2 PASS, language back to "System default" afterwards (`cmd locale get-app-locales` → `[]`) |
+| Language: `AppLocaleMigrationTest` (API 34), `AppLocaleTest` (JVM) | — (new) | 5/5 and 4/4 PASS: stored language handed over once; "System default" set later is not overwritten; an existing system choice wins; no stored language leaves the system alone; `zh-Hant-TW` → `zh-TW`, `fr-FR` → `fr` |
+| Cover reads from the source (`ArtworkIoTest`, counting wrapper around the source, 640 px photo-like JPEG) | validation + display: 2 reads; two display sizes: 3 reads | 1 read; 1 read |
+| Thumbnail files for the requested sizes 104 / 120 / 128 px | 3 files | 1 file (bucket 128) |
+| Broken cover first, good one second; failed / permission-denied reads | good one read once, broken one read once (validation) and skipped; failures not remembered (PASS before and after) | same (`ArtworkIoTest` 5/5 PASS) |
+| `ArtworkImageBytesTest`, `ArtworkIndexTest`, `ThumbnailDiskCacheTest` (JVM, fake file system / temp directory) | — (new) | PASS: reads counted on an in-memory NAS (a cache that keeps nothing = the old 2 reads, the cache = 1), broken / failed / cut reads never kept, 3 MB per-image and 12 MB total limits with LRU, no credentials in keys, the index is read on another thread and early changes are not lost, buckets never below the request, LRU eviction, old revision directories and legacy files removed |
+| Related suites after the change | — | `BrowserUiTest` 5/5 (thumbnails, SMB thumbnails, late cover, cache clear, 300 folders), `CastCleanupTest` 1/1, `JapaneseUiTest` 3/3, `ArtworkIoTest` 5/5 |
+| `lintDebug` | 0 errors, 61 warnings + 6 hints | 0 errors, 61 warnings + 6 hints (one `NewApi` error in the first version of `AppLocale` was fixed before the commit) |
+| New regular CI (`ci.yml`, draft PR #1 only to trigger it) | — | [run 37437201950](https://github.com/yuu-biz/Folder-Player/actions/runs/37437201950): success in 7 min 44 s (assembleDebug, testDebugUnitTest, lintDebug, license notices; no secrets, no release step). `release.yml` unchanged |
+| Signed release build `-PfpVersionName=1.0.0-dev2 -PfpVersionCode=1000002` | — | `FolderPlayerFork-1.0.0-dev2.apk` (not committed; no tag, no release), SHA-256 `0a49b60cee625807dc05c0da45f17b01acd8a9520fd40a18f542f1ef0aca40c9`; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; `application-debuggable` absent; arm64-v8a + x86_64; `zipalign -c -P 16` and `check-16k.sh` PASS. Installed on API 34: starts, survives a system-side language change, no crash in the log; uninstalled afterwards |
+
+Values and reasons (artwork cache):
+
+- Buckets 128 / 192 / 288 / 512 px (longer side). Current requests: the list thumbnail is 40 dp (105–140 px at 2.6–3.5×
+  density), grid cells are 1/3–1/5 of the width (216–360 px on a 1080 px phone), the mini player cover is 48 dp. Steps of
+  1.5×–1.8× give at most 1.8× the requested size per side, a new phone or a different grid size lands on an existing
+  bucket, and nothing is cut below the request. 512 px stays the largest cached request (`THUMB_MAX_PX`, unchanged);
+  larger requests (a tablet's 3-column grid, the full player) are not thumbnails and are read from the source as before.
+- 64 MB limit, trimmed to 48 MB when 4 MB were written since the last clean-up (and once per process). Estimate, not
+  measured on a large library: 10–30 KB for 128–192 px and about 100 KB for 512 px thumbnails, so the limit holds a few
+  thousand folders; the cache is in `cacheDir`, so Android may clear it anyway. A hit refreshes the file time at most
+  once an hour (the file time is the "recently used" order).
+- Image bytes shared between validation and display: 12 MB in total and 3 MB per image (4 large covers or about
+  100 typical ones); above that the image is read again for display, as before. Source revision in the key.
+
+Not checked: a real phone or NAS (the "NAS" is a counting wrapper around local files and an in-memory file system);
+other API levels (the per-app language is Android 13+; Android 12 and older use unchanged code paths and were not run);
+the full suite list.
 
 ### 5.11 Stability hardening toward 1.0.0 (1.0.0-dev1, 2026-10-06)
 
