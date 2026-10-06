@@ -114,6 +114,16 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.15 Test flake: `SearchRepositoryTest#eachFolderListedOnce` (2026-10-06, branch `feature/ui-adaptive-polish`)
+
+Only the test changed; `SearchRepository` and `InMemoryFileSystem` are untouched, no new APK (1.0.0-dev4 is still the latest).
+
+| Check | Result |
+|---|---|
+| Reproduction (temporary stress test, not committed: 5000 fresh searches, the old `fs.listCalls++` counter next to a thread-safe per-path count) | old counter wrong in 5 of 5000 runs (the search lists 3 folders at a time and `listCalls++` on a plain `Int` loses updates); the per-path count never differed: every folder under `/Music` was listed exactly once in all 5000 runs, so the search itself is right |
+| Fix | the test counts per path with `ConcurrentHashMap<String, AtomicInteger>` in the lister it hands to `SearchRepository`, and now asserts that exactly the folders below `/Music` were listed and each once (stronger than the old total) |
+| Stability | the committed check repeated 30000 times (temporary stress test): 0 wrong (the old counter would have missed about 30); `SearchRepositoryTest` run 3 more times with the test task cleaned: PASS each time |
+| JVM, all tests | 176 tests, 21 skipped (the fixture-server tests), 0 failures |
 ### 5.14 Settings two-pane height (1.0.0-dev4, 2026-10-06)
 
 One fix after the dev3 review: Settings used two panes from 600 dp of width alone, so a phone in landscape (about

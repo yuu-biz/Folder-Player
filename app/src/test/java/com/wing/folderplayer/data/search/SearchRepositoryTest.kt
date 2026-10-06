@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.last
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -41,10 +43,10 @@ class SearchRepositoryTest {
         assertEquals(1, repo.search(SourceRef("s", "/Music"), "ＢＬＵＥ ＳＫＹ").last().results.size) // NFKC full-width
     }
 
-    @Test fun eachFolderListedOnce() = runBlocking {
-        fs.listCalls = 0
-        repo.search(SourceRef("s", "/Music"), "zzz").last()
-        assertEquals(fs.dirs.count { it.startsWith("/Music") }, fs.listCalls)
+    @Test fun eachFolderListedOnce() {
+        val counts = listCountsOf(fs, "zzz")
+        assertEquals("exactly the folders below the root were listed", fs.dirs.filter { it.startsWith("/Music") }.toSet(), counts.keys)
+        assertTrue("each folder listed once: $counts", counts.values.all { it == 1 })
     }
 
     @Test fun emptyQueryDoesNothing() = runBlocking {
@@ -69,4 +71,15 @@ class SearchRepositoryTest {
         assertEquals(10, p.results.size)
         assertTrue(p.truncated)
     }
+}
+
+/**
+ * Searches [query] below `/Music` of [fs] and returns how often each path was listed. The search lists folders in
+ * parallel, so the counting is thread-safe (a plain counter in the file system double lost updates now and then).
+ */
+internal fun listCountsOf(fs: InMemoryFileSystem, query: String): Map<String, Int> {
+    val counts = ConcurrentHashMap<String, AtomicInteger>()
+    val repo = SearchRepository({ ref -> counts.computeIfAbsent(ref.path) { AtomicInteger() }.incrementAndGet(); fs.list(ref.path) })
+    runBlocking { repo.search(SourceRef("s", "/Music"), query).last() }
+    return counts.mapValues { it.value.get() }
 }
