@@ -149,7 +149,7 @@ class ThumbnailRepository private constructor(private val context: Context) {
      * image's bytes stay in [imageBytes] so that showing it does not read the source again.
      */
     private fun validateImage(entry: MusicFile): Boolean = try {
-        imageBytes.validate(entry, ::decodesAsImage)
+        imageBytes.validate(entry)
     } catch (e: com.wing.folderplayer.data.source.SourceException.TooLarge) {
         false
     }
@@ -197,6 +197,7 @@ class ThumbnailRepository private constructor(private val context: Context) {
             ValidatedImageCache(),
             read = { ref -> SourceRegistry.fileSystem(ref).readBytes(ref.path, MAX_IMAGE_BYTES) },
             revisionOf = { id -> SourceRegistry.get(id)?.revision ?: 0 },
+            decodes = ::decodesAsImage,
         )
 
         /** True when [bytes] decode to a bitmap (a small sample is fully decoded). */

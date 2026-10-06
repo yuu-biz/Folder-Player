@@ -48,7 +48,9 @@ language.
 - A cover on a network source was read twice (validation, then display): now once. Measured with a counting source on
   API 34: 2 reads → 1; two sizes of the same cover 3 → 1 (`ArtworkIoTest`). The bytes are kept in a bounded LRU memory
   cache (12 MB total, 3 MB per image; larger images are read again for display). Only complete reads of decodable
-  images are kept (never a failed, cancelled, permission-denied or broken read); the key is the image URI with its
+  images are kept, whichever side (validation or display) read them: a failed, cancelled, permission-denied, broken or
+  undecodable read, or bytes whose size is not the one in the URI's version, is never kept, so a glitch seen by the display
+  cannot make a later validation pass (found in review before the merge). The key is the image URI with its
   size/mtime version and the source revision, no credentials.
 - The first `positive` lookup read and parsed `artwork-index.json` on the calling (often main) thread: now read on an
   I/O thread when the repository is created; lookups wait for it, changes made meanwhile are merged, saves stay

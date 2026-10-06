@@ -59,13 +59,18 @@ class ValidatedImageCache(
  * Reads image files for the two users of one image: cover validation (is it decodable?) and display (Coil fetcher,
  * notification bitmap). Whatever one of them read is handed to the other through [cache].
  *
+ * Invariant: everything in [cache] decoded successfully ([decodes]) and had the size its version key states, whichever
+ * side read it. So a cache hit means "valid" for [validate], and a glitch (cut connection, an error page, a file being
+ * replaced) read for display is never kept: the next read goes to the source again and recovers.
+ *
  * [read] fetches the whole file and throws for I/O errors; [revisionOf] gives the source's connection revision, so an
- * edited source does not serve bytes read from its old settings.
+ * edited source does not serve bytes read from its old settings; [decodes] tells whether bytes are a decodable image.
  */
 class ArtworkImageBytes(
     val cache: ValidatedImageCache,
     private val read: (SourceRef) -> ByteArray,
     private val revisionOf: (String) -> Int,
+    private val decodes: (ByteArray) -> Boolean,
 ) {
     /** Cache key of an image URI as used by the display side (the URI carries the file's size / mtime as `?v=`). */
     fun keyOf(imageUri: String): String {
@@ -74,31 +79,38 @@ class ArtworkImageBytes(
     }
 
     /**
-     * Reads [entry] (or finds it in the cache) and returns whether [decodes] accepts it. A decodable image is kept for
-     * [load]. I/O exceptions propagate and leave nothing cached; a broken image is not cached either.
+     * Reads [entry] (or finds it in the cache) and returns whether it decodes. A decodable image of the size the listing
+     * gave is kept for [load]. I/O exceptions propagate and leave nothing cached; a broken image is not cached either.
      */
-    fun validate(entry: MusicFile, decodes: (ByteArray) -> Boolean): Boolean {
+    fun validate(entry: MusicFile): Boolean {
         val ref = SourceRef(entry.sourceId, entry.path)
         val key = keyOf(ImageUris.of(ref, entry))
-        if (cache.get(key) != null) return true
+        if (cache.get(key) != null) return true // only valid images are ever stored
         val bytes = read(ref)
         if (!decodes(bytes)) return false
-        // Only when what was read is the file the listing described (same size): otherwise the version key would lie.
-        if (entry.size <= 0 || bytes.size.toLong() == entry.size) cache.put(key, bytes)
+        keepIfConsistent(key, bytes, entry.size)
         return true
     }
 
     /**
      * The bytes behind [imageUri]: from the cache when validation (or an earlier display) already read them, else from
-     * the source. A versioned URI's complete read is kept for the next user; an unversioned one is not (it cannot tell
-     * when the file changes).
+     * the source. A read is kept for the next user only when the URI is versioned, the bytes decode and their size is the
+     * one in the version (otherwise the key would describe another file). The caller gets the bytes in any case: a
+     * broken image is for its own decoder to reject. An unversioned URI is never kept (it cannot tell when the file changes).
      */
     fun load(imageUri: String, ref: SourceRef): ByteArray {
-        val versioned = imageUri.contains("?v=")
-        val key = if (versioned) keyOf(imageUri) else null
+        val key = if (imageUri.contains("?v=")) keyOf(imageUri) else null
         key?.let { cache.get(it) }?.let { return it }
         val bytes = read(ref)
-        if (key != null) cache.put(key, bytes)
+        if (key != null && decodes(bytes)) keepIfConsistent(key, bytes, versionedSize(imageUri))
         return bytes
     }
+
+    private fun keepIfConsistent(key: String, bytes: ByteArray, expectedSize: Long) {
+        if (expectedSize <= 0 || bytes.size.toLong() == expectedSize) cache.put(key, bytes)
+    }
+
+    /** The file size in `?v=<size>-<mtime>` (see [ImageUris.of]); -1 when the URI has none. */
+    private fun versionedSize(imageUri: String): Long =
+        imageUri.substringAfter("?v=", "").substringBefore('-').toLongOrNull() ?: -1
 }

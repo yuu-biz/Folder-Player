@@ -34,6 +34,7 @@ class ArtworkImageBytesTest {
         cache,
         read = { ref -> reads.incrementAndGet(); readsOf.merge(ref.path, 1, Int::plus); fs.readBytes(ref.path, 1L shl 20) },
         revisionOf = { revision },
+        decodes = decodes,
     )
 
     private fun entry(path: String) = fs.stat(path)!!.let { MusicFile(it.name, it.path, false, it.size, it.lastModified, "nas") }
@@ -42,13 +43,13 @@ class ArtworkImageBytesTest {
 
     @Test fun beforeTheCoverWasReadTwiceNowOnce() {
         val before = loader(ValidatedImageCache(maxTotalBytes = 0, maxItemBytes = 0)) // keeps nothing = the old behaviour
-        assertTrue(before.validate(entry("/A/cover.jpg"), decodes))
+        assertTrue(before.validate(entry("/A/cover.jpg")))
         before.load(uri("/A/cover.jpg"), ref("/A/cover.jpg"))
         assertEquals("validation + display", 2, reads.get())
 
         reads.set(0)
         val after = loader()
-        assertTrue(after.validate(entry("/A/cover.jpg"), decodes))
+        assertTrue(after.validate(entry("/A/cover.jpg")))
         val bytes = after.load(uri("/A/cover.jpg"), ref("/A/cover.jpg"))
         assertEquals("validation and display share one read", 1, reads.get())
         assertArrayEquals("IMG-cover".toByteArray(), bytes)
@@ -60,13 +61,13 @@ class ArtworkImageBytesTest {
     @Test fun resolverStillSkipsBrokenImagesAndKeepsOnlyTheGoodOne() {
         fs.put("/A/cover.jpg", "broken".toByteArray(), 111)
         val l = loader()
-        val resolver = ArtworkResolver({ r -> fs.list(r.path) }, { e -> l.validate(e, decodes) })
+        val resolver = ArtworkResolver({ r -> fs.list(r.path) }, { e -> l.validate(e) })
         val r = resolver.resolve(ref("/A")) as ArtworkResult.Found
         assertEquals("/A/folder.png", r.image.path)
         assertNull("the broken image is not kept", l.cache.get(l.keyOf(uri("/A/cover.jpg"))))
         assertNotNull(l.cache.get(l.keyOf(uri("/A/folder.png"))))
         // The broken one is read again when asked for (nothing was remembered about it).
-        assertFalse(l.validate(entry("/A/cover.jpg"), decodes))
+        assertFalse(l.validate(entry("/A/cover.jpg")))
         assertEquals(2, readsOf["/A/cover.jpg"])
         assertEquals(1, readsOf["/A/folder.png"])
     }
@@ -74,15 +75,15 @@ class ArtworkImageBytesTest {
     @Test fun readErrorsAndPermissionLossAreNeverRemembered() {
         val l = loader()
         fs.unreadable.add("/A")
-        val e = runCatching { l.validate(entry("/A/cover.jpg"), decodes) }.exceptionOrNull()
+        val e = runCatching { l.validate(entry("/A/cover.jpg")) }.exceptionOrNull()
         assertTrue("permission error propagates: $e", e is SourceException.PermissionDenied)
         assertEquals(0, l.cache.count)
         fs.truncateAt["/A/folder.png"] = 3
         fs.unreadable.clear()
-        assertTrue(runCatching { l.validate(entry("/A/folder.png"), decodes) }.exceptionOrNull() is IOException)
+        assertTrue(runCatching { l.validate(entry("/A/folder.png")) }.exceptionOrNull() is IOException)
         assertEquals("a cut connection leaves nothing", 0, l.cache.count)
         fs.truncateAt.clear()
-        assertTrue("reconnected: read and kept", l.validate(entry("/A/cover.jpg"), decodes))
+        assertTrue("reconnected: read and kept", l.validate(entry("/A/cover.jpg")))
         assertEquals(1, l.cache.count)
     }
 
@@ -99,7 +100,7 @@ class ArtworkImageBytesTest {
         fs.put("/A/cover.jpg", ByteArray(500).also { "IMG".toByteArray().copyInto(it) }, 111)
         val cache = ValidatedImageCache(maxTotalBytes = 10_000, maxItemBytes = 100)
         val l = loader(cache)
-        assertTrue("still valid", l.validate(entry("/A/cover.jpg"), decodes))
+        assertTrue("still valid", l.validate(entry("/A/cover.jpg")))
         assertEquals(0L, cache.totalBytes)
         l.load(uri("/A/cover.jpg"), ref("/A/cover.jpg"))
         assertEquals("fallback: read again", 2, reads.get())
@@ -131,7 +132,7 @@ class ArtworkImageBytesTest {
     @Test fun anImageThatDoesNotMatchTheListingIsNotKept() {
         val l = loader()
         val stale = entry("/A/cover.jpg").copy(size = 999) // the listing said 999 bytes, the file has 9
-        assertTrue(l.validate(stale, decodes))
+        assertTrue(l.validate(stale))
         assertEquals(0, l.cache.count)
     }
 
@@ -143,9 +144,47 @@ class ArtworkImageBytesTest {
         assertEquals(0, l.cache.count)
     }
 
+    // ---- bytes read for display must meet the same bar as validated ones ----
+
+    @Test fun undecodableBytesReadForDisplayAreNotKeptAndNotTakenAsValid() {
+        val l = loader()
+        val goodUri = uri("/A/cover.jpg")          // version of the good file (9 bytes, mtime 111)
+        fs.put("/A/cover.jpg", "XXX-cover".toByteArray(), 111) // a glitch: same size, not an image
+        val shown = l.load(goodUri, ref("/A/cover.jpg"))
+        assertEquals("the display still gets what was read (it fails to decode it itself)", "XXX-cover", String(shown))
+        assertEquals("nothing undecodable is kept", 0, l.cache.count)
+        assertFalse("validation must not pass on a cache hit of broken bytes", l.validate(entry("/A/cover.jpg")))
+
+        // The source is fine again: the next read recovers (it is not served from a poisoned entry).
+        fs.put("/A/cover.jpg", "IMG-cover".toByteArray(), 111)
+        reads.set(0)
+        assertEquals("IMG-cover", String(l.load(goodUri, ref("/A/cover.jpg"))))
+        assertEquals("read again", 1, reads.get())
+        assertTrue(l.validate(entry("/A/cover.jpg")))
+        assertEquals("kept now, validation does not read again", 1, reads.get())
+    }
+
+    @Test fun bytesThatDoNotMatchTheSizeInTheVersionAreNotKeptUnderThatKey() {
+        val l = loader()
+        val oldUri = uri("/A/cover.jpg")             // ?v=9-111
+        fs.put("/A/cover.jpg", "IMG-cover-replaced-by-a-longer-file".toByteArray(), 111)
+        val bytes = l.load(oldUri, ref("/A/cover.jpg"))
+        assertEquals("the display gets the current file", "IMG-cover-replaced-by-a-longer-file", String(bytes))
+        assertEquals("but not under the old version's key", 0, l.cache.count)
+        l.load(oldUri, ref("/A/cover.jpg"))
+        assertEquals(2, readsOf["/A/cover.jpg"])
+    }
+
+    @Test fun displayFirstThenValidationReadsTheSourceOnce() {
+        val l = loader()
+        assertArrayEquals("IMG-cover".toByteArray(), l.load(uri("/A/cover.jpg"), ref("/A/cover.jpg")))
+        assertTrue(l.validate(entry("/A/cover.jpg")))
+        assertEquals(1, reads.get())
+    }
+
     @Test fun invalidatingASourceDropsItsImages() {
         val l = loader()
-        l.validate(entry("/A/cover.jpg"), decodes)
+        l.validate(entry("/A/cover.jpg"))
         l.cache.removePrefix("fpsrc://nas")
         assertEquals(0, l.cache.count)
     }
