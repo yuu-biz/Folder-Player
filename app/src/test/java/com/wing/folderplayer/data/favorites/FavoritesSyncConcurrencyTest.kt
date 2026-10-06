@@ -138,6 +138,20 @@ class FavoritesSyncConcurrencyTest {
         assertEquals(setOf("/new.flac"), remoteItems(remote.inner).map { it.path }.toSet())
     }
 
+    @Test fun entryAddedWhileReplacingTheRemoteIsWritten() {
+        val r = repo()
+        r.add(localOnly) // A
+        val remote = GatedFs(remoteWith(remoteSong), gateWrites = true)
+        val replace = pool.submit<SyncResult> { r.replaceRemote(remote, "/fav.json") }
+        assertTrue(remote.entered.await(5, TimeUnit.SECONDS))
+        pool.submit { r.add(addedDuringSync) }.within(1_000, "add during replace") // B
+        remote.release.countDown()
+        val res = replace.get(10, TimeUnit.SECONDS)
+        assertTrue("$res", res is SyncResult.Synced && res.total == 2)
+        assertEquals("the remote is the local list when replace returns", setOf("/local.flac", "/new.flac"),
+            remoteItems(remote.inner).map { it.path }.toSet())
+    }
+
     @Test fun syncsRunOneAfterAnother() {
         val r = repo()
         r.add(localOnly)
