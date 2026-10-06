@@ -15,7 +15,8 @@
     <string name="common_retry">再試行</string>
     <string name="common_back">戻る</string>
     <string name="sort_name">名前</string>
-    <string name="sort_date">日付</string>
+    <string name="sort_date">更新日</string>
+    <string name="sort_created">作成日</string>
     <string name="sort_size">サイズ</string>
     <string name="browser_sources_title">音楽ソース</string>
     <string name="browser_back_to_sources">ソース一覧に戻る</string>

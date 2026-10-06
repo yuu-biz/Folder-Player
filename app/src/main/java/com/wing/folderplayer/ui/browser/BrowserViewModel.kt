@@ -299,6 +299,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         fun sort(l: List<MusicFile>) = when (by) {
             "NAME" -> if (ascending) l.sortedBy { it.name.lowercase() } else l.sortedByDescending { it.name.lowercase() }
             "DATE" -> if (ascending) l.sortedBy { it.lastModified } else l.sortedByDescending { it.lastModified }
+            "CREATED" -> if (ascending) l.sortedBy { it.createdOrModified } else l.sortedByDescending { it.createdOrModified }
             "SIZE" -> if (ascending) l.sortedBy { it.size } else l.sortedByDescending { it.size }
             else -> l
         }

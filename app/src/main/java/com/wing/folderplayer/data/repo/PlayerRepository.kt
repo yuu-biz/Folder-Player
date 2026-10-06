@@ -35,6 +35,7 @@ class PlayerRepository(private val context: Context) {
     fun sortFiles(files: List<MusicFile>, field: String?, ascending: Boolean): List<MusicFile> {
         val sorted = when (field) {
             "DATE" -> files.sortedBy { it.lastModified }
+            "CREATED" -> files.sortedBy { it.createdOrModified }
             "SIZE" -> files.sortedBy { it.size }
             else -> files.sortedBy { it.name.lowercase() }
         }

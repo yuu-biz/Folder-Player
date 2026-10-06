@@ -257,3 +257,19 @@ never "closed" by Back.
 
 **Hinge.** No fold / hinge information is used: both panes are plain rectangles. If a hinge separates the window, the
 browser pane's right edge is at 40 % of the width, not at the hinge. (Not verified on a real foldable; see KNOWN_ISSUES.)
+
+## Sort by creation date (1.0.0-dev5)
+
+The sort buttons are Name, **Modified** (what "Date" was), **Created**, Size; "Created" is also a choice for the default sort in
+Settings › Library & network. Where a source tells a creation time, files are sorted by it; where it does not (or a single file
+has none), that file is placed by its modification time (`MusicFile.createdOrModified`), so the list never has holes.
+
+| Source | Creation time |
+|---|---|
+| Local (this device) | the time the file was **added to the media library** (`MediaStore` `DATE_ADDED`: when it appeared on the device). Android gives apps no birth time of a file: `BasicFileAttributes.creationTime` returns the modification time (checked on API 34), so it is used only where it differs from it. Files the media library does not list (not audio / images the app may read, folders) → modification time |
+| SMB | the share's creation time (`smbj` `creationTime`) |
+| WebDAV, FTP, SAF folders | none → modification time |
+
+The buttons are always there (the fallback makes them harmless). The row shows the creation date beside the format while the list
+is sorted by it. The sort row is as wide as its buttons: with four equal buttons while the names fit, and scrolling sideways
+(never breaking a name) with a large font or in the narrow browser pane.

@@ -6,6 +6,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -402,13 +404,17 @@ private fun SearchStatus(s: SearchUiState, onCancel: () -> Unit) {
 
 @Composable
 fun SortHeader(currentField: String, ascending: Boolean, onSortClick: (String) -> Unit) {
+    // Four equal buttons while their names fit; with a large font or a narrow pane a button is as wide as its name and the
+    // row scrolls sideways (a name is never broken in the middle of a word).
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val equalWidth = ((maxWidth - 16.dp - 8.dp * 3) / 4).coerceAtLeast(48.dp)
     Row(
         modifier = Modifier
-            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
             .padding(horizontal = 8.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        listOf("NAME" to R.string.sort_name, "DATE" to R.string.sort_date, "SIZE" to R.string.sort_size).forEach { (field, label) ->
+        listOf("NAME" to R.string.sort_name, "DATE" to R.string.sort_date, "CREATED" to R.string.sort_created, "SIZE" to R.string.sort_size).forEach { (field, label) ->
             val isSelected = currentField == field
             val direction = stringResource(if (ascending) R.string.settings_ascending else R.string.settings_descending)
             Surface(
@@ -416,14 +422,14 @@ fun SortHeader(currentField: String, ascending: Boolean, onSortClick: (String) -
                 shape = RoundedCornerShape(8.dp),
                 color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                 contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f).semantics { selected = isSelected; if (isSelected) stateDescription = direction }
+                modifier = Modifier.widthIn(min = equalWidth).semantics { selected = isSelected; if (isSelected) stateDescription = direction }.testTag("sortbtn_$field")
             ) {
                 Row(
                     modifier = Modifier.heightIn(min = 48.dp).padding(vertical = 8.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(stringResource(label), style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(label), style = MaterialTheme.typography.labelLarge, maxLines = 1, softWrap = false, modifier = Modifier.padding(horizontal = 8.dp))
                     if (isSelected) {
                         Icon(
                             if (ascending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
@@ -434,6 +440,7 @@ fun SortHeader(currentField: String, ascending: Boolean, onSortClick: (String) -
                 }
             }
         }
+    }
     }
 }
 
@@ -632,6 +639,7 @@ fun FileList(
                                     isUnsupported -> null
                                     sortField == "SIZE" && file.size > 0 -> formatSize(file.size)
                                     sortField == "DATE" && file.lastModified > 0 -> dateFormatter.format(Date(file.lastModified))
+                                    sortField == "CREATED" && file.createdOrModified > 0 -> dateFormatter.format(Date(file.createdOrModified))
                                     else -> null
                                 }
                                 Text(

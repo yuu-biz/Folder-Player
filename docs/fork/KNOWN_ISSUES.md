@@ -22,6 +22,12 @@ See "1.0.0 UI polish" in [UI_REDESIGN.md](UI_REDESIGN.md) for what the screens d
 - When the window turns wide while the full player is open on the phone, the sheet's state is kept: turning narrow again
   shows the full player again (not the mini player).
 - The mini player's height grows with the font size, so with a very large font it takes more of the list than before.
+- **"Created" is not the file's birth time on this device.** Android does not give apps a birth time. For local files "Created" is the
+  time the file was added to the media library (when it appeared on the phone; a file copied with its old modification time
+  is "created" when it was copied), for SMB the share's creation time; WebDAV, FTP, SAF folders and files the media library
+  does not list sort by the modification time. Checked on an API 34 emulator only; how far the media library's time matches
+  the real creation on other phones (and after a library rescan or a restore from backup) is not known.
+- The "Date" sort is now named "Modified" (the same sort as before).
 - Browser rows no longer show the size and the modification time; they are in the long-press sheet (and next to the
   format while sorted by size / date).
 - A very long title in the player is still shrunk sideways to fit one line (`TextCompressed`, unchanged); with a large

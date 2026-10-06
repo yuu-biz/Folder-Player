@@ -15,7 +15,8 @@
     <string name="common_retry">重试</string>
     <string name="common_back">返回</string>
     <string name="sort_name">名称</string>
-    <string name="sort_date">日期</string>
+    <string name="sort_date">修改日期</string>
+    <string name="sort_created">创建日期</string>
     <string name="sort_size">大小</string>
     <string name="browser_sources_title">音乐来源</string>
     <string name="browser_back_to_sources">返回来源列表</string>
