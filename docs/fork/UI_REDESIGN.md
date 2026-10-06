@@ -199,7 +199,7 @@ untouched). No row has a fixed width or height: rows grow with the text, every c
 page scrolls with the keyboard open (`imePadding`).
 
 - Phone / narrow window (< 600 dp wide): one pane. Back goes up one level: page → category → category list → browser.
-- Wide window (≥ 600 dp wide, measured on the Settings window itself): the category list stays on the left (300 dp), the
+- Wide window (≥ 600 dp wide and ≥ 480 dp high, measured on the Settings window itself: a phone in landscape, about 720 × 360 dp, stays one pane): the category list stays on the left (300 dp), the
   category's settings (or page) on the right. The first category is shown until another is chosen. Back: page →
   category → browser (the list is always there, so there is no "up" from a category).
 
@@ -234,7 +234,7 @@ The layout follows the size of the window the app has now (rotation, fold / unfo
 | Browser | page | left pane, 40 % of the width between 320 and 480 dp |
 | Player | mini player + sheet (mini ⇄ full) | right pane, docked: the same player content, always open |
 | Mini player | at the bottom | none |
-| Settings | one pane | two panes (also whenever the Settings window is ≥ 600 dp) |
+| Settings | one pane | two panes (also in a smaller window that is ≥ 600 × 480 dp) |
 | System bars in landscape | hidden (immersive) | kept |
 
 One `PlayerViewModel`, one `MediaController`, one queue: `DockedPlayerPane` shows `MainPlayerScreen` with

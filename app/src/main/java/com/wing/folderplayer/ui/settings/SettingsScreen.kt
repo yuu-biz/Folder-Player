@@ -81,8 +81,13 @@ internal enum class SettingsSub(val id: String, val title: Int, val parent: Sett
     }
 }
 
-/** Width from which Settings shows the categories beside their content. Measured on the Settings window itself. */
+/**
+ * Size from which Settings shows the categories beside their content, measured on the Settings window itself. Narrower
+ * than the player's wide layout (640 dp) is fine for a list and a page, but the height is the same (480 dp): a phone in
+ * landscape (about 720 x 360 dp) is wide and low, and stays one pane there like the rest of the app.
+ */
 private val TwoPaneMinWidth = 600.dp
+private val TwoPaneMinHeight = 480.dp
 private val CategoryListWidth = 300.dp
 
 /**
@@ -114,7 +119,7 @@ fun SettingsScreen(
 
     Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = horizontalSafePadding).testTag("settings_column")) {
-            val twoPane = maxWidth >= TwoPaneMinWidth
+            val twoPane = maxWidth >= TwoPaneMinWidth && maxHeight >= TwoPaneMinHeight
             val category = SettingsCategory.byId(categoryId)
             // Narrow: no category = the list. Wide: the list is always there, and the first category is shown until one is chosen.
             val shownCategory = if (twoPane) category ?: SettingsCategory.values().first() else category
