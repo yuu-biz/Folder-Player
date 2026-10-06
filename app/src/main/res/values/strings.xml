@@ -19,7 +19,8 @@
 
     <!-- sort -->
     <string name="sort_name">Name</string>
-    <string name="sort_date">Date</string>
+    <string name="sort_date">Modified</string>
+    <string name="sort_created">Created</string>
     <string name="sort_size">Size</string>
 
     <!-- browser -->

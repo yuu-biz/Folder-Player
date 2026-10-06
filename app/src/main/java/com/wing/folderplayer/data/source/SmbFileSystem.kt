@@ -171,6 +171,7 @@ class SmbFileSystem(override val config: SourceConfig, credentials: CredentialSt
                     size = if (dir) 0 else it.endOfFile,
                     lastModified = it.lastWriteTime.toEpochMillis(),
                     sourceId = config.id,
+                    createdAt = it.creationTime.toEpochMillis(),
                 )
             }
     }
@@ -181,7 +182,8 @@ class SmbFileSystem(override val config: SourceConfig, credentials: CredentialSt
             val dir = info.standardInformation.isDirectory
             val p = SourcePath.normalize(path)
             MusicFile(SourcePath.name(p), p, dir, if (dir) 0 else info.standardInformation.endOfFile,
-                info.basicInformation.lastWriteTime.toEpochMillis(), config.id)
+                info.basicInformation.lastWriteTime.toEpochMillis(), config.id,
+                info.basicInformation.creationTime.toEpochMillis())
         }
     } catch (e: SourceException.NotFound) {
         null

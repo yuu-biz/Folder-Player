@@ -120,7 +120,7 @@ object SourceRegistry {
             InMemoryCredentialStore().apply { put(cfg.effectiveCredentialRef, passwordOverride) }
         } else credentials
         return when (cfg.type) {
-            SourceType.LOCAL -> LocalFileSystem(cfg)
+            SourceType.LOCAL -> LocalFileSystem(cfg, appContext)
             SourceType.SAF -> SafFileSystem(cfg, appContext)
             SourceType.WEBDAV -> WebDavFileSystem(cfg, store)
             SourceType.SMB -> SmbFileSystem(cfg, store)

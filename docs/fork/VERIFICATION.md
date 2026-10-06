@@ -114,6 +114,22 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.16 Sort by creation date (1.0.0-dev5, 2026-10-06)
+
+Local and SMB give a creation time, every other source falls back to the modification time (what was asked for). Emulator API 34 only.
+
+| Check | Result |
+|---|---|
+| What Android gives for a local file | `BasicFileAttributes.creationTime` returned the modification time for files whose modification time had been changed (first version: `CreatedSortTest` a was skipped by its assumption "this device reports the modification time as creation time"), so the local creation time is the media library's `DATE_ADDED`; the NIO value is used only where it differs from the modification time |
+| `CreatedSortTest` (new, 3): local files made one after the other (1.2 s apart) and given the opposite modification times — Modified oldest-first c3,c2,c1; Created oldest-first c1,c2,c3; newest-first c3,c2,c1; the choice is stored for the folder; SMB share: every file has a creation time and the order follows it; WebDAV: no creation time (0) and the order is the modification order | 3/3 PASS |
+| `CreationTimeTest` (JVM, new): `createdOrModified`, a local listing / stat on a real temporary file (a time near now or nothing, never the old modification time) | PASS |
+| Related suites | `MigrationTest` (stored sort fields), `LibraryUiTest` 5/5, `BrowserUiTest` 5/5, `SettingsLayoutTest` 5/5, `NavigationUiTest` 16/16 — 32 test processes, exit 0 (run on the commit before the sort row was made scrollable) |
+| Screenshots | four equal sort buttons on a 411 dp phone and in the browser pane; with font 2.0 on 320 dp the first version broke "Name" / "Modified" in the middle of a word — the row now scrolls sideways instead (looked at again) |
+| `testDebugUnitTest` / `lintDebug` | 178 tests, 21 skipped, 0 failures / 0 errors, 61 warnings + 5 hints |
+| Signed release build `-PfpVersionName=1.0.0-dev5 -PfpVersionCode=1000005` | `FolderPlayerFork-1.0.0-dev5.apk` (not committed; no tag, no release), SHA-256 `11173b35c760b9ec2fdb74f616088c4bd4600d7357336bab58a99c7af4282fb3`; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; arm64-v8a + x86_64; `zipalign -c -P 16` and `check-16k.sh` PASS. Not installed on the emulator (the code is the one tested above) |
+
+Not checked: a real phone (whether the media library's time is a good creation time there), SAF / FTP sources (they have none by design).
+
 ### 5.15 Test flake: `SearchRepositoryTest#eachFolderListedOnce` (2026-10-06, branch `feature/ui-adaptive-polish`)
 
 Only the test changed; `SearchRepository` and `InMemoryFileSystem` are untouched, no new APK (1.0.0-dev4 is still the latest).

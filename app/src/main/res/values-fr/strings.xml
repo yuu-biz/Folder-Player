@@ -15,7 +15,8 @@
     <string name="common_retry">Réessayer</string>
     <string name="common_back">Retour</string>
     <string name="sort_name">Nom</string>
-    <string name="sort_date">Date</string>
+    <string name="sort_date">Modifié</string>
+    <string name="sort_created">Créé</string>
     <string name="sort_size">Taille</string>
     <string name="browser_sources_title">Sources musicales</string>
     <string name="browser_back_to_sources">Retour aux sources</string>

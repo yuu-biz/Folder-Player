@@ -286,7 +286,7 @@ private fun LibraryPage(openSub: (SettingsSub) -> Unit, browserViewModel: Browse
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
             Text(stringResource(R.string.settings_default_sort), style = MaterialTheme.typography.bodyLarge)
             ChoiceChips(
-                listOf("NAME" to stringResource(R.string.sort_name), "DATE" to stringResource(R.string.sort_date), "SIZE" to stringResource(R.string.sort_size)),
+                listOf("NAME" to stringResource(R.string.sort_name), "DATE" to stringResource(R.string.sort_date), "CREATED" to stringResource(R.string.sort_created), "SIZE" to stringResource(R.string.sort_size)),
                 defaultSort.field, "sort", Modifier.padding(top = 4.dp),
             ) { defaultSort = defaultSort.copy(field = it); sourcePrefs.saveDefaultSort(defaultSort.field, defaultSort.ascending) }
             ChoiceChips(

@@ -11,7 +11,7 @@ import java.io.RandomAccessFile
  * READ_MEDIA_AUDIO, images READ_MEDIA_IMAGES (or a partial selection on 14+), and non-media files such as .lrc/.nfo
  * of other apps are not visible at all. Folders that need those files must be added as a SAF source.
  */
-class LocalFileSystem(override val config: SourceConfig) : SourceFileSystem {
+class LocalFileSystem(override val config: SourceConfig, private val context: android.content.Context? = null) : SourceFileSystem {
     private val root: File = File(config.url).absoluteFile
 
     override val capabilities = setOf(SourceCapability.WRITE, SourceCapability.RANDOM_ACCESS)
@@ -33,6 +33,7 @@ class LocalFileSystem(override val config: SourceConfig) : SourceFileSystem {
         if (!dir.isDirectory) throw SourceException.NotFound("not a directory: $path")
         val children = dir.listFiles() ?: throw SourceException.PermissionDenied("cannot list $path")
         val parent = SourcePath.normalize(path)
+        val added = addedTimes(dir)
         return children.map {
             MusicFile(
                 name = it.name,
@@ -41,15 +42,55 @@ class LocalFileSystem(override val config: SourceConfig) : SourceFileSystem {
                 size = if (it.isDirectory) 0 else it.length(),
                 lastModified = it.lastModified(),
                 sourceId = config.id,
+                createdAt = added[it.name] ?: creationTime(it),
             )
         }
+    }
+
+    /**
+     * Creation time of a file. Android does not give apps the birth time of a file: `BasicFileAttributes.creationTime` returns the
+     * modification time (checked on API 34), so it is only used when it differs from it (a file system that does keep one).
+     * 0 = not known.
+     */
+    private fun creationTime(f: File): Long = runCatching {
+        val a = java.nio.file.Files.readAttributes(f.toPath(), java.nio.file.attribute.BasicFileAttributes::class.java)
+        a.creationTime().toMillis().takeIf { it != a.lastModifiedTime().toMillis() } ?: 0L
+    }.getOrDefault(0L)
+
+    /**
+     * When the files of [dir] (direct children) were added to the device's media library, by name, in ms: the time they
+     * appeared on the device, which is what is left of a creation time on Android. Only files the media library knows (audio,
+     * images the app may read); anything else, or a failing query, gives nothing and the sort falls back to the
+     * modification time. Needs a context (without one, e.g. in JVM tests, the map is empty).
+     */
+    private fun addedTimes(dir: File?): Map<String, Long> {
+        val ctx = context ?: return emptyMap()
+        if (dir == null) return emptyMap()
+        val prefix = dir.absolutePath.trimEnd('/') + "/"
+        return runCatching {
+            val out = HashMap<String, Long>()
+            val data = android.provider.MediaStore.MediaColumns.DATA
+            ctx.contentResolver.query(
+                android.provider.MediaStore.Files.getContentUri("external"),
+                arrayOf(data, android.provider.MediaStore.MediaColumns.DATE_ADDED),
+                "$data LIKE ? AND $data NOT LIKE ?", arrayOf("$prefix%", "$prefix%/%"), null,
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    val p = c.getString(0) ?: continue
+                    val sec = c.getLong(1)
+                    // LIKE treats "_" and "%" of the folder name as wildcards: check the prefix and the depth again.
+                    if (sec > 0 && p.startsWith(prefix) && !p.substring(prefix.length).contains('/')) out[p.substring(prefix.length)] = sec * 1000
+                }
+            }
+            out
+        }.getOrDefault(emptyMap())
     }
 
     override fun stat(path: String): MusicFile? {
         val f = file(path)
         if (!f.exists()) return null
         val p = SourcePath.normalize(path)
-        return MusicFile(SourcePath.name(p), p, f.isDirectory, if (f.isDirectory) 0 else f.length(), f.lastModified(), config.id)
+        return MusicFile(SourcePath.name(p), p, f.isDirectory, if (f.isDirectory) 0 else f.length(), f.lastModified(), config.id, creationTime(f))
     }
 
     override fun openRead(path: String, offset: Long, length: Long): SourceInput {
