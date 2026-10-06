@@ -346,15 +346,32 @@ class PlayerViewModel : ViewModel() {
         return player ?: controller
     }
 
-    /** Incremented by every user play request; delayed work of an older request checks it before touching the player. */
+    /**
+     * Identifies the latest play request (folder, list, playlist, CUE, restore, next folder). Every request captures it
+     * when it starts; after each wait (connection, network listing, cover lookup, delays) its work goes on only while
+     * it is still the latest. Cancelling the older coroutine is not enough: network I/O that ignores the interrupt
+     * returns late, and some lookups swallow the cancellation.
+     */
     private var playRequestGeneration = 0
 
-    private fun cancelRestore() {
+    /** The coroutine of the latest play request (not the restore). */
+    private var playJob: kotlinx.coroutines.Job? = null
+
+    private fun isCurrent(generation: Int) = generation == playRequestGeneration
+
+    /** Starts a user play request (or ends the session): earlier requests and the restore can no longer apply anything. */
+    private fun newPlayRequest(): Int {
         userStartedPlayback = true
         playRequestGeneration++
+        playJob?.cancel()
+        playJob = null
         restoreJob?.cancel()
         restoreJob = null
         isRestoring = false
+        // A target of an older request would hold back the metadata of this one until it appears, i.e. forever.
+        pendingPlayIntent = null
+        pendingQueueIndex = null
+        return playRequestGeneration
     }
 
     private fun restoreLastState() {
@@ -362,24 +379,29 @@ class PlayerViewModel : ViewModel() {
         val folder = prefs.getLastFolder() ?: return
         val mediaId = prefs.getLastMediaId() ?: return
         if (SourceRegistry.get(folder.sourceId) == null) { isRestoring = false; return }
+        // Only started while no user request exists; the first one makes it stale.
+        val generation = playRequestGeneration
 
         restoreJob = viewModelScope.launch(exceptionHandler) {
             try {
                 if (SourceUris.isCueTrackId(mediaId)) {
                     val audio = SourceUris.parse(mediaId) ?: return@launch
                     val cue = SourceRef(audio.sourceId, SourcePath.baseName(audio.path) + ".cue")
-                    playCueSheetInternal(cue, mediaId, prefs.getLastPosition(), playWhenReady = false)
+                    playCueSheetInternal(cue, mediaId, prefs.getLastPosition(), playWhenReady = false, generation)
                 } else if (mediaId.lowercase().endsWith(".cue")) {
-                    playCueSheetInternal(SourceUris.parse(mediaId) ?: return@launch, null, prefs.getLastPosition(), playWhenReady = false)
+                    playCueSheetInternal(SourceUris.parse(mediaId) ?: return@launch, null, prefs.getLastPosition(), playWhenReady = false, generation)
                 } else {
-                    playFolderInternal(folder, SourceUris.parse(mediaId)?.path, prefs.getLastPosition(), playWhenReady = false)
+                    playFolderInternal(folder, SourceUris.parse(mediaId)?.path, prefs.getLastPosition(), playWhenReady = false, generation)
                 }
+                if (!isCurrent(generation)) return@launch
                 queuePlaylistId = null
                 val defaultItems = playlistManager?.getPlaylist("default")?.items
                 if (defaultItems != null && queueHolds(defaultItems)) queuePlaylistId = "default"
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("PlayerViewModel", "restore failed: ${e.message}")
-                isRestoring = false
+                if (isCurrent(generation)) isRestoring = false
             }
         }
     }
@@ -759,17 +781,20 @@ class PlayerViewModel : ViewModel() {
 
     private fun checkAndPlayNextFolder() {
         if (!_uiState.value.autoNextFolder) return
-        viewModelScope.launch(exceptionHandler) {
-            moveNextFolder()
+        // A play request still loading decides what plays next (this also runs once per end-of-queue event, twice).
+        if (playJob?.isActive == true) return
+        val generation = ++playRequestGeneration
+        playJob = viewModelScope.launch(exceptionHandler) {
+            moveNextFolder(generation)
         }
     }
 
-    private suspend fun moveNextFolder() {
+    private suspend fun moveNextFolder(generation: Int) {
         val folder = currentFolder ?: return
         val parent = folder.parent ?: return
 
-        val siblings = try { repo().list(parent) } catch (e: Exception) { emptyList() }.filter { it.isDirectory }
-        if (siblings.isEmpty()) return
+        val siblings = try { repo().list(parent) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { emptyList() }.filter { it.isDirectory }
+        if (!isCurrent(generation) || siblings.isEmpty()) return
 
         val sortOption = sourcePreferences?.getDirectorySort(parent) ?: sourcePreferences?.getDefaultSort()
             ?: com.wing.folderplayer.data.prefs.SourcePreferences.SortOption("NAME", true)
@@ -778,7 +803,7 @@ class PlayerViewModel : ViewModel() {
         val currentIndex = sortedSiblings.indexOfFirst { it.path == folder.path }
         if (currentIndex != -1 && currentIndex < sortedSiblings.size - 1) {
             val nextFolder = sortedSiblings[currentIndex + 1]
-            playFolderInternal(nextFolder.ref, null, 0L, playWhenReady = true)
+            playFolderInternal(nextFolder.ref, null, 0L, playWhenReady = true, generation)
         }
     }
 
@@ -942,7 +967,7 @@ class PlayerViewModel : ViewModel() {
         if (p?.isPlaying == true) return
         // Casting pauses the phone: the session goes on on the renderer and must keep its controls here.
         if (appContext?.let { com.wing.folderplayer.cast.CastController.get(it).state.value.sessionInProgress } == true) return
-        cancelRestore()
+        newPlayRequest() // a request still loading must not bring the session back
         metadataJob?.cancel()
         aiLyricsJob?.cancel()
         progressJob?.cancel()
@@ -1059,7 +1084,7 @@ class PlayerViewModel : ViewModel() {
 
     /** Plays a folder, optionally starting at [startPath] (source-relative path of a file in it). */
     fun playFolder(folder: SourceRef, startPath: String? = null) {
-        cancelRestore()
+        val generation = newPlayRequest()
         val pendingTitle = startPath?.let { SourcePath.baseName(SourcePath.name(it)) } ?: "Loading..."
         _uiState.value = _uiState.value.copy(
             currentTitle = pendingTitle,
@@ -1077,19 +1102,21 @@ class PlayerViewModel : ViewModel() {
         pendingQueueIndex = null
         pendingPlayIntent = startPath?.let { SourceUris.toUri(folder.sourceId, it) } ?: "ANY_NEW"
 
-        viewModelScope.launch(exceptionHandler) {
+        playJob = viewModelScope.launch(exceptionHandler) {
             try {
                 awaitPlayer()
-                playFolderInternal(folder, startPath, 0L, playWhenReady = true)
+                playFolderInternal(folder, startPath, 0L, playWhenReady = true, generation)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isBuffering = false, playbackError = errorText(e))
+                if (isCurrent(generation)) _uiState.value = _uiState.value.copy(isBuffering = false, playbackError = errorText(e))
             }
         }
     }
 
     /** Plays [files] (already sorted as shown) starting at [startIndex]. */
     fun playCustomList(files: List<MusicFile>, startIndex: Int) {
-        cancelRestore()
+        val generation = newPlayRequest()
         val firstFile = files.getOrNull(startIndex) ?: return
         // Shown at once, also while the controller is still connecting after a cold start.
         _uiState.value = _uiState.value.copy(
@@ -1103,14 +1130,13 @@ class PlayerViewModel : ViewModel() {
             playbackError = null,
             playRequested = true,
         )
-        viewModelScope.launch(exceptionHandler) {
+        lastMediaIdBeforeIntent = player?.currentMediaItem?.mediaId
+        pendingPlayIntent = firstFile.ref.toUriString()
+        playJob = viewModelScope.launch(exceptionHandler) {
             awaitPlayer()
-            currentFolder = firstFile.ref.parent
-            lastMediaIdBeforeIntent = player?.currentMediaItem?.mediaId
-            pendingQueueIndex = null
-            pendingPlayIntent = firstFile.ref.toUriString()
-
             val mediaItems = repo().mediaItemsFor(files)
+            if (!isCurrent(generation)) return@launch
+            currentFolder = firstFile.ref.parent
             player?.setMediaItems(mediaItems)
             if (startIndex in mediaItems.indices) {
                 player?.seekTo(startIndex, 0L)
@@ -1133,7 +1159,7 @@ class PlayerViewModel : ViewModel() {
             refreshPlaylists()
 
             kotlinx.coroutines.delay(1000)
-            updateMetadata()
+            if (isCurrent(generation)) updateMetadata()
         }
     }
 
@@ -1146,7 +1172,7 @@ class PlayerViewModel : ViewModel() {
     )
 
     fun playCueSheet(cue: SourceRef) {
-        cancelRestore()
+        val generation = newPlayRequest()
         _uiState.value = _uiState.value.copy(
             currentTitle = SourcePath.baseName(cue.name),
             currentFolderName = cue.parent?.let { SourcePath.name(it.path) } ?: "",
@@ -1164,25 +1190,28 @@ class PlayerViewModel : ViewModel() {
         pendingQueueIndex = null
         pendingPlayIntent = "ANY_NEW"
 
-        viewModelScope.launch(exceptionHandler) {
+        playJob = viewModelScope.launch(exceptionHandler) {
             try {
                 awaitPlayer()
-                playCueSheetInternal(cue, null, 0L, playWhenReady = true)
+                playCueSheetInternal(cue, null, 0L, playWhenReady = true, generation)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isBuffering = false, playbackError = errorText(e))
+                if (isCurrent(generation)) _uiState.value = _uiState.value.copy(isBuffering = false, playbackError = errorText(e))
             }
         }
     }
 
     fun playPlaylistSong(playlistId: String, startIndex: Int) {
-        cancelRestore()
+        val generation = newPlayRequest()
         val manager = playlistManager ?: return
         val playlist = manager.getPlaylist(playlistId) ?: return
         val items = playlist.items
         if (items.getOrNull(startIndex) == null) return
 
-        viewModelScope.launch(exceptionHandler) {
+        playJob = viewModelScope.launch(exceptionHandler) {
             awaitPlayer()
+            if (!isCurrent(generation)) return@launch
             val mediaItems = items.mapNotNull { pItem ->
                 val ref = pItem.ref ?: return@mapNotNull null
                 if (SourceRegistry.get(ref.sourceId) == null) return@mapNotNull null
@@ -1223,7 +1252,8 @@ class PlayerViewModel : ViewModel() {
         cue: SourceRef,
         startingMediaId: String?,
         positionMs: Long,
-        playWhenReady: Boolean
+        playWhenReady: Boolean,
+        generation: Int,
     ) {
         val fs = SourceRegistry.fileSystem(cue)
         val cueContent = runInterruptible(Dispatchers.IO) { fs.readText(cue.path) }
@@ -1250,8 +1280,10 @@ class PlayerViewModel : ViewModel() {
         }
         val audioFile = audio ?: return
 
-        currentFolder = parent
         val cover = repo().coverFor(parent, siblings)
+        // Nothing of an older request is applied from here on (queue, folder, Default playlist, saved state).
+        if (!isCurrent(generation)) return
+        currentFolder = parent
 
         val mediaItems = tracks.map { track ->
             repo().createCueMediaItem(
@@ -1307,18 +1339,16 @@ class PlayerViewModel : ViewModel() {
         playbackPreferences?.savePlaybackState(parent, startingMediaId ?: mediaItems.first().mediaId, positionMs)
 
         kotlinx.coroutines.delay(1000)
-        updateMetadata()
+        if (isCurrent(generation)) updateMetadata()
     }
 
     private suspend fun playFolderInternal(
         folder: SourceRef,
         startPath: String?,
         positionMs: Long,
-        playWhenReady: Boolean
+        playWhenReady: Boolean,
+        generation: Int,
     ) {
-        currentFolder = folder
-        val generation = playRequestGeneration
-
         val sortPref = sourcePreferences?.getDirectorySort(folder) ?: sourcePreferences?.getDefaultSort()
 
         val items = repo().getMediaItemsInFolder(
@@ -1326,6 +1356,9 @@ class PlayerViewModel : ViewModel() {
             sortField = sortPref?.field ?: "NAME",
             sortAscending = sortPref?.ascending ?: true
         )
+        // Nothing of an older request is applied from here on (queue, folder, Default playlist, saved state).
+        if (!isCurrent(generation)) return
+        currentFolder = folder
         player?.setMediaItems(items)
 
         if (!isRestoring) {
@@ -1369,13 +1402,13 @@ class PlayerViewModel : ViewModel() {
                 }
                 kotlinx.coroutines.delay(200)
                 // The user may have started something else meanwhile; never seek their new queue.
-                if (generation == playRequestGeneration && index != -1) player?.seekTo(index.coerceAtLeast(0), positionMs)
+                if (isCurrent(generation) && index != -1) player?.seekTo(index.coerceAtLeast(0), positionMs)
             }
         }
 
         viewModelScope.launch(exceptionHandler) {
             kotlinx.coroutines.delay(1000)
-            updateMetadata()
+            if (isCurrent(generation)) updateMetadata()
         }
 
         playbackPreferences?.savePlaybackState(folder, target ?: items.firstOrNull()?.mediaId, positionMs)
