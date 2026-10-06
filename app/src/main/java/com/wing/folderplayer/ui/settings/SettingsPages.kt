@@ -101,7 +101,12 @@ private fun PlaybackPage() {
     val exportSettings = remember { ExportSettings(context) }
     SettingsPage {
         var castOn by remember { mutableStateOf(castSettings.enabled) }
-        SettingsSwitch(stringResource(R.string.settings_dlna), castOn, "dlna_enabled") { castOn = it; castSettings.enabled = it }
+        SettingsSwitch(stringResource(R.string.settings_dlna), castOn, "dlna_enabled") {
+            castOn = it; castSettings.enabled = it
+            // Off ends a running session (renderer stopped, relay closed, locks released) and discovery; without the
+            // switch the cast button, and with it the Stop control, is gone.
+            if (!it) com.wing.folderplayer.cast.CastController.get(context).shutdown()
+        }
         var exportOn by remember { mutableStateOf(exportSettings.enabled) }
         SettingsSwitch(
             stringResource(R.string.settings_auto_save), exportOn, "auto_save",

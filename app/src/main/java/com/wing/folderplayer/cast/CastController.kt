@@ -248,6 +248,7 @@ class CastController internal constructor(
         poll?.cancel()
         poll = scope.launch {
             var sawPlaying = false
+            var locksReleased = false
             // State is written only while this session is still the current one, so a renderer answer that arrives
             // after stop() cannot bring the session back.
             fun write(change: (CastState) -> CastState) =
@@ -257,9 +258,17 @@ class CastController internal constructor(
                     val t = cp.transportState(r.udn)
                     val (pos, dur) = runCatching { cp.progress(r.udn) }.getOrDefault(-1L to -1L)
                     write { it.copy(rendererState = t, positionMs = pos, durationMs = dur, progressAvailable = pos >= 0) }
-                    if (t == "PLAYING") sawPlaying = true
+                    if (t == "PLAYING") {
+                        sawPlaying = true
+                        // A replay on the same session (renderer started again) needs the locks again.
+                        if (locksReleased) { locksReleased = false; holdSessionLocks(gen, true) }
+                    }
                     if (sawPlaying && t == "STOPPED" && _state.value.lastCommand != "Stop" && gen == generation.get()) {
                         sawPlaying = false
+                        // The track ended on the renderer: the session stays (Stop button, replay) but the phone
+                        // must not keep the Wi-Fi and wake locks (up to 6 h) for a renderer that is idle.
+                        locksReleased = true
+                        holdSessionLocks(gen, false)
                         onRendererFinished?.invoke()
                     }
                 } catch (e: CancellationException) {
@@ -269,6 +278,14 @@ class CastController internal constructor(
                 }
                 delay(pollIntervalMs)
             }
+        }
+    }
+
+    /** Takes or drops the session locks, only while [gen] is still the current session (under the session lock). */
+    private suspend fun holdSessionLocks(gen: Long, hold: Boolean) {
+        session.withLock {
+            if (gen != generation.get()) return@withLock
+            if (hold) locks.acquireSession() else locks.releaseSession()
         }
     }
 
