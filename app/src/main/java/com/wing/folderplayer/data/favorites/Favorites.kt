@@ -91,8 +91,17 @@ sealed class SyncResult {
     data class RemoteHasUnreadableEntries(val rejected: Int, val mergedFromRemote: Int) : SyncResult()
 }
 
-/** Local favorites (files/favorites/fav.json) plus explicit sync with a user-chosen remote fav.json. */
+/**
+ * Local favorites (files/favorites/fav.json) plus explicit sync with a user-chosen remote fav.json.
+ *
+ * Two locks: [localLock] guards the list and the local file and is only ever held briefly (add / remove from the UI
+ * thread, and the step of a sync that merges into the list); [syncLock] lets one sync or remote replace run at a time
+ * and is held across the network I/O, which add / remove never wait for.
+ */
 class FavoritesRepository(private val file: File, private val clock: () -> Long = System::currentTimeMillis) {
+    private val localLock = Any()
+    private val syncLock = Any()
+
     private val _items = MutableStateFlow(load())
     val items: StateFlow<List<FavoriteItem>> = _items.asStateFlow()
 
@@ -108,7 +117,7 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
         emptyList()
     }
 
-    @Synchronized
+    /** Caller holds [localLock]. */
     private fun store(items: List<FavoriteItem>) {
         file.parentFile?.mkdirs()
         if (backupBeforeWrite) {
@@ -126,34 +135,44 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
         return _items.value.any { it.sourceId == ref.sourceId && it.path == ref.path && it.type == type }
     }
 
-    @Synchronized
     fun add(entry: MusicFile) {
-        if (isFavorite(entry.ref, entry.isDirectory)) return
-        val item = FavoriteItem(
-            type = if (entry.isDirectory) FavoriteItem.TYPE_FOLDER else FavoriteItem.TYPE_SONG,
-            sourceId = entry.sourceId,
-            path = SourcePath.normalize(entry.path),
-            name = entry.name,
-            size = entry.size,
-            timestamp = clock(),
-        )
-        store(_items.value + item)
+        synchronized(localLock) {
+            if (isFavorite(entry.ref, entry.isDirectory)) return
+            val item = FavoriteItem(
+                type = if (entry.isDirectory) FavoriteItem.TYPE_FOLDER else FavoriteItem.TYPE_SONG,
+                sourceId = entry.sourceId,
+                path = SourcePath.normalize(entry.path),
+                name = entry.name,
+                size = entry.size,
+                timestamp = clock(),
+            )
+            store(_items.value + item)
+        }
     }
 
-    @Synchronized
     fun remove(ref: SourceRef, folder: Boolean) {
         val type = if (folder) FavoriteItem.TYPE_FOLDER else FavoriteItem.TYPE_SONG
-        store(_items.value.filterNot { it.sourceId == ref.sourceId && it.path == ref.path && it.type == type })
+        synchronized(localLock) {
+            store(_items.value.filterNot { it.sourceId == ref.sourceId && it.path == ref.path && it.type == type })
+        }
     }
 
-    fun toggle(entry: MusicFile) = if (isFavorite(entry.ref, entry.isDirectory)) remove(entry.ref, entry.isDirectory) else add(entry)
+    fun toggle(entry: MusicFile) {
+        synchronized(localLock) {
+            if (isFavorite(entry.ref, entry.isDirectory)) remove(entry.ref, entry.isDirectory) else add(entry)
+        }
+    }
 
     /**
      * Merge with the remote file at [remotePath] on [fs]. The remote is written only when the merge changed it, and
      * never when it is broken or holds entries this version cannot read (those need the explicit [replaceRemote]).
+     *
+     * The remote is read and written without holding [localLock]; the merge is applied to the list as it is at that
+     * moment, so favourites added or removed while the remote was being read are kept as the user left them (a removed
+     * entry that the remote still has comes back, as with any sync: deletions are not propagated). Entries added while
+     * the merged list is being written stay local and reach the remote with the next sync.
      */
-    @Synchronized
-    fun sync(fs: SourceFileSystem, remotePath: String): SyncResult {
+    fun sync(fs: SourceFileSystem, remotePath: String): SyncResult = synchronized(syncLock) {
         val remote: FavoritesCodec.DecodeReport? = try {
             val st = fs.stat(remotePath)
             if (st == null) null else {
@@ -166,10 +185,12 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
             return SyncResult.Failed(e.message ?: e.javaClass.simpleName)
         }
         val remoteItems = remote?.data?.items.orEmpty()
-        val before = _items.value
-        val merged = FavoritesCodec.merge(before, remoteItems)
-        val added = merged.size - before.size
-        if (merged != before) store(merged)
+        val (merged, added) = synchronized(localLock) {
+            val before = _items.value
+            val merged = FavoritesCodec.merge(before, remoteItems)
+            if (merged != before) store(merged)
+            merged to merged.size - before.size
+        }
         if (remote != null && remote.rejected > 0) return SyncResult.RemoteHasUnreadableEntries(remote.rejected, added)
         // Semantically unchanged: leave the remote file (and its formatting) alone.
         if (remote != null && merged.size == remoteItems.size && merged.toSet() == remoteItems.toSet()) return SyncResult.Synced(added, merged.size)
@@ -177,8 +198,9 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
     }
 
     /** Explicit user action: overwrite the remote file with the local list (also used to repair a broken remote). */
-    @Synchronized
-    fun replaceRemote(fs: SourceFileSystem, remotePath: String): SyncResult = writeRemote(fs, remotePath, _items.value, 0)
+    fun replaceRemote(fs: SourceFileSystem, remotePath: String): SyncResult = synchronized(syncLock) {
+        writeRemote(fs, remotePath, _items.value, 0)
+    }
 
     private fun writeRemote(fs: SourceFileSystem, remotePath: String, items: List<FavoriteItem>, added: Int): SyncResult {
         val json = FavoritesCodec.encode(FavoritesData(items = items))
