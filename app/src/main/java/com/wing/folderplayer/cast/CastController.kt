@@ -92,9 +92,10 @@ class AndroidCastLocks(private val context: Context) : CastLocks {
  * Android side of DLNA casting: Wi-Fi multicast lock for discovery, Wi-Fi + wake lock while casting, relay lifetime
  * bound to the session, renderer state polling (1 s). Disabled unless the user turns casting on in Settings.
  *
- * cast / stop / shutdown run one at a time. Each call takes a new generation number when it is made (not when its
- * coroutine runs); only the operation holding the latest number owns the relay, the session locks and
- * [CastState.active]. An older operation that finishes or fails late only undoes what it sent to its own renderer.
+ * cast / stop / shutdown and the Play / Pause / Seek commands run one at a time. cast / stop / shutdown take a new
+ * generation number when called (not when their coroutine runs); only the operation holding the latest number owns
+ * the relay, the session locks and [CastState.active]. An older operation that finishes or fails late only undoes what
+ * it sent to its own renderer. A command is dropped when a newer generation exists by the time it may start.
  */
 class CastController internal constructor(
     private val isEnabled: () -> Boolean,
@@ -197,14 +198,31 @@ class CastController internal constructor(
         _state.update { it.copy(active = null, rendererState = null, positionMs = -1, durationMs = -1, progressAvailable = false) }
     }
 
+    /**
+     * Play / Pause / Seek belong to the session that was current when the button was pressed: they take the session
+     * lock like cast / stop (so one never talks to a renderer while the session around it changes), and are dropped
+     * unmodified when a stop or another cast was requested since, or the renderer is no longer the active one. A
+     * command already talking to the renderer cannot be recalled, but cast / stop wait for it, and its answer — success
+     * or failure — is not written into a session that has moved on.
+     */
     private fun command(name: String, block: (String) -> Unit) {
-        val r = _state.value.active ?: return
+        val gen = generation.get()
+        val target = _state.value.active?.udn ?: return
         scope.launch {
-            try {
-                block(r.udn)
-                _state.update { it.copy(lastCommand = name, error = null) }
-            } catch (e: Exception) {
-                _state.update { it.copy(error = "$name: ${e.message}") }
+            session.withLock {
+                if (gen != generation.get()) return@withLock
+                val r = _state.value.active?.takeIf { it.udn == target } ?: return@withLock
+                // Written only while the session is still the one the command was pressed for.
+                fun write(change: (CastState) -> CastState) =
+                    _state.update { if (gen == generation.get() && it.active?.udn == r.udn) change(it) else it }
+                try {
+                    block(r.udn)
+                    write { it.copy(lastCommand = name, error = null) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    write { it.copy(error = "$name: ${e.message}") }
+                }
             }
         }
     }
