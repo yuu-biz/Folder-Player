@@ -170,7 +170,8 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
      * The remote is read and written without holding [localLock]; the merge is applied to the list as it is at that
      * moment, so favourites added or removed while the remote was being read are kept as the user left them (a removed
      * entry that the remote still has comes back, as with any sync: deletions are not propagated). Entries added while
-     * the merged list is being written stay local and reach the remote with the next sync.
+     * the merged list is being written stay local and reach the remote with the next sync; entries this sync put on the
+     * remote and the user removed while it was writing are taken off again ([writeRemoteFollowingRemovals]).
      */
     fun sync(fs: SourceFileSystem, remotePath: String): SyncResult = synchronized(syncLock) {
         val remote: FavoritesCodec.DecodeReport? = try {
@@ -194,12 +195,39 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
         if (remote != null && remote.rejected > 0) return SyncResult.RemoteHasUnreadableEntries(remote.rejected, added)
         // Semantically unchanged: leave the remote file (and its formatting) alone.
         if (remote != null && merged.size == remoteItems.size && merged.toSet() == remoteItems.toSet()) return SyncResult.Synced(added, merged.size)
-        return writeRemote(fs, remotePath, merged, added)
+        val remoteKeys = remoteItems.mapTo(HashSet()) { it.key }
+        return writeRemoteFollowingRemovals(fs, remotePath, merged, added) { it.key !in remoteKeys }
     }
 
     /** Explicit user action: overwrite the remote file with the local list (also used to repair a broken remote). */
     fun replaceRemote(fs: SourceFileSystem, remotePath: String): SyncResult = synchronized(syncLock) {
-        writeRemote(fs, remotePath, _items.value, 0)
+        writeRemoteFollowingRemovals(fs, remotePath, _items.value, 0) { true }
+    }
+
+    /**
+     * Writes [items] to the remote. The list was taken before the (unlocked) write, so the user may have removed some
+     * of its entries meanwhile; those that [retractable] allows (entries this write itself put on the remote — never
+     * ones the remote already had, whose deletion a sync does not propagate) are taken out and the remote is written
+     * again, until nothing was removed during the last write.
+     */
+    private fun writeRemoteFollowingRemovals(
+        fs: SourceFileSystem,
+        remotePath: String,
+        items: List<FavoriteItem>,
+        added: Int,
+        retractable: (FavoriteItem) -> Boolean,
+    ): SyncResult {
+        var written = items
+        while (true) {
+            val result = writeRemote(fs, remotePath, written, added)
+            if (result !is SyncResult.Synced) return result
+            val removed = synchronized(localLock) {
+                val now = _items.value.mapTo(HashSet()) { it.key }
+                written.filter { it.key !in now && retractable(it) }
+            }
+            if (removed.isEmpty()) return result
+            written = written - removed.toSet()
+        }
     }
 
     private fun writeRemote(fs: SourceFileSystem, remotePath: String, items: List<FavoriteItem>, added: Int): SyncResult {
