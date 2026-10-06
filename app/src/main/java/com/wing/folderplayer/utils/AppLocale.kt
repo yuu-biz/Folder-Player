@@ -12,7 +12,7 @@ import android.os.LocaleList
 import java.util.Locale
 
 /**
- * In-app language: System default, English, Simplified/Traditional Chinese, French, Italian, Japanese.
+ * In-app language: System default, Simplified Chinese, English, Japanese, Traditional Chinese, French, Italian.
  *
  * Android 13+: the system's per-app language (Settings > Apps > Folder Player Fork > Language, [LocaleManager]) is the
  * only source of truth. It is read, never copied: a change made in the system settings and one made in the app are the
@@ -24,9 +24,12 @@ import java.util.Locale
  * activity context ([wrap], and again for texts outside the activity, see [Strings]).
  */
 object AppLocale {
-    /** Languages offered in Settings: tag to its name in that language ("" = system default, labelled by the UI). */
+    /**
+     * Languages offered in Settings, in the order they are listed: tag to its name in that language ("" = system default,
+     * labelled by the UI). The Chinese of the original author comes first; English is one language among the others.
+     */
     val LANGUAGES = listOf(
-        "" to "", "en" to "English", "zh-CN" to "简体中文", "zh-TW" to "繁體中文", "fr" to "Français", "it" to "Italiano", "ja" to "日本語",
+        "" to "", "zh-CN" to "简体中文", "en" to "English", "ja" to "日本語", "zh-TW" to "繁體中文", "fr" to "Français", "it" to "Italiano",
     )
     val TAGS = LANGUAGES.map { it.first }
     private const val PREFS = "ui_prefs"

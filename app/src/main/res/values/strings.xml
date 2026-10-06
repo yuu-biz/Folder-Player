@@ -15,6 +15,7 @@
     <string name="common_ok">OK</string>
     <string name="common_replace">Replace</string>
     <string name="common_retry">Retry</string>
+    <string name="common_back">Back</string>
 
     <!-- sort -->
     <string name="sort_name">Name</string>
@@ -41,6 +42,9 @@
     <string name="browser_add_to_playlist">Add to playlist</string>
     <string name="browser_add_favorite">Add to favorites</string>
     <string name="browser_remove_favorite">Remove from favorites</string>
+    <string name="browser_now_playing">Playing</string>
+    <string name="browser_row_details">Details and actions</string>
+    <string name="browser_empty">Nothing to show here</string>
     <string name="browser_local_no_audio_permission">Music access is not allowed – files may be hidden. Allow it in Settings › Storage &amp; permissions, or add the folder as a SAF folder.</string>
 
     <!-- source editor -->
@@ -75,6 +79,25 @@
 
     <!-- settings -->
     <string name="settings_title">Settings</string>
+    <string name="settings_cat_playback">Playback</string>
+    <string name="settings_cat_playback_desc">Casting, saving songs, decoders</string>
+    <string name="settings_cat_display">Display</string>
+    <string name="settings_cat_display_desc">Language, font, player and screen</string>
+    <string name="settings_cat_library">Library &amp; network</string>
+    <string name="settings_cat_library_desc">Sorting, view, folder thumbnails</string>
+    <string name="settings_cat_lyrics">Lyrics &amp; AI</string>
+    <string name="settings_cat_lyrics_desc">Lyrics lookup and AI connection</string>
+    <string name="settings_cat_storage_desc">Access state and image cache</string>
+    <string name="settings_cat_about">About</string>
+    <string name="settings_decoders">Decoders</string>
+    <string name="settings_group_player">Player</string>
+    <string name="settings_group_screen">Screen</string>
+    <string name="settings_group_network">Network</string>
+    <string name="settings_group_ai">AI</string>
+    <string name="settings_group_cache">Cache</string>
+    <string name="settings_lyrics_priority">Lyrics source priority</string>
+    <string name="settings_thumbs_summary">On for %1$d of %2$d</string>
+    <string name="settings_not_set">Not set</string>
     <string name="settings_cover_size">Cover display size</string>
     <string name="settings_cover_standard">Standard</string>
     <string name="settings_cover_large">Large</string>
@@ -205,6 +228,8 @@
     <string name="player_open">Open player</string>
     <string name="player_collapse">Minimize player</string>
     <string name="player_dismiss">Close player</string>
+    <string name="player_seek">Playback position</string>
+    <string name="player_seek_state">%1$s of %2$s</string>
     <string name="playlist_reorder">Drag to reorder</string>
     <string name="player_next">Next</string>
     <string name="player_playlist_title">PLAYLIST</string>

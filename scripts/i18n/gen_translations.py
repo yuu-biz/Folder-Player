@@ -609,6 +609,69 @@ T["ja"] = {
 }
 
 
+# Settings categories, browser row labels (1.0.0 UI polish).
+T["zh-rCN"].update({
+    "browser_empty": "这里没有内容", "player_seek": "播放进度", "player_seek_state": "%1$s / %2$s",
+    "common_back": "返回", "browser_now_playing": "正在播放", "browser_row_details": "详情和操作",
+    "settings_cat_playback": "播放", "settings_cat_playback_desc": "投放、保存歌曲、解码器",
+    "settings_cat_display": "显示", "settings_cat_display_desc": "语言、字体、播放器和屏幕",
+    "settings_cat_library": "媒体库与网络", "settings_cat_library_desc": "排序、视图、文件夹缩略图",
+    "settings_cat_lyrics": "歌词与 AI", "settings_cat_lyrics_desc": "歌词查找和 AI 连接",
+    "settings_cat_storage_desc": "访问状态和图片缓存", "settings_cat_about": "关于",
+    "settings_decoders": "解码器", "settings_group_player": "播放器", "settings_group_screen": "屏幕",
+    "settings_group_network": "网络", "settings_group_ai": "AI", "settings_group_cache": "缓存",
+    "settings_lyrics_priority": "歌词来源优先级", "settings_thumbs_summary": "已开启 %1$d / %2$d", "settings_not_set": "未设置",
+})
+T["zh-rTW"].update({
+    "browser_empty": "這裡沒有內容", "player_seek": "播放進度", "player_seek_state": "%1$s / %2$s",
+    "common_back": "返回", "browser_now_playing": "正在播放", "browser_row_details": "詳細資料與操作",
+    "settings_cat_playback": "播放", "settings_cat_playback_desc": "投放、儲存歌曲、解碼器",
+    "settings_cat_display": "顯示", "settings_cat_display_desc": "語言、字型、播放器與螢幕",
+    "settings_cat_library": "媒體庫與網路", "settings_cat_library_desc": "排序、檢視、資料夾縮圖",
+    "settings_cat_lyrics": "歌詞與 AI", "settings_cat_lyrics_desc": "歌詞查詢與 AI 連線",
+    "settings_cat_storage_desc": "存取狀態與圖片快取", "settings_cat_about": "關於",
+    "settings_decoders": "解碼器", "settings_group_player": "播放器", "settings_group_screen": "螢幕",
+    "settings_group_network": "網路", "settings_group_ai": "AI", "settings_group_cache": "快取",
+    "settings_lyrics_priority": "歌詞來源優先順序", "settings_thumbs_summary": "已開啟 %1$d / %2$d", "settings_not_set": "未設定",
+})
+T["fr"].update({
+    "browser_empty": "Rien à afficher ici", "player_seek": "Position de lecture", "player_seek_state": "%1$s sur %2$s",
+    "common_back": "Retour", "browser_now_playing": "En lecture", "browser_row_details": "Détails et actions",
+    "settings_cat_playback": "Lecture", "settings_cat_playback_desc": "Diffusion, enregistrement des morceaux, décodeurs",
+    "settings_cat_display": "Affichage", "settings_cat_display_desc": "Langue, police, lecteur et écran",
+    "settings_cat_library": "Bibliothèque et réseau", "settings_cat_library_desc": "Tri, vue, vignettes des dossiers",
+    "settings_cat_lyrics": "Paroles et IA", "settings_cat_lyrics_desc": "Recherche de paroles et connexion IA",
+    "settings_cat_storage_desc": "État des accès et cache d'images", "settings_cat_about": "À propos",
+    "settings_decoders": "Décodeurs", "settings_group_player": "Lecteur", "settings_group_screen": "Écran",
+    "settings_group_network": "Réseau", "settings_group_ai": "IA", "settings_group_cache": "Cache",
+    "settings_lyrics_priority": "Priorité des paroles", "settings_thumbs_summary": "Activées pour %1$d sur %2$d", "settings_not_set": "Non défini",
+})
+T["it"].update({
+    "browser_empty": "Niente da mostrare qui", "player_seek": "Posizione di riproduzione", "player_seek_state": "%1$s di %2$s",
+    "common_back": "Indietro", "browser_now_playing": "In riproduzione", "browser_row_details": "Dettagli e azioni",
+    "settings_cat_playback": "Riproduzione", "settings_cat_playback_desc": "Trasmissione, salvataggio dei brani, decoder",
+    "settings_cat_display": "Visualizzazione", "settings_cat_display_desc": "Lingua, carattere, lettore e schermo",
+    "settings_cat_library": "Libreria e rete", "settings_cat_library_desc": "Ordinamento, vista, miniature delle cartelle",
+    "settings_cat_lyrics": "Testi e IA", "settings_cat_lyrics_desc": "Ricerca dei testi e connessione IA",
+    "settings_cat_storage_desc": "Stato degli accessi e cache delle immagini", "settings_cat_about": "Informazioni",
+    "settings_decoders": "Decoder", "settings_group_player": "Lettore", "settings_group_screen": "Schermo",
+    "settings_group_network": "Rete", "settings_group_ai": "IA", "settings_group_cache": "Cache",
+    "settings_lyrics_priority": "Priorità dei testi", "settings_thumbs_summary": "Attive per %1$d su %2$d", "settings_not_set": "Non impostato",
+})
+T["ja"].update({
+    "browser_empty": "ここには表示する項目がありません", "player_seek": "再生位置", "player_seek_state": "%2$s 中 %1$s",
+    "common_back": "戻る", "browser_now_playing": "再生中", "browser_row_details": "詳細と操作",
+    "settings_cat_playback": "再生", "settings_cat_playback_desc": "キャスト、曲の保存、デコーダー",
+    "settings_cat_display": "表示", "settings_cat_display_desc": "言語、フォント、プレーヤー、画面",
+    "settings_cat_library": "ライブラリとネットワーク", "settings_cat_library_desc": "並び順、表示形式、フォルダのサムネイル",
+    "settings_cat_lyrics": "歌詞と AI", "settings_cat_lyrics_desc": "歌詞の取得と AI 接続",
+    "settings_cat_storage_desc": "アクセス状態と画像キャッシュ", "settings_cat_about": "アプリについて",
+    "settings_decoders": "デコーダー", "settings_group_player": "プレーヤー", "settings_group_screen": "画面",
+    "settings_group_network": "ネットワーク", "settings_group_ai": "AI 接続", "settings_group_cache": "キャッシュ",
+    "settings_lyrics_priority": "歌詞の優先順位", "settings_thumbs_summary": "%2$d 件中 %1$d 件でオン", "settings_not_set": "未設定",
+})
+
+
 def main():
     keys = base_keys()
     ok = True
