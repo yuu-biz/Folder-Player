@@ -7,6 +7,8 @@
         <!-- Keystore-encrypted secrets cannot be restored on another device; never back them up. -->
         <exclude domain="sharedpref" path="fp_credentials.xml"/>
         <exclude domain="file" path="migration-backup/"/>
+        <!-- Downloaded fonts (14-24 MB each) are re-creatable; Auto Backup stops for good above 25 MB of app data. -->
+        <exclude domain="file" path="fonts/"/>
     </cloud-backup>
     <device-transfer>
         <include domain="sharedpref" path="."/>
