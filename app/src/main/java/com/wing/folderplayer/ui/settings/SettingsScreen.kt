@@ -1,72 +1,96 @@
 package com.wing.folderplayer.ui.settings
 
-import android.content.Intent
-import android.net.Uri
-import android.provider.Settings
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Subject
+import androidx.compose.material3.Divider
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.wing.folderplayer.BuildConfig
 import com.wing.folderplayer.R
-import com.wing.folderplayer.cast.CastSettings
-import com.wing.folderplayer.data.artwork.ThumbnailRepository
-import com.wing.folderplayer.data.prefs.LyricPreferences
-import com.wing.folderplayer.data.prefs.NotchPreferences
-import com.wing.folderplayer.data.prefs.OrientationPreferences
-import com.wing.folderplayer.data.prefs.PlaybackPreferences
-import com.wing.folderplayer.data.repo.TitleMode
-import com.wing.folderplayer.data.source.SourceType
-import com.wing.folderplayer.playback.ExportSettings
-import com.wing.folderplayer.playback.NativeDecoder
 import com.wing.folderplayer.ui.browser.BrowserViewModel
 import com.wing.folderplayer.ui.player.PlayerViewModel
-import com.wing.folderplayer.ui.theme.AppFont
-import com.wing.folderplayer.ui.theme.FontManager
-import com.wing.folderplayer.ui.theme.FontState
-import com.wing.folderplayer.utils.AppLocale
-import com.wing.folderplayer.utils.PermissionDiagnostics
-import kotlinx.coroutines.launch
 
-@Composable
-private fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 8.dp))
-}
+/** Top-level groups of Settings, in the order they are listed. [id] is saved with the screen state and used in test tags. */
+internal enum class SettingsCategory(val id: String, val title: Int, val description: Int?, val icon: ImageVector) {
+    PLAYBACK("playback", R.string.settings_cat_playback, R.string.settings_cat_playback_desc, Icons.Default.PlayCircle),
+    DISPLAY("display", R.string.settings_cat_display, R.string.settings_cat_display_desc, Icons.Default.Palette),
+    LIBRARY("library", R.string.settings_cat_library, R.string.settings_cat_library_desc, Icons.Default.LibraryMusic),
+    LYRICS("lyrics", R.string.settings_cat_lyrics, R.string.settings_cat_lyrics_desc, Icons.Default.Subject),
+    STORAGE("storage", R.string.settings_permissions, R.string.settings_cat_storage_desc, Icons.Default.Storage),
+    ABOUT("about", R.string.settings_cat_about, null, Icons.Default.Info);
 
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
-@Composable
-private fun <T> ChoiceRow(options: List<Pair<T, String>>, selected: T, tagPrefix: String, onSelect: (T) -> Unit) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        options.forEach { (value, label) ->
-            FilterChip(selected = selected == value, onClick = { onSelect(value) }, label = { Text(label) },
-                modifier = Modifier.testTag("${tagPrefix}_$value"))
-        }
+    companion object {
+        fun byId(id: String?) = values().firstOrNull { it.id == id }
     }
 }
 
-@Composable
-private fun SwitchRow(label: String, checked: Boolean, tag: String, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-        Switch(checked = checked, onCheckedChange = onChange, modifier = Modifier.testTag(tag))
+/** Pages one level below a category: the settings with a long list or text fields. */
+internal enum class SettingsSub(val id: String, val title: Int, val parent: SettingsCategory) {
+    LANGUAGE("language", R.string.settings_language, SettingsCategory.DISPLAY),
+    FONT("font", R.string.settings_font, SettingsCategory.DISPLAY),
+    THUMBNAILS("thumbnails", R.string.settings_thumbnails, SettingsCategory.LIBRARY),
+    AI("ai", R.string.settings_ai, SettingsCategory.LYRICS);
+
+    companion object {
+        fun byId(id: String?) = values().firstOrNull { it.id == id }
     }
 }
 
+/** Width from which Settings shows the categories beside their content. Measured on the Settings window itself. */
+private val TwoPaneMinWidth = 600.dp
+private val CategoryListWidth = 300.dp
+
+/**
+ * Settings: categories → settings → (for long lists and text fields) a page of their own.
+ * Narrow window: one pane, navigated category list → category → page. Wide window: the category list stays on the left,
+ * its content (and pages) on the right. Where the user is (category, page) is one saved value each, so a recreation
+ * (language change) or a change of the window size shows the same place.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -79,343 +103,118 @@ fun SettingsScreen(
     onNotchModeChange: (String) -> Unit = {},
     onLanguageChange: (String) -> Unit = {},
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    // Only the two display choices: the full player state changes about once a second while playing, and collecting it
-    // here would recompose the whole (non-lazy) settings column with it.
-    val coverDisplaySize by playerViewModel.coverDisplaySize.collectAsState()
-    val backgroundStyle by playerViewModel.backgroundStyle.collectAsState()
-    val browserState by browserViewModel.uiState.collectAsState()
-    val lyricPrefs = remember { LyricPreferences(context) }
-    val playbackPrefs = remember { PlaybackPreferences(context) }
-    val thumbs = remember { ThumbnailRepository.get(context) }
-    val fonts = remember { FontManager.get(context) }
-    val castSettings = remember { CastSettings(context) }
-    val exportSettings = remember { ExportSettings(context) }
-    var isDebug by remember { mutableStateOf(com.wing.folderplayer.utils.CrashHandler.isDebugEnabled(context)) }
+    var categoryId by rememberSaveable { mutableStateOf<String?>(null) }
+    var subId by rememberSaveable { mutableStateOf<String?>(null) }
     val snackbar = remember { SnackbarHostState() }
 
     val horizontalSafePadding = WindowInsets.displayCutout.asPaddingValues().let {
-        val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
+        val layoutDirection = LocalLayoutDirection.current
         maxOf(it.calculateLeftPadding(layoutDirection), it.calculateRightPadding(layoutDirection))
     }
 
-    val fontPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri != null) scope.launch {
-            val name = androidx.documentfile.provider.DocumentFile.fromSingleUri(context, uri)?.name ?: "font"
-            try {
-                fonts.import(uri, name)
-                fonts.select(AppFont.IMPORTED)
-                snackbar.showSnackbar(context.getString(R.string.settings_font_imported, name))
-            } catch (e: Exception) {
-                snackbar.showSnackbar(context.getString(R.string.settings_font_import_failed, e.message ?: ""))
-            }
-        }
-    }
-
     Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = horizontalSafePadding)) {
-            Scaffold(
-                snackbarHost = { SnackbarHost(snackbar) },
-                topBar = {
-                    TopAppBar(
-                        title = { Text(stringResource(R.string.settings_title)) },
-                        navigationIcon = {
-                            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.common_close)) }
-                        }
+        BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = horizontalSafePadding).testTag("settings_column")) {
+            val twoPane = maxWidth >= TwoPaneMinWidth
+            val category = SettingsCategory.byId(categoryId)
+            // Narrow: no category = the list. Wide: the list is always there, and the first category is shown until one is chosen.
+            val shownCategory = if (twoPane) category ?: SettingsCategory.values().first() else category
+            val sub = SettingsSub.byId(subId)?.takeIf { it.parent == shownCategory }
+
+            // One step up: page → category → category list → leave Settings.
+            val up: () -> Unit = {
+                when {
+                    sub != null -> subId = null
+                    !twoPane && category != null -> categoryId = null
+                    else -> onBack()
+                }
+            }
+            BackHandler(enabled = sub != null || (!twoPane && category != null)) { up() }
+
+            val openCategory: (SettingsCategory) -> Unit = { categoryId = it.id; subId = null }
+            val openSub: (SettingsSub) -> Unit = { subId = it.id }
+
+            val pageContent: @Composable () -> Unit = {
+                when {
+                    shownCategory == null -> Unit
+                    sub != null -> SettingsSubPage(sub, snackbar, onLanguageChange)
+                    else -> SettingsCategoryPage(
+                        shownCategory, openSub, snackbar, playerViewModel, browserViewModel, permissionEpoch,
+                        onRequestPermissions, onOrientationChange, onNotchModeChange,
                     )
                 }
-            ) { padding ->
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).testTag("settings_column")
-                ) {
-                    // ---------- Display ----------
-                    SectionTitle(stringResource(R.string.settings_cover_size))
-                    ChoiceRow(listOf("STANDARD" to stringResource(R.string.settings_cover_standard), "LARGE" to stringResource(R.string.settings_cover_large)),
-                        coverDisplaySize, "cover") { playerViewModel.setCoverDisplaySize(it) }
+            }
 
-                    SectionTitle(stringResource(R.string.settings_background))
-                    ChoiceRow(listOf("GRADIENT" to stringResource(R.string.settings_background_solid), "BLUR" to stringResource(R.string.settings_background_blur),
-                        "BLACK" to stringResource(R.string.settings_background_black)), backgroundStyle, "bg") { playerViewModel.setBackgroundStyle(it) }
-
-                    SectionTitle(stringResource(R.string.settings_title_mode))
-                    var titleMode by remember { mutableStateOf(playbackPrefs.getTitleMode()) }
-                    ChoiceRow(listOf("FILENAME" to stringResource(R.string.settings_title_filename), "TAGS" to stringResource(R.string.settings_title_tags)),
-                        titleMode, "title") { titleMode = it; playerViewModel.setTitleMode(TitleMode.valueOf(it)) }
-
-                    SectionTitle(stringResource(R.string.settings_orientation))
-                    val orientationPrefs = remember { OrientationPreferences(context) }
-                    var currentOrientation by remember { mutableStateOf(orientationPrefs.getOrientation()) }
-                    ChoiceRow(
-                        listOf(
-                            OrientationPreferences.ORIENTATION_SYSTEM to stringResource(R.string.settings_system),
-                            OrientationPreferences.ORIENTATION_PORTRAIT to stringResource(R.string.settings_portrait),
-                            OrientationPreferences.ORIENTATION_LANDSCAPE to stringResource(R.string.settings_landscape),
-                        ), currentOrientation, "orientation"
-                    ) { currentOrientation = it; orientationPrefs.setOrientation(it); onOrientationChange(it) }
-
-                    SectionTitle(stringResource(R.string.settings_notch))
-                    val notchPrefs = remember { NotchPreferences(context) }
-                    var currentNotchMode by remember { mutableStateOf(notchPrefs.getNotchMode()) }
-                    ChoiceRow(
-                        listOf(NotchPreferences.NOTCH_FULLSCREEN to stringResource(R.string.settings_notch_fullscreen),
-                            NotchPreferences.NOTCH_BLACK_BAR to stringResource(R.string.settings_notch_black_bar)),
-                        currentNotchMode, "notch"
-                    ) { currentNotchMode = it; notchPrefs.setNotchMode(it); onNotchModeChange(it) }
-
-                    SectionTitle(stringResource(R.string.settings_grid_density))
-                    ChoiceRow((2..5).map { it to it.toString() }, browserState.gridDensity, "grid") { browserViewModel.setGridDensity(it) }
-
-                    // ---------- Language ----------
-                    SectionTitle(stringResource(R.string.settings_language))
-                    val systemLabel = stringResource(R.string.settings_system)
-                    val langLabels = AppLocale.LANGUAGES.map { (tag, name) -> tag to name.ifEmpty { systemLabel } }
-                    ChoiceRow(langLabels, AppLocale.get(context), "lang") { onLanguageChange(it) }
-
-                    // ---------- Fonts ----------
-                    SectionTitle(stringResource(R.string.settings_font))
-                    val selectedFont by fonts.selected.collectAsState()
-                    val fontStates by fonts.states.collectAsState()
-                    val fallback by fonts.fallbackReason.collectAsState()
-                    AppFont.values().forEach { f ->
-                        val state = fontStates[f]
-                        val label = when (f) {
-                            AppFont.SYSTEM -> stringResource(R.string.settings_system)
-                            AppFont.NOTO_SANS_SC -> "Noto Sans SC (思源黑体)"
-                            AppFont.LXGW_WENKAI -> "LXGW WenKai (霞鹜文楷)"
-                            AppFont.SARASA_UI_SC -> "Sarasa UI SC (更纱黑体)"
-                            AppFont.IMPORTED -> stringResource(R.string.settings_font_imported_label, fonts.importedName.ifEmpty { "—" })
-                        }
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(
-                                selected = selectedFont == f,
-                                enabled = state == FontState.Ready,
-                                onClick = { fonts.select(f) },
-                                modifier = Modifier.testTag("font_${f.id}")
-                            )
-                            Column(Modifier.weight(1f)) {
-                                Text(label, style = MaterialTheme.typography.bodyMedium)
-                                val status = when (state) {
-                                    FontState.Ready -> if (f == AppFont.SYSTEM) "" else stringResource(R.string.settings_font_ready)
-                                    FontState.NotDownloaded -> if (f == AppFont.IMPORTED) "" else stringResource(R.string.settings_font_not_downloaded)
-                                    is FontState.Downloading -> stringResource(R.string.settings_font_downloading, (state.progress * 100).toInt())
-                                    is FontState.Failed -> stringResource(R.string.settings_font_failed, state.reason)
-                                    null -> ""
-                                }
-                                if (status.isNotEmpty()) Text(status, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("font_status_${f.id}"))
+            Scaffold(
+                containerColor = MaterialTheme.colorScheme.surface,
+                snackbarHost = { SnackbarHost(snackbar) },
+                topBar = {
+                    // Wide: "Settings" over both panes; the page title is the header of the right pane.
+                    val title = when {
+                        twoPane || shownCategory == null -> stringResource(R.string.settings_title)
+                        sub != null -> stringResource(sub.title)
+                        else -> stringResource(shownCategory.title)
+                    }
+                    TopAppBar(
+                        title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() }) },
+                        navigationIcon = {
+                            IconButton(onClick = { if (twoPane) onBack() else up() }, modifier = Modifier.testTag("settings_up")) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.common_back))
                             }
-                            if (f.url != null && state !is FontState.Downloading && state != FontState.Ready) {
-                                TextButton(onClick = { scope.launch { if (fonts.download(f)) fonts.select(f) } }, modifier = Modifier.testTag("font_dl_${f.id}")) {
-                                    Text(stringResource(R.string.settings_font_download))
-                                }
-                            }
-                            if (f != AppFont.SYSTEM && state == FontState.Ready) {
-                                TextButton(onClick = { fonts.delete(f) }) { Text(stringResource(R.string.common_delete)) }
-                            }
-                        }
-                    }
-                    OutlinedButton(onClick = { fontPicker.launch(arrayOf("font/ttf", "font/otf", "font/sfnt", "application/x-font-ttf", "application/x-font-otf", "application/octet-stream")) },
-                        modifier = Modifier.testTag("font_import")) {
-                        Text(stringResource(R.string.settings_font_import))
-                    }
-                    Text(stringResource(R.string.settings_font_license), style = MaterialTheme.typography.bodySmall)
-                    fallback?.let { Text(stringResource(R.string.settings_font_fallback, it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-
-                    // ---------- Library ----------
-                    SectionTitle(stringResource(R.string.settings_default_sort))
-                    val sourcePrefs = remember { com.wing.folderplayer.data.prefs.SourcePreferences(context) }
-                    var defaultSort by remember { mutableStateOf(sourcePrefs.getDefaultSort()) }
-                    ChoiceRow(listOf("NAME" to stringResource(R.string.sort_name), "DATE" to stringResource(R.string.sort_date), "SIZE" to stringResource(R.string.sort_size)),
-                        defaultSort.field, "sort") { defaultSort = defaultSort.copy(field = it); sourcePrefs.saveDefaultSort(defaultSort.field, defaultSort.ascending) }
-                    ChoiceRow(listOf(true to stringResource(R.string.settings_ascending), false to stringResource(R.string.settings_descending)),
-                        defaultSort.ascending, "sortdir") { defaultSort = defaultSort.copy(ascending = it); sourcePrefs.saveDefaultSort(defaultSort.field, defaultSort.ascending) }
-                    var defaultView by remember { mutableStateOf(sourcePrefs.getDefaultViewMode()) }
-                    ChoiceRow(listOf("LIST" to stringResource(R.string.settings_view_list), "GRID" to stringResource(R.string.settings_view_grid)),
-                        defaultView, "defview") { defaultView = it; sourcePrefs.saveDefaultViewMode(it) }
-
-                    SectionTitle(stringResource(R.string.settings_thumbnails))
-                    var thumbsRev by remember { mutableIntStateOf(0) }
-                    key(thumbsRev) {
-                        listOf(SourceType.LOCAL to stringResource(R.string.settings_thumbs_local), SourceType.SAF to stringResource(R.string.settings_thumbs_saf),
-                            SourceType.WEBDAV to "WebDAV", SourceType.SMB to "SMB", SourceType.FTP to "FTP").forEach { (t, label) ->
-                            SwitchRow(label, thumbs.settings.thumbnailsEnabled(t), "thumbs_${t.name}") { thumbs.settings.setThumbnailsEnabled(t, it); thumbs.invalidateNegatives(); thumbsRev++ }
-                        }
-                        SwitchRow(stringResource(R.string.settings_thumbs_wifi_only), thumbs.settings.wifiOnly, "thumbs_wifi") { thumbs.settings.wifiOnly = it; thumbsRev++ }
-                    }
-                    Text(stringResource(R.string.settings_thumbs_help), style = MaterialTheme.typography.bodySmall)
-                    OutlinedButton(onClick = {
-                        thumbs.clearCaches()
-                        coil.Coil.imageLoader(context).memoryCache?.clear()
-                        browserViewModel.onImageCacheCleared()
-                        scope.launch { snackbar.showSnackbar(context.getString(R.string.settings_cache_cleared)) }
-                    }, modifier = Modifier.testTag("clear_image_cache")) { Text(stringResource(R.string.settings_clear_image_cache)) }
-
-                    // ---------- Storage & permissions ----------
-                    SectionTitle(stringResource(R.string.settings_permissions))
-                    val report = remember(permissionEpoch, browserState.availableSources) { PermissionDiagnostics.report(context) }
-                    @Composable fun accessText(a: PermissionDiagnostics.Access) = stringResource(when (a) {
-                        PermissionDiagnostics.Access.GRANTED -> R.string.perm_granted
-                        PermissionDiagnostics.Access.PARTIAL -> R.string.perm_partial
-                        PermissionDiagnostics.Access.DENIED -> R.string.perm_denied
-                        PermissionDiagnostics.Access.NOT_APPLICABLE -> R.string.perm_na
-                    })
-                    Text(stringResource(R.string.perm_android_version, report.sdk), style = MaterialTheme.typography.bodySmall)
-                    Text(stringResource(R.string.perm_audio, accessText(report.audio)), modifier = Modifier.testTag("perm_audio"))
-                    Text(stringResource(R.string.perm_images, accessText(report.images)), modifier = Modifier.testTag("perm_images"))
-                    Text(stringResource(R.string.perm_notifications, accessText(report.notifications)))
-                    report.safFolders.forEach { (name, ok) ->
-                        Text(stringResource(R.string.perm_saf, name, stringResource(if (ok) R.string.perm_granted else R.string.perm_revoked)))
-                    }
-                    if (report.images != PermissionDiagnostics.Access.GRANTED) {
-                        Text(stringResource(R.string.perm_images_help), style = MaterialTheme.typography.bodySmall)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = onRequestPermissions, modifier = Modifier.testTag("perm_request")) { Text(stringResource(R.string.perm_request)) }
-                        OutlinedButton(onClick = {
-                            context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
-                        }) { Text(stringResource(R.string.perm_open_settings)) }
-                    }
-
-                    // ---------- Lyrics ----------
-                    SectionTitle(stringResource(R.string.settings_lyrics))
-                    var lyricApiUrl by remember { mutableStateOf(lyricPrefs.getLyricApiUrl()) }
-                    OutlinedTextField(value = lyricApiUrl, onValueChange = { lyricApiUrl = it; lyricPrefs.setLyricApiUrl(it) },
-                        label = { Text(stringResource(R.string.settings_lyric_api)) }, modifier = Modifier.fillMaxWidth())
-                    var aiAuto by remember { mutableStateOf(lyricPrefs.aiLyricsAuto) }
-                    SwitchRow(stringResource(R.string.settings_ai_lyrics_auto), aiAuto, "ai_lyrics_auto") { aiAuto = it; lyricPrefs.aiLyricsAuto = it; playerViewModel.invalidateLyrics() }
-                    var priority by remember { mutableStateOf(lyricPrefs.lyricsPriority) }
-                    ChoiceRow(listOf("LOCAL_FIRST" to stringResource(R.string.settings_lyrics_local_first), "AI_FIRST" to stringResource(R.string.settings_lyrics_ai_first)),
-                        priority, "lyrics_priority") { priority = it; lyricPrefs.lyricsPriority = it; playerViewModel.invalidateLyrics() }
-                    var lyricLang by remember { mutableStateOf(lyricPrefs.aiLyricsLanguage) }
-                    OutlinedTextField(value = lyricLang, onValueChange = { lyricLang = it; lyricPrefs.aiLyricsLanguage = it },
-                        label = { Text(stringResource(R.string.settings_ai_lyrics_language)) }, modifier = Modifier.fillMaxWidth())
-                    var translation by remember { mutableStateOf(lyricPrefs.translationTarget) }
-                    OutlinedTextField(value = translation, onValueChange = { translation = it; lyricPrefs.translationTarget = it },
-                        label = { Text(stringResource(R.string.settings_translation_target)) }, placeholder = { Text("zh-CN / en / ja …") }, modifier = Modifier.fillMaxWidth())
-                    Text(stringResource(R.string.settings_ai_lyrics_help), style = MaterialTheme.typography.bodySmall)
-
-                    SectionTitle(stringResource(R.string.settings_ai))
-                    var aiBaseUrl by remember { mutableStateOf(lyricPrefs.getAiBaseUrl()) }
-                    OutlinedTextField(value = aiBaseUrl, onValueChange = { aiBaseUrl = it; lyricPrefs.setAiBaseUrl(it) },
-                        label = { Text(stringResource(R.string.settings_ai_base_url)) }, placeholder = { Text("https://api.openai.com/v1") }, modifier = Modifier.fillMaxWidth())
-                    var aiApiKey by remember { mutableStateOf(lyricPrefs.getAiApiKey()) }
-                    OutlinedTextField(value = aiApiKey, onValueChange = { aiApiKey = it; lyricPrefs.setAiApiKey(it) },
-                        label = { Text(stringResource(R.string.settings_ai_key)) }, modifier = Modifier.fillMaxWidth(),
-                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
-                    var aiModel by remember { mutableStateOf(lyricPrefs.getAiModel()) }
-                    OutlinedTextField(value = aiModel, onValueChange = { aiModel = it; lyricPrefs.setAiModel(it) },
-                        label = { Text(stringResource(R.string.settings_ai_model)) }, placeholder = { Text("gpt-3.5-turbo") }, modifier = Modifier.fillMaxWidth())
-
-                    // ---------- Playback extras ----------
-                    SectionTitle(stringResource(R.string.settings_playback_extras))
-                    var castOn by remember { mutableStateOf(castSettings.enabled) }
-                    SwitchRow(stringResource(R.string.settings_dlna), castOn, "dlna_enabled") { castOn = it; castSettings.enabled = it }
-                    var exportOn by remember { mutableStateOf(exportSettings.enabled) }
-                    SwitchRow(stringResource(R.string.settings_auto_save), exportOn, "auto_save") { exportOn = it; exportSettings.enabled = it }
-                    Text(stringResource(R.string.settings_auto_save_help, exportSettings.folderName), style = MaterialTheme.typography.bodySmall)
-                    Text(
-                        if (NativeDecoder.isAvailable()) stringResource(R.string.settings_native_decoder_ok, NativeDecoder.version())
-                        else stringResource(R.string.settings_native_decoder_missing),
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.testTag("native_decoder_status")
+                        },
                     )
-
-                    Spacer(modifier = Modifier.height(32.dp))
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-
-                    // ---------- About ----------
-                    Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = stringResource(R.string.settings_about_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.testTag("about_version")
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(stringResource(R.string.settings_about_fork), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("Copyright © 2026 Wyvern2000.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("All rights reserved.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-                            if (isDebug) {
-                                Text(
-                                    text = stringResource(R.string.settings_debug_on),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(top = 4.dp)
-                                )
-                            }
-
-                            val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "https://github.com/wyvern3000/Folder-Player",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold,
-                                softWrap = false,
-                                modifier = Modifier.clickable { uriHandler.openUri("https://github.com/wyvern3000/Folder-Player") }
-                            )
-                            Text(
-                                text = "https://github.com/yuu-biz/Folder-Player",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                softWrap = false,
-                                modifier = Modifier.clickable { uriHandler.openUri("https://github.com/yuu-biz/Folder-Player") }
-                            )
-                            var showLicenses by remember { mutableStateOf(false) }
-                            TextButton(onClick = { showLicenses = true }, modifier = Modifier.testTag("open_licenses")) {
-                                Text(stringResource(R.string.settings_licenses))
-                            }
-                            if (showLicenses) LicensesDialog { showLicenses = false }
+                },
+            ) { padding ->
+                if (twoPane) {
+                    Row(Modifier.fillMaxSize().padding(padding)) {
+                        Column(Modifier.width(CategoryListWidth).fillMaxHeight().verticalScroll(rememberScrollState()).padding(vertical = 8.dp).testTag("settings_categories")) {
+                            CategoryList(selected = shownCategory, onOpen = openCategory)
                         }
-
-                        // App Icon with Secret Trigger
-                        var tapCount by remember { mutableStateOf(0) }
-                        androidx.compose.foundation.Image(
-                            painter = painterResource(id = R.mipmap.ic_launcher_foreground),
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(100.dp)
-                                .align(Alignment.TopEnd)
-                                .graphicsLayer(scaleX = 1.5f, scaleY = 1.5f)
-                                .offset(x = (-1).dp, y = 1.dp)
-                                .clickable {
-                                    tapCount++
-                                    if (tapCount >= 2) {
-                                        tapCount = 0
-                                        val newState = !isDebug
-                                        com.wing.folderplayer.utils.CrashHandler.setDebugEnabled(context, newState)
-                                        isDebug = newState
-                                    }
-                                }
-                        )
+                        Divider(Modifier.fillMaxHeight().width(1.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        Column(Modifier.weight(1f).fillMaxHeight()) {
+                            if (shownCategory != null) PaneHeader(
+                                title = stringResource((sub?.title ?: shownCategory.title)),
+                                onBack = if (sub != null) up else null,
+                            )
+                            Box(Modifier.weight(1f).fillMaxWidth()) { pageContent() }
+                        }
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
+                } else {
+                    Box(Modifier.fillMaxSize().padding(padding)) {
+                        if (shownCategory == null) {
+                            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 8.dp).testTag("settings_categories")) {
+                                CategoryList(selected = null, onOpen = openCategory)
+                            }
+                        } else pageContent()
+                    }
                 }
             }
         }
     }
 }
 
-/** Third-party notices bundled as an asset (generated by scripts/licenses/gen_notices.py). */
+/** The categories, each with a short description (the version for About). */
 @Composable
-private fun LicensesDialog(onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val lines = remember {
-        runCatching { context.assets.open("licenses/third_party_notices.txt").bufferedReader().readLines() }.getOrElse { listOf(it.message ?: "") }
+private fun CategoryList(selected: SettingsCategory?, onOpen: (SettingsCategory) -> Unit) {
+    SettingsCategory.values().forEach { c ->
+        val description = c.description?.let { stringResource(it) } ?: BuildConfig.VERSION_NAME
+        SettingsNavRow(
+            title = stringResource(c.title),
+            value = description,
+            tag = "settings_cat_${c.id}",
+            onClick = { onOpen(c) },
+            leadingIcon = c.icon,
+            selected = c == selected,
+        )
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.settings_licenses)) },
-        text = {
-            androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp).testTag("licenses_text")) {
-                items(lines.size) { i ->
-                    Text(lines[i], style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_close)) } },
-    )
+}
+
+/** Header of the right pane: the page's name, with a way back to the category while a page is open. */
+@Composable
+private fun PaneHeader(title: String, onBack: (() -> Unit)?) {
+    Row(Modifier.fillMaxWidth().padding(start = if (onBack == null) 16.dp else 4.dp, end = 16.dp, top = 8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        if (onBack != null) IconButton(onClick = onBack, modifier = Modifier.testTag("settings_pane_up")) {
+            Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.common_back))
+        }
+        Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
+    }
 }
