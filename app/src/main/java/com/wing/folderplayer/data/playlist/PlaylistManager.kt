@@ -62,7 +62,9 @@ class PlaylistStore(private val context: Context) {
     }
 
     private fun saveMetadata() {
-        metadataFile.writeText(gson.toJson(playlistMetadata))
+        // Rewritten on every play: a kill or a full disk in the middle must not leave a cut-off file, which the next
+        // start reads as "no playlists" (the .fpl files stay, unlisted).
+        writeTextAtomically(metadataFile, gson.toJson(playlistMetadata))
     }
 
     fun getAllPlaylists(): List<Playlist> {
@@ -95,9 +97,7 @@ class PlaylistStore(private val context: Context) {
 
     fun savePlaylist(playlist: Playlist) {
         val file = File(playlistsDir, "${playlist.id}.fpl")
-        val tmp = File(playlistsDir, "${playlist.id}.fpl.tmp")
-        tmp.writeText(gson.toJson(PlaylistFile(VERSION, playlist.items)))
-        if (!tmp.renameTo(file)) { file.writeText(tmp.readText()); tmp.delete() }
+        writeTextAtomically(file, gson.toJson(PlaylistFile(VERSION, playlist.items)))
         playlistMetadata[playlist.id] = playlist.name
         saveMetadata()
     }
@@ -187,4 +187,15 @@ fun <T> List<T>.moved(from: Int, to: Int): List<T>? {
     if (from !in indices || to !in indices) return null
     if (from == to) return this
     return toMutableList().apply { add(to, removeAt(from)) }
+}
+
+/** Writes [text] to a sibling `.tmp` file and renames it over [file]: [file] is either the old or the new content. */
+internal fun writeTextAtomically(file: File, text: String) {
+    val tmp = File(file.parentFile, file.name + ".tmp")
+    tmp.writeText(text)
+    if (!tmp.renameTo(file)) {
+        // Some file systems refuse to rename over an existing file.
+        file.delete()
+        if (!tmp.renameTo(file)) { file.writeText(text); tmp.delete() }
+    }
 }
