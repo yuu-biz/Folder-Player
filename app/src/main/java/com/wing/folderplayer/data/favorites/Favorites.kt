@@ -199,16 +199,29 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
         return writeRemoteFollowingRemovals(fs, remotePath, merged, added) { it.key !in remoteKeys }
     }
 
-    /** Explicit user action: overwrite the remote file with the local list (also used to repair a broken remote). */
+    /**
+     * Explicit user action: overwrite the remote file with the local list (also used to repair a broken remote). The
+     * write runs without [localLock]; if the list changed meanwhile (added or removed favourites), the remote is
+     * written again with the list as it is then, so it equals the local list when this returns.
+     */
     fun replaceRemote(fs: SourceFileSystem, remotePath: String): SyncResult = synchronized(syncLock) {
-        writeRemoteFollowingRemovals(fs, remotePath, _items.value, 0) { true }
+        var written = _items.value
+        var result = writeRemote(fs, remotePath, written, 0)
+        while (result is SyncResult.Synced) {
+            val now = synchronized(localLock) { _items.value }
+            if (now == written) break
+            written = now
+            result = writeRemote(fs, remotePath, written, 0)
+        }
+        result
     }
 
     /**
-     * Writes [items] to the remote. The list was taken before the (unlocked) write, so the user may have removed some
-     * of its entries meanwhile; those that [retractable] allows (entries this write itself put on the remote — never
-     * ones the remote already had, whose deletion a sync does not propagate) are taken out and the remote is written
-     * again, until nothing was removed during the last write.
+     * Writes [items] to the remote for a sync. The list was taken before the (unlocked) write, so the user may have
+     * removed some of its entries meanwhile; those that [retractable] allows (entries this write itself put on the
+     * remote — never ones the remote already had, whose deletion a sync does not propagate) are taken out and the
+     * remote is written again, until nothing was removed during the last write. Entries added meanwhile go out with
+     * the next sync.
      */
     private fun writeRemoteFollowingRemovals(
         fs: SourceFileSystem,
