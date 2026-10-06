@@ -141,6 +141,27 @@ class ArtworkIoTest {
         assertTrue("both failed attempts and the good one read the source", fs.reads("/Album Four/cover.jpg") >= 3)
     }
 
+    @Test fun undecodableBytesReadForDisplayAreNotKeptAndTheCoverRecoversWhenTheSourceIsFine() {
+        val good = jpeg(6)
+        val folder = album("Album Six", "cover.jpg" to good)
+        val f = found(runBlocking { thumbs.playbackCover(folder, null) })
+        val file = File(dir, "Album Six/cover.jpg")
+        val mtime = file.lastModified()
+        ThumbnailRepository.imageBytes.cache.clear()  // as if validation had not kept it (or evicted)
+
+        // The source delivers something that is not an image, same size and time (glitch / error page).
+        file.writeBytes(ByteArray(good.size) { 'x'.code.toByte() }); file.setLastModified(mtime)
+        assertTrue("display of a broken file fails", !display(f, 128))
+        assertEquals("nothing broken was kept", 0, ThumbnailRepository.imageBytes.cache.count)
+        assertTrue("validation does not pass on a leftover", !ThumbnailRepository.imageBytes.validate(f.entry))
+
+        // The source is fine again: read again and shown, no stale entry in the way.
+        file.writeBytes(good); file.setLastModified(mtime)
+        assertTrue("recovered", display(f, 128))
+        // validation 1 + broken display 1 + the validation call on the leftover 1 + recovered display 1
+        assertEquals(4, fs.reads("/Album Six/cover.jpg"))
+    }
+
     @Test fun nearbyRequestedSizesShareOneThumbnailFile() {
         val folder = album("Album Five", "cover.jpg" to jpeg(5))
         val f = found(runBlocking { thumbs.playbackCover(folder, null) })
