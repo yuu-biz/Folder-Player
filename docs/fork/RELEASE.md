@@ -45,6 +45,9 @@ The real-server protocol tests and the emulator suites need the Docker fixtures 
 The source of the release is the tag itself (GitHub's source archive). "Run workflow" on the Actions page runs the
 same steps and keeps the APK as a workflow artifact without creating a release.
 
+`.github/workflows/ci.yml` is the everyday check (push to main, pull requests, manual run): debug build, JVM tests, lint and
+the license notices, read-only, no signing secrets, never a release.
+
 ```
 git tag v0.5.1
 git push origin v0.5.1
