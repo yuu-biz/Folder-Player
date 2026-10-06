@@ -3,7 +3,8 @@
 An unofficial personal fork of [Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000, not
 affiliated with the original project. It installs next to the original app as **Folder Player Fork**
 (`com.wing.folderplayer.fork`) and adds SMB / FTP / SAF sources, a browser start page with a mini player that grows
-into the full player, ALAC / WMA / APE / DSD playback through FFmpeg, search, favourites and more.
+into the full player, a layout for tablets and foldables, ALAC / WMA / APE / DSD playback through FFmpeg, search,
+favourites, sorting by name / modified / created time and more.
 
 - **Download**: [Releases](https://github.com/yuu-biz/Folder-Player/releases) (Android 8.0 or newer)
 - **What this fork adds**: [docs/fork/FEATURES.md](docs/fork/FEATURES.md) ·
@@ -12,7 +13,7 @@ into the full player, ALAC / WMA / APE / DSD playback through FFmpeg, search, fa
   ([docs/fork/DEPENDENCIES.md](docs/fork/DEPENDENCIES.md))
 
 日本語：Folder Player を個人的に改造した非公式フォークです。元のアプリとは別アプリとして並べてインストールでき、
-SMB / FTP / SAF への対応、ミニプレーヤーから広がるプレーヤー画面、FFmpeg による追加形式、検索、お気に入りなどを加えています。
+SMB / FTP / SAF への対応、ミニプレーヤーから広がるプレーヤー画面、タブレット・折りたたみ端末向けのレイアウト、FFmpeg による追加形式、検索、お気に入りなどを加えています。
 
 The rest of this page is the original project's README. Some of it differs in this fork; for example the three
 swipeable pages (player / browser / settings) are replaced by the browser with a mini player.

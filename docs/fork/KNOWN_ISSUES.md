@@ -1,5 +1,74 @@
 # Known issues
 
+## Limitations of 1.0.0 (current)
+
+What a user can run into, in one place. The sections below give the history of each point and what was fixed when.
+
+- **Foldables / hinge**: no fold or hinge information is used; the layout follows the window size. Not checked on a real
+  foldable or tablet (window resizing on emulators only).
+- **Navigation**: opening a folder from search results or favourites leaves that list (Back goes to the folder's parent);
+  Settings shows no mini player.
+- **Sorting "Created"**: Android gives apps no file birth time. Local files: the time added to the media library;
+  SMB: the share's creation time; WebDAV, FTP, SAF folders: the modification time. Files with equal times are ordered by
+  name. Not compared with real creation times on other phones.
+- **Formats**: Android 8.0 cannot decode FLAC (no platform decoder); DSF / DFF cannot be cast; DST-compressed DSD is
+  not supported.
+- **Cast (DLNA)**: tested against a software renderer in Docker and with a fake renderer, not with a real TV / speaker.
+  Only the current track is sent: when it ends on the renderer the session stays open (Stop button, replay) but
+  nothing advances to the next track. The discovery service (and its Wi-Fi multicast lock) runs from the first time the
+  cast list is opened until DLNA is switched off in Settings or the process ends. Discovery was not checked after a
+  Wi-Fi change (home → office) or when first opened without Wi-Fi: if the list stays empty, switch DLNA off and on.
+  The relay listens on all interfaces; every URL carries a random token and exists only during a session.
+- **Playback control from other apps**: `MusicService` is exported so that the system UI, Bluetooth and car
+  controls can use it, and accepts any controller. Another installed app can start / stop playback and replace the queue.
+  An allow-list of known controller packages is a hardening candidate after 1.0.0.
+- **Sleep timer**: a "songs" timer ends with the queue (with "next folder" on it does not carry on into the next
+  folder; use the minutes timer) and does not count a track repeated by "repeat one". The timer is lost when the app
+  process ends.
+- **Restore**: after playing a list built from search results, favourites or a shuffle across folders, the next start
+  restores the folder of the first song of that list, at the position of the song that played last.
+- **Android 8–9**: auto-save of network tracks and saving `Info.nfo` into shared storage need the storage write
+  permission, which the app does not ask for (off by default; Android 10+ is not affected).
+- **Large folders**: playing a folder of several thousand songs writes the playlist on the main thread (a short stall);
+  every local folder listing queries the media library once (slow on very large libraries, not measured).
+- **Backup**: on Android 11 and older Auto Backup covers the settings (shared preferences) only, not the playlists and
+  `fav.json` under `files/`; Android 12+ backs them up (without downloaded fonts and the Keystore secrets).
+- **Credentials**: a WebDAV address typed as `http://user:password@host` is stored as typed (use the user / password
+  fields). Passwords entered in the fields are kept in the Android Keystore, per source. API keys of the AI feature
+  read from an old (pre-0.6) settings file stay once in `files/migration-backup/` (not backed up).
+- **Not checked**: TalkBack sessions, HyperOS devices, a NAS, a background network retry on a real phone with the
+  screen off (a refused foreground start is caught and logged, see below).
+
+## Final audit before 1.0.0: fixed
+
+Found by reading the whole code base (four independent reviews of playback, sources / credentials, storage / caches
+and UI / cast); each fix has a test that failed before it.
+
+- **Backup**: the cloud backup included `files/fonts/` (a downloaded font is 14–24 MB); Auto Backup stops for good above
+  25 MB of app data, so after one font download favourites, playlists and the source list were no longer backed up
+  (`BackupRulesTest`).
+- **Cast**: switching DLNA off in Settings during a session removed the cast button, and with it the only Stop control;
+  the relay, the Wi-Fi / wake locks and the renderer went on (`NavigationUiTest#n17`). `CastController.shutdown()` had
+  no caller; it now runs when DLNA is switched off. When the track ends on the renderer the Wi-Fi lock and the 6 h
+  wake lock are released (and taken again if the renderer plays again) (`CastSessionOrderTest`).
+- **Sleep timer by minutes + next folder**: the timer was cancelled when the queue ended, so with "next folder" on the
+  next folder played on all night. It now runs to its deadline (`PlaybackServiceTest#timeTimerSurvivesTheEndOfTheQueue`).
+- **Shuffle / next folder on a folder with no songs of its own** (the music root, an artist folder holding only albums):
+  the running playback was stopped, the "Default" playlist replaced by an empty one, and the player stayed on "Loading…".
+  Nothing is touched now (`PlaybackServiceTest#folderWithoutSongsOfItsOwnKeepsThePlayback`).
+- **Playlists**: `metadata.json` (the list of playlists) was rewritten in place on every play; a kill or a full disk
+  during the write left a cut-off file that the next start read as "no playlists". Written through a temporary file now
+  (`AtomicWriteTest`).
+- **Sorting**: songs with equal sort keys (normal for "Created": an album copied in one go has one second for every
+  file) came in the order of the file system, and descending order reversed them differently in the browser list and
+  in the queue of "play folder" / restore / next folder. One function with a name tie-break serves both
+  (`SortOrderTest`).
+- **Notification**: an Android 12+ refusal to start the foreground service from the background (a network retry with
+  the screen off) is caught and logged instead of ending the app. Written from the code path, not reproduced on a
+  device.
+
+## Earlier history
+
 The two issues known at the first public release (0.6.0) are fixed in 1.0.0-dev2; see the next section for what changed
 and what is left. Older fixes follow below.
 
