@@ -54,7 +54,8 @@ class CastSessionOrderTest {
         override fun pause(udn: String) = call("pause:$udn")
         override fun stop(udn: String) = call("stop:$udn")
         override fun seek(udn: String, positionMs: Long) = call("seek:$udn")
-        override fun transportState(udn: String): String { call("transport:$udn"); return "PLAYING" }
+        @Volatile var transport = "PLAYING"
+        override fun transportState(udn: String): String { call("transport:$udn"); return transport }
         override fun progress(udn: String): Pair<Long, Long> = 1_000L to 60_000L
         override fun shutdown() = Unit
     }
@@ -377,5 +378,25 @@ class CastSessionOrderTest {
         assertEquals("no such renderer", s.error)
         awaitTrue("relay and locks released") { !cast.relay.isRunning && !locks.sessionHeld }
         assertNull(cast.state.value.active)
+    }
+
+    @Test fun shutdownEndsTheActiveSessionAndReleasesEverything() {
+        startCastToA()
+        cast.shutdown()
+        awaitTrue("session ended") { cast.state.value.active == null && !cast.relay.isRunning && !locks.sessionHeld }
+        assertTrue("the renderer was told to stop", renderer.calls.contains("stop:uuid:A"))
+        assertFalse(cast.state.value.sessionInProgress)
+    }
+
+    @Test fun finishedTrackReleasesTheSessionLocksAndAReplayTakesThemAgain() {
+        startCastToA()
+        awaitState("polled") { it.rendererState == "PLAYING" }
+        assertTrue(locks.sessionHeld)
+        // The track ends on the renderer (nobody pressed Stop): the phone must not stay awake for hours.
+        renderer.transport = "STOPPED"
+        awaitTrue("locks released after the track ended") { !locks.sessionHeld }
+        assertEquals("the session itself stays (replay, Stop button)", a, cast.state.value.active)
+        renderer.transport = "PLAYING"
+        awaitTrue("locks taken again when the renderer plays") { locks.sessionHeld }
     }
 }

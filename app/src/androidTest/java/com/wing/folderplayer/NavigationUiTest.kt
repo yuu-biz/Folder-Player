@@ -735,4 +735,36 @@ class NavigationUiTest : UiTestBase() {
             com.wing.folderplayer.cast.CastController.replaceInstanceForTest(null)
         }
     }
+
+    // Review: switching DLNA off in Settings during a session removed the cast button, and with it the only Stop
+    // control, while the relay, the locks and the renderer went on. Off now ends the session.
+    @Test fun n17_switchingDlnaOffEndsTheCastSession() {
+        val fake = FakeRenderer()
+        val cast = com.wing.folderplayer.cast.CastController(
+            { com.wing.folderplayer.cast.CastSettings(Fx.ctx).enabled }, fake, { ref -> SourceRegistry.fileSystem(ref) }, NoLocks,
+        )
+        com.wing.folderplayer.cast.CastController.replaceInstanceForTest(cast)
+        com.wing.folderplayer.cast.CastSettings(Fx.ctx).enabled = true
+        try {
+            toBrowser()
+            onUi { player.playFolder(SourceRef(local, "$fx/Long"), null) }
+            until(15_000, "playing") { playing("Long") }
+            onUi { player.pauseLocal() }
+            fake.uriGate.countDown()
+            cast.cast(fake.renderer, SourceRef(local, "$fx/Long/long.flac"), "long", null)
+            until(10_000, "cast active") { cast.state.value.active != null && fake.playing }
+            assertTrue("relay running during the session", cast.relay.isRunning)
+
+            toSettings()
+            click("dlna_enabled") // on → off
+            until(10_000, "session ended") { cast.state.value.active == null && !cast.relay.isRunning && !fake.playing }
+            assertFalse("DLNA is off", com.wing.folderplayer.cast.CastSettings(Fx.ctx).enabled)
+            assertFalse("nothing keeps the player from being dismissed", cast.state.value.sessionInProgress)
+        } finally {
+            fake.uriGate.countDown()
+            com.wing.folderplayer.cast.CastSettings(Fx.ctx).enabled = false
+            cast.shutdown()
+            com.wing.folderplayer.cast.CastController.replaceInstanceForTest(null)
+        }
+    }
 }
