@@ -44,8 +44,18 @@ import com.wing.folderplayer.R
 import kotlin.math.abs
 import kotlin.math.sign
 
-/** Height of the mini player row (without the system navigation bar below it). */
+/** Height of the mini player row (without the system navigation bar below it) at the normal font size. */
 val MiniPlayerHeight = 66.dp
+
+/**
+ * Height of the mini player row at the font size in use: two lines of text (title, artist) must fit, so the bar grows
+ * with a large font (by half of the extra size, at most 1.5 times). Everything that reserves the bar's place asks here.
+ */
+@Composable
+fun miniPlayerHeight(): androidx.compose.ui.unit.Dp {
+    val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
+    return MiniPlayerHeight * (1f + (fontScale - 1f) * 0.5f).coerceIn(1f, 1.5f)
+}
 
 /** What the mini player shows; the position is left out so it does not recompose every second while playing. */
 data class MiniPlayerState(
@@ -69,6 +79,7 @@ fun PlayerUiState.mini() =MiniPlayerState(currentTitle, currentArtist, coverUri,
  */
 @Composable
 fun MiniPlayer(viewModel: PlayerViewModel, transition: PlayerTransition, onOpen: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    val barHeight = miniPlayerHeight()
     val state by viewModel.miniState.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     val cast by com.wing.folderplayer.cast.CastController.get(context).state.collectAsState()
@@ -146,7 +157,7 @@ fun MiniPlayer(viewModel: PlayerViewModel, transition: PlayerTransition, onOpen:
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(MiniPlayerHeight - 2.dp)
+                        .height(barHeight - 2.dp)
                         .clickable(onClickLabel = stringResource(R.string.player_open), role = Role.Button, onClick = onOpen)
                         .testTag("mini_player")
                         .padding(start = 8.dp, end = 4.dp),

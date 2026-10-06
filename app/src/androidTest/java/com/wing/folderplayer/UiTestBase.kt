@@ -51,8 +51,43 @@ abstract class UiTestBase {
         return parts.joinToString("")
     }
 
+    /**
+     * Settings page that holds the control [tag]: category and (optional) page, as the tags of their rows name them
+     * (`settings_cat_<category>`, `settings_sub_<page>`). Null: not a Settings control.
+     */
+    protected fun settingsRoute(tag: String): Pair<String, String?>? = when {
+        tag.startsWith("lang_") -> "display" to "language"
+        tag.startsWith("font_") -> "display" to "font"
+        listOf("cover_", "bg_", "title_", "orientation_", "notch_").any { tag.startsWith(it) } -> "display" to null
+        listOf("sort_", "sortdir_", "defview_", "grid_").any { tag.startsWith(it) } -> "library" to null
+        tag.startsWith("thumbs_") -> "library" to "thumbnails"
+        tag == "clear_image_cache" || tag.startsWith("perm_") -> "storage" to null
+        tag == "ai_lyrics_auto" || tag.startsWith("lyrics_priority_") -> "lyrics" to null
+        tag == "dlna_enabled" || tag == "auto_save" || tag == "native_decoder_status" -> "playback" to null
+        tag == "about_version" || tag == "open_licenses" -> "about" to null
+        else -> null
+    }
+
+    /** Opens the Settings page of the control [tag] (from wherever Settings is now) and scrolls the control into view. */
+    protected fun settingsReveal(tag: String) {
+        val (category, sub) = settingsRoute(tag) ?: error("not a Settings control: $tag")
+        if (!exists(tag)) {
+            var up = 0
+            while (!exists("settings_cat_$category") && up++ < 4) { compose.onNodeWithTag("settings_up").performClick(); compose.waitForIdle() }
+            // (Scrolled to first: with a large font a row can be below the visible part of the list.)
+            for (row in listOfNotNull("settings_cat_$category", sub?.let { "settings_sub_$it" })) {
+                if (row.startsWith("settings_sub_") && exists(tag)) break
+                runCatching { compose.onNodeWithTag(row, useUnmergedTree = true).performScrollTo() }
+                compose.onNodeWithTag(row, useUnmergedTree = true).performClick(); compose.waitForIdle()
+            }
+        }
+        runCatching { compose.onNodeWithTag(tag, useUnmergedTree = true).performScrollTo() }
+        compose.waitForIdle()
+    }
+
     /** Clicks a node, scrolling it into view first when it sits in a scrollable container (dialogs, settings). */
     protected fun click(tag: String) {
+        if (exists("settings_column") && settingsRoute(tag) != null) settingsReveal(tag)
         runCatching { compose.onNodeWithTag(tag).performScrollTo() }
         compose.onNodeWithTag(tag).performClick()
         compose.waitForIdle()
@@ -80,7 +115,9 @@ abstract class UiTestBase {
     protected fun toBrowser() {
         compose.waitForIdle()
         if (playerOpen()) click("btn_collapse_player")
-        if (exists("settings_column")) pressBack()
+        // Settings has pages below its categories: one Back goes up one level.
+        var backs = 0
+        while (exists("settings_column") && backs++ < 4) pressBack()
         until(10_000, "browser") { browserShown() }
     }
 

@@ -77,15 +77,23 @@ fun MainPlayerScreen(
     viewModel: PlayerViewModel,
     onCollapse: () -> Unit,
     transition: PlayerTransition,
+    /** Shown in a pane beside the browser (wide windows): no folding, and the layout follows the pane, not the screen. */
+    docked: Boolean = false,
 ) {
     // The controller is connected once by MainActivity; opening or closing this screen never touches it.
     val configuration = LocalConfiguration.current
-    Box(Modifier.fillMaxSize().testTag("player_full")) {
-        if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+    BoxWithConstraints(Modifier.fillMaxSize().testTag(if (docked) "player_docked" else "player_full")) {
+        // The sheet fills the window, so the screen says it. A pane is only part of the window: it says for itself.
+        val landscape = if (docked) maxWidth > maxHeight * 1.15f else configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val viewportHeight = if (docked) maxHeight else configuration.screenHeightDp.dp
+        if (landscape) {
             val uiState by viewModel.uiState.collectAsState()
-            LandscapePlayerLayout(viewModel = viewModel, uiState = uiState, onCollapse = onCollapse, transition = transition)
+            LandscapePlayerLayout(
+                viewModel = viewModel, uiState = uiState, onCollapse = onCollapse, transition = transition, docked = docked,
+                viewportRatio = if (docked) maxWidth / maxHeight else null,
+            )
         } else {
-            PortraitPlayerLayout(viewModel, onCollapse, transition)
+            PortraitPlayerLayout(viewModel, onCollapse, transition, viewportHeight, maxWidth, docked)
         }
     }
 }
@@ -113,6 +121,9 @@ private fun PortraitPlayerLayout(
     viewModel: PlayerViewModel,
     onCollapse: () -> Unit,
     transition: PlayerTransition,
+    viewportHeight: androidx.compose.ui.unit.Dp,
+    viewportWidth: androidx.compose.ui.unit.Dp,
+    docked: Boolean,
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -121,8 +132,7 @@ private fun PortraitPlayerLayout(
     var lyricsExpanded by remember { mutableStateOf(false) }
     var showAlbumInfo by remember { mutableStateOf(false) }
 
-    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
-    val screenHeight = configuration.screenHeightDp.dp
+    val screenHeight = viewportHeight
     
     // Animation targets for Large Lyrics mode
     val coverWidthFraction by androidx.compose.animation.core.animateFloatAsState(
@@ -211,7 +221,8 @@ private fun PortraitPlayerLayout(
                     animationSpec = androidx.compose.animation.core.tween(durationMillis = 500)
                 )
                 
-                val maxCoverSize = screenHeight * 0.6f
+                // In a pane the cover must leave room for title, lyrics and controls: the pane is narrower and not taller than a phone.
+                val maxCoverSize = if (docked) minOf(screenHeight * 0.4f, viewportWidth * 0.85f) else screenHeight * 0.6f
 
                 Box(
                     modifier = Modifier
@@ -294,7 +305,7 @@ private fun PortraitPlayerLayout(
                                 Text(
                                     text = uiState.audioInfo,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White.copy(alpha = 0.5f),
+                                    color = Color.White.copy(alpha = 0.65f),
                                     modifier = Modifier.padding(top = 2.dp)
                                 )
                             }
@@ -343,7 +354,7 @@ private fun PortraitPlayerLayout(
                                 itemsIndexed(uiState.lyrics) { index, lyric ->
                                     val isCurrentLine = index == uiState.currentLyricIndex
                                     val colorAlpha by androidx.compose.animation.core.animateFloatAsState(
-                                        targetValue = if (isCurrentLine) 0.8f else 0.4f,
+                                        targetValue = if (isCurrentLine) 0.8f else 0.55f,
                                         label = "lyricAlpha"
                                     )
                                     val scale by androidx.compose.animation.core.animateFloatAsState(
@@ -402,7 +413,7 @@ private fun PortraitPlayerLayout(
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Text(
                                     androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_no_lyrics),
-                                    color = Color.White.copy(alpha = 0.3f),
+                                    color = Color.White.copy(alpha = 0.6f),
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                             }
@@ -414,7 +425,8 @@ private fun PortraitPlayerLayout(
                     if (!lyricsExpanded) LyricsFooter(uiState) { regen -> viewModel.requestAiLyrics(regen) }
                     PlaybackErrorBanner(uiState)
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                // (The seek bar below is 48 dp high for the finger: 12 dp of it were spacing before.)
+                Spacer(modifier = Modifier.height(4.dp))
 
                 // Progress Bar
                 Column(
@@ -480,8 +492,12 @@ private fun PortraitPlayerLayout(
                         BoxWithConstraints(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(24.dp)
+                                .height(48.dp)
                                 .testTag("seek_bar")
+                                .seekSemantics(uiState.currentPosition, uiState.duration) { f ->
+                                    sliderPosition = f
+                                    viewModel.seekTo((f * uiState.duration).toLong())
+                                }
                                 .seekGestures(
                                     onPreview = { sliderPosition = it },
                                     onSeek = {
@@ -535,8 +551,6 @@ private fun PortraitPlayerLayout(
                         }
                     }
                     
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -545,12 +559,12 @@ private fun PortraitPlayerLayout(
                     ) {
                         Text(
                             text = formatTime(uiState.currentPosition),
-                            color = Color.White.copy(alpha = 0.6f),
+                            color = Color.White.copy(alpha = 0.75f),
                             style = MaterialTheme.typography.labelMedium
                         )
                         Text(
                             text = formatTime(uiState.duration),
-                            color = Color.White.copy(alpha = 0.6f),
+                            color = Color.White.copy(alpha = 0.75f),
                             style = MaterialTheme.typography.labelMedium
                         )
                     }
@@ -604,7 +618,7 @@ private fun PortraitPlayerLayout(
                     }
                 }
             }
-            CollapsePlayerButton(onCollapse, Modifier.align(Alignment.TopStart).statusBarsPadding().padding(4.dp).fullPlayerContent(transition))
+            if (!docked) CollapsePlayerButton(onCollapse, Modifier.align(Alignment.TopStart).statusBarsPadding().padding(4.dp).fullPlayerContent(transition))
         }
 
         // Playlist BottomSheet
@@ -668,17 +682,18 @@ private fun PortraitPlayerLayout(
                                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                                                 Text(playlist.name, modifier = Modifier.weight(1f), color = Color.White)
                                                 if (playlist.id != "default") {
+                                                    // 48 dp targets, named for TalkBack.
                                                     IconButton(onClick = { 
                                                         playlistToRename = playlist.id
                                                         renameName = playlist.name
                                                         expanded = false
-                                                    }, modifier = Modifier.size(24.dp)) {
-                                                        Icon(Icons.Default.Edit, contentDescription = null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
+                                                    }, modifier = Modifier.size(48.dp)) {
+                                                        Icon(Icons.Default.Edit, contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_rename), tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
                                                     }
                                                     IconButton(onClick = { 
                                                         viewModel.deletePlaylist(playlist.id)
-                                                    }, modifier = Modifier.size(24.dp)) {
-                                                        Icon(Icons.Default.Delete, contentDescription = null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
+                                                    }, modifier = Modifier.size(48.dp)) {
+                                                        Icon(Icons.Default.Delete, contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.common_delete), tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
                                                     }
                                                 }
                                             }

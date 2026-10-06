@@ -1,7 +1,5 @@
 package com.wing.folderplayer
 
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -12,7 +10,6 @@ import org.junit.runner.RunWith
 class LicensesUiTest : UiTestBase() {
     @Test fun noticesAreShownFromSettings() {
         toSettings()
-        compose.onNodeWithTag("open_licenses", useUnmergedTree = true).performScrollTo()
         click("open_licenses")
         until(5_000, "licenses dialog") { exists("licenses_text") }
         val notices = compose.activity.assets.open("licenses/third_party_notices.txt").bufferedReader().readText()

@@ -57,13 +57,10 @@ class BrowserUiTest : UiTestBase() {
 
     private fun settingSwitch(tag: String, on: Boolean) {
         toSettings()
-        compose.onNodeWithTagScrolled(tag)
+        settingsReveal(tag)
         val isOn = runCatching { node(tag).assertIsOn(); true }.getOrDefault(false)
         if (isOn != on) click(tag)
     }
-
-    private fun androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>.onNodeWithTagScrolled(tag: String) =
-        onNodeWithTag(tag, useUnmergedTree = true).performScrollTo()
 
     private fun shell(cmd: String) = Fx.shell(cmd).also { Fx.log("shell $cmd -> ${it.trim()}") }
     private fun rescan() = shell("content call --uri content://media/external/file --method scan_volume --arg external_primary")
@@ -85,9 +82,9 @@ class BrowserUiTest : UiTestBase() {
     @Test fun a13_thumbnailDefaultsAndGridListMemoryAndDensity() {
         // Defaults: Local/SAF on, network off.
         toSettings()
-        for (t in listOf("LOCAL", "SAF")) { compose.onNodeWithTagScrolled("thumbs_$t"); node("thumbs_$t").assertIsOn() }
-        for (t in listOf("WEBDAV", "SMB", "FTP")) { compose.onNodeWithTagScrolled("thumbs_$t"); node("thumbs_$t").assertIsOff() }
-        compose.onNodeWithTagScrolled("thumbs_wifi")
+        for (t in listOf("LOCAL", "SAF")) { settingsReveal("thumbs_$t"); node("thumbs_$t").assertIsOn() }
+        for (t in listOf("WEBDAV", "SMB", "FTP")) { settingsReveal("thumbs_$t"); node("thumbs_$t").assertIsOff() }
+        settingsReveal("thumbs_wifi")
 
         // Per-folder view memory.
         open(local, fx, "GRID")
@@ -101,7 +98,7 @@ class BrowserUiTest : UiTestBase() {
         // Grid density from settings changes the number of columns.
         for (cols in listOf(2, 5)) {
             toSettings()
-            compose.onNodeWithTagScrolled("grid_$cols"); click("grid_$cols")
+            settingsReveal("grid_$cols"); click("grid_$cols")
             toBrowser()
             until(5_000, "grid") { exists("file_grid") }
             val gridW = node("file_grid").fetchSemanticsNode().boundsInRoot.width
@@ -197,7 +194,7 @@ class BrowserUiTest : UiTestBase() {
         val density = browser.uiState.value.gridDensity
         val sources = SourceRegistry.savedSources().map { it.id }
         toSettings()
-        compose.onNodeWithTagScrolled("clear_image_cache"); click("clear_image_cache")
+        settingsReveal("clear_image_cache"); click("clear_image_cache")
         assertEquals(density, browser.uiState.value.gridDensity)
         assertEquals(sources, SourceRegistry.savedSources().map { it.id })
         assertTrue(player.uiState.value.allPlaylists.any { it.name == "cache-test" })
@@ -207,7 +204,7 @@ class BrowserUiTest : UiTestBase() {
     }
 
     @Test fun a18_threeHundredFoldersFastScrollNoMixups() {
-        toSettings(); compose.onNodeWithTagScrolled("grid_4"); click("grid_4")
+        toSettings(); settingsReveal("grid_4"); click("grid_4")
         open(local, "$fx/Many", "GRID")
         val grid = compose.onNodeWithTag("file_grid")
         val rt = Runtime.getRuntime()

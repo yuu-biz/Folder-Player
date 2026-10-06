@@ -3,6 +3,7 @@ package com.wing.folderplayer
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.ViewModelProvider
@@ -42,7 +43,6 @@ class LibraryUiTest : UiTestBase() {
         until(5_000, "list") { exists("file_list") }
     }
 
-    private fun scrolled(tag: String) { compose.onNodeWithTag(tag, useUnmergedTree = true).performScrollTo(); compose.waitForIdle() }
 
     // ---------------- search ----------------
 
@@ -57,6 +57,8 @@ class LibraryUiTest : UiTestBase() {
         assertTrue(names.containsAll((10..19).map { "track %03d.flac".format(it) }))
         assertTrue("results stay under the root", s1.results.all { it.path.startsWith("$fx/") && it.sourceId == local })
         assertEquals("no duplicates", s1.results.size, s1.results.map { it.sourceId + it.path }.toSet().size)
+        // The list ends above the keyboard now, so a row can be below the visible part: scroll to it.
+        compose.onNodeWithTag("file_list").performScrollToNode(androidx.compose.ui.test.hasTestTag("item_track 015.flac"))
         until(5_000, "result rows") { exists("item_track 015.flac") }
 
         // Changing the query replaces the previous search (no stale results).
@@ -138,11 +140,12 @@ class LibraryUiTest : UiTestBase() {
     @Test fun a31_languageAndDisplaySettings() {
         toSettings()
         for (tag in listOf("grid_5", "bg_BLACK", "cover_LARGE", "notch_BLACK_BAR", "title_TAGS", "sort_DATE", "defview_GRID")) {
-            scrolled(tag); click(tag)
+            settingsReveal(tag); click(tag)
         }
-        scrolled("lang_fr"); click("lang_fr")
+        settingsReveal("lang_fr"); click("lang_fr")
         // The activity is recreated in French.
-        until(15_000, "French UI") { AppLocale.get(Fx.ctx) == "fr" && textExists("Réglages") }
+        // Settings stays on its language page, whose title is now "Langue".
+        until(15_000, "French UI") { AppLocale.get(Fx.ctx) == "fr" && textExists("Langue") }
         Fx.log("settings title now: ${compose.activity.getString(R.string.settings_title)}")
     }
 
@@ -151,19 +154,19 @@ class LibraryUiTest : UiTestBase() {
         toSettings()
         until(10_000, "French UI after restart") { textExists("Réglages") }
         for (tag in listOf("grid_5", "bg_BLACK", "cover_LARGE", "notch_BLACK_BAR", "title_TAGS", "sort_DATE", "defview_GRID")) {
-            scrolled(tag); node(tag).assertIsSelected()
+            settingsReveal(tag); node(tag).assertIsSelected()
         }
         // Every language can be selected; switch through them and back to the system language.
         for (tag in listOf("zh-CN", "zh-TW", "it", "ja", "en", "")) {
             toSettings()
-            scrolled("lang_$tag"); click("lang_$tag")
+            settingsReveal("lang_$tag"); click("lang_$tag")
             until(15_000, "language $tag") { AppLocale.get(Fx.ctx) == tag }
             Thread.sleep(1_500)
             Fx.log("language '$tag': settings title = ${compose.activity.getString(R.string.settings_title)}")
         }
         // Back to defaults for other suites.
         toSettings()
-        for (tag in listOf("grid_3", "bg_GRADIENT", "cover_STANDARD", "notch_FULLSCREEN", "title_FILENAME", "sort_NAME", "defview_LIST")) { scrolled(tag); click(tag) }
+        for (tag in listOf("grid_3", "bg_GRADIENT", "cover_STANDARD", "notch_FULLSCREEN", "title_FILENAME", "sort_NAME", "defview_LIST")) { settingsReveal(tag); click(tag) }
         assertFalse(AppLocale.get(Fx.ctx).isNotEmpty())
     }
 }

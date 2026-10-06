@@ -75,7 +75,11 @@ import kotlin.math.abs
  * so a recreation in the middle of a move always lands at one end.
  */
 @Stable
-class PlayerSheetState internal constructor(initiallyExpanded: Boolean) {
+class PlayerSheetState internal constructor(
+    initiallyExpanded: Boolean,
+    /** Shown in a pane beside the browser: always open, never dragged or folded. */
+    val isDocked: Boolean = false,
+) {
     var fraction by mutableFloatStateOf(if (initiallyExpanded) 1f else 0f)
         private set
     var expanded by mutableStateOf(initiallyExpanded)
@@ -105,6 +109,15 @@ class PlayerSheetState internal constructor(initiallyExpanded: Boolean) {
 
     fun expand() = animateTo(true)
     fun collapse() = animateTo(false)
+
+    /**
+     * The window changed size while the player may be moving (a finger on it, or on its way): stop where it is and land
+     * on the nearer end at once, so a resize never leaves it half-way. At rest nothing happens.
+     */
+    fun settle() {
+        if (!isDragging && !isAnimating) return
+        snapTo(fraction >= 0.5f)
+    }
 
     /** Jumps to an end without animating (e.g. when another page replaces the browser). */
     fun snapTo(open: Boolean) {
@@ -183,6 +196,9 @@ class PlayerSheetState internal constructor(initiallyExpanded: Boolean) {
         private fun animationsEnabled() = ValueAnimator.areAnimatorsEnabled()
 
         val Saver: Saver<PlayerSheetState, Boolean> = Saver(save = { it.expanded }, restore = { PlayerSheetState(it) })
+
+        /** The state of a player docked in a pane: open for good. */
+        fun docked() = PlayerSheetState(initiallyExpanded = true, isDocked = true)
     }
 }
 
@@ -359,6 +375,12 @@ fun Modifier.playerSheetDrag(sheet: PlayerSheetState, onSwipeUpWhenFull: (() -> 
                     return@awaitEachGesture
                 }
 
+                if (sheet.isDocked) {
+                    // Docked in a pane there is nothing to fold: a downward drag only ends here (it is not left to the parts below).
+                    follow(start.id, PointerEventPass.Main) { _, _ -> }
+                    return@awaitEachGesture
+                }
+
                 token = sheet.beginDrag()
                 moved = true
                 velocity.moved(start)
@@ -438,18 +460,9 @@ fun PlayerSheetHost(
 ) {
     val density = LocalDensity.current
     val configuration = LocalConfiguration.current
-    val transition = remember(sheet) { PlayerTransition(sheet).also { t -> sheet.range = { t.miniTop ?: t.fallbackMiniTop } } }
+    val transition = rememberPlayerTransition(sheet)
     val navBottom = WindowInsets.navigationBars.getBottom(density)
-    with(density) {
-        transition.miniCornerPx = MiniCoverCorner.toPx()
-        transition.miniCoverPx = MiniCoverSize.toPx()
-        transition.thumbPx = MiniCoverSize.roundToPx()
-        transition.contentOffsetPx = 40.dp.toPx()
-        transition.panelCornerPx = 24.dp.toPx()
-        // The same for both orientations: turning the phone does not request the picture again.
-        transition.largePx = minOf(configuration.screenWidthDp, configuration.screenHeightDp).dp.roundToPx().coerceAtLeast(1)
-    }
-    val miniBarPx = with(density) { MiniPlayerHeight.toPx() } + navBottom
+    val miniBarPx = with(density) { miniPlayerHeight().toPx() } + navBottom
 
     val open by remember(sheet) { derivedStateOf { sheet.isOpen } }
     val settledFull by remember(sheet) { derivedStateOf { sheet.isSettledFull } }
@@ -508,7 +521,7 @@ private fun SheetBackHandler(sheet: PlayerSheetState) {
 
 /** Panel behind the player: a scrim over the pages above it, the mini colour turning into the player background. */
 @Composable
-private fun PanelBackground(transition: PlayerTransition, style: String, cover: Pair<Any?, ByteArray?>) {
+internal fun PanelBackground(transition: PlayerTransition, style: String, cover: Pair<Any?, ByteArray?>) {
     val base = MaterialTheme.colorScheme.surfaceVariant
     val path = remember { Path() }
     Box(
@@ -541,3 +554,28 @@ private fun PanelBackground(transition: PlayerTransition, style: String, cover: 
         )
     }
 }
+
+/**
+ * The transition values of a player: dimensions in pixels and the size the large cover is requested at. The sheet
+ * (phone) and the docked pane (wide) both use it, so both ask for the same picture at the same size.
+ */
+@Composable
+fun rememberPlayerTransition(sheet: PlayerSheetState): PlayerTransition {
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    val transition = remember(sheet) { PlayerTransition(sheet).also { t -> sheet.range = { t.miniTop ?: t.fallbackMiniTop } } }
+    with(density) {
+        transition.miniCornerPx = MiniCoverCorner.toPx()
+        transition.miniCoverPx = MiniCoverSize.toPx()
+        transition.thumbPx = MiniCoverSize.roundToPx()
+        transition.contentOffsetPx = 40.dp.toPx()
+        transition.panelCornerPx = 24.dp.toPx()
+        // The same for both orientations (turning the phone does not request the picture again) and for the sheet and the
+        // docked pane. Rounded up to a step, so a small resize of the window (multi-window) keeps the picture in the cache.
+        val shortSidePx = minOf(configuration.screenWidthDp, configuration.screenHeightDp).dp.roundToPx().coerceAtLeast(1)
+        transition.largePx = ((shortSidePx + LargePxStep - 1) / LargePxStep) * LargePxStep
+    }
+    return transition
+}
+
+private const val LargePxStep = 256
