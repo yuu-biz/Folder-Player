@@ -73,6 +73,34 @@ touch them.
   sideways swipe on the mini player while it may not be dismissed (playing) opened the full player, and a refused
   dismissal left the bar slid out of view; both fixed.
 
+## Stability hardening toward 1.0.0 (1.0.0-dev1): fixed
+
+Found by static review, reproduced by tests first (see VERIFICATION.md 5.11).
+
+- Play requests raced: while one request was still reading a slow source (NAS listing, CUE file, cover lookup),
+  a newer one could finish first; the older one then replaced the queue, the "Default" playlist, the saved last
+  folder / track and the screen, or showed its late error over the new playback. Only the latest request (folder,
+  list, playlist, CUE, restore, next folder) is applied now (`PlayRequestRaceTest`). The restore of the last session
+  was already safe (its cancellation took effect).
+- Favourites: a sync held the favourites lock across its network I/O, so adding / removing a favourite from the
+  browser (main thread) waited for the server. The lock is now held only to merge; changes made during a sync are
+  kept (`FavoritesSyncConcurrencyTest`).
+- Sleep timer: it lived in the screen's ViewModel. After leaving the app (activity finished) playback went on in the
+  service but the timer was gone, so it never stopped playback, and the next screen showed no timer. It now runs in
+  `MusicService` (`SleepTimerLifecycleTest`). Changed on the way: a time deadline that passes while playback is paused
+  now ends the timer without effect; before, the next resume was paused at once.
+- A folder named `Init` or `init` in shared Music erased settings on every start — the configured sources included —
+  and left the app unable to play (no player connection). Seen on API 34 with and without media permissions. Release
+  builds now ignore the folder; debug builds keep it as a development escape hatch (`DevSafeModeTest`).
+
+## Stability hardening: open points
+
+- Debug safe mode (`Music/Init`) still clears the source list but leaves the sources' stored passwords in the
+  credential store (unreachable, not readable without the source). There is no user-facing "reset app settings";
+  Android's "Clear storage" is the full reset.
+- The sleep timer is not kept when the app process ends (as before: it was never persisted).
+- Next-folder playback is skipped while a play request is still loading (the request decides what plays).
+
 ## Fixed in 0.6.0-dev5
 
 - Player drag (up / down) and the mini player's sideways swipe: a short fast move, then the finger held still, then

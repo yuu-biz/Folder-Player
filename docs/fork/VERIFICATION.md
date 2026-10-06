@@ -112,6 +112,26 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.11 Stability hardening toward 1.0.0 (1.0.0-dev1, 2026-10-06)
+
+Branch `feature/stability-hardening` from `b1c98fb` (v0.6.0 docs). Four findings of a static review, each reproduced
+by a new test on the unchanged code first (APKs of the unchanged code kept for that run), then fixed. Emulator API 34
+only; suites run one method per process (`run-suites.sh`). See [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for the
+behaviour changes.
+
+| Check | Result |
+|---|---|
+| 1. Play requests: `PlayRequestRaceTest` (fake NAS whose reads wait at a gate and ignore interrupts; A on it, then B; then A's I/O returns) | before: 5 of 6 FAIL — custom list, folder, CUE and folder-then-list: A's items replaced B's queue; failing folder: A's late "Server unreachable" shown over B. Restore vs. B PASSED (its cancellation took effect). After: 6/6 PASS (queue, current track, folder name, saved folder / track, Default playlist, no error) |
+| 2. Favourites: `FavoritesSyncConcurrencyTest` (JVM; remote read / write held at a gate) | before: 2 of 3 FAIL (add during the sync waited for it; timed out at 1 s). After: 3/3 PASS: add / remove finish at once, a local add and removal of a local-only entry made during the remote read are kept and reach the remote, an add during the remote write stays local and goes out with the next sync; two syncs run one after the other. `FavoritesTest` 12/12 unchanged |
+| 3. Sleep timer: `SleepTimerLifecycleTest` (real `MainActivity` via `ActivityScenario`; the activity is finished, not only its controller released) | before: 3 of 4 FAIL — 1-minute timer never stopped playback with no screen (timed out at 90 s), song timer likewise, the next activity showed no timer. Recreated activity counting once PASSED. After: 4/4 PASS; time timer paused playback 60.1 s after it was set, with no activity |
+| 4. `Music/Init` on the unchanged debug build (API 34) | folder made with `adb shell mkdir`; next start: `source_prefs` reduced to `sources_schema` (configured sources gone), `playback_prefs` empty, log "Safe Mode Trigger Detected!". Also fires with all media permissions revoked |
+| 4. Release APK `1.0.0-dev1` with `Music/Init` | WebDAV source added and a track played through the UI, paused, app force-stopped, folder created, app started: no safe-mode log, source and last folder shown, mini player restored with the track, Play → PLAYING. `DevSafeModeTest` (JVM) covers debug / release branches |
+| Related suites after the fixes | `PlaybackServiceTest` 8, `PlayerSkipTest` 4, `PlaylistQueueTest` 1, `OpenPlayerColdStartTest` 2, `NotificationSwitchTest` 2, `RetryExportTest` 5, `CastCleanupTest` 1, `NavigationUiTest` 16, `PlayerSheetUiTest` 12: all PASS on the first run (with the new suites 61/61) |
+| `lintDebug testDebugUnitTest` | lint 0 errors, 68 warnings (61 at dev5); the only one in a changed file is the existing `DefaultLocale` in `computeAudioInfo`. JVM 130, 0 failures, 21 skipped |
+| Signed release build `-PfpVersionName=1.0.0-dev1 -PfpVersionCode=1000001` | `FolderPlayerFork-1.0.0-dev1.apk`, SHA-256 `065ec0a096cb9e602c0822c1ed7b8b10374d43c93fab676802d83c3e5aaf1337`; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; arm64-v8a + x86_64; `zipalign -c -P 16` and `check-16k.sh` PASS |
+
+Not checked: a real phone; other API levels; the full suite list; a real NAS (the slow source is a fake).
+
 ### 5.10 First stable release `v0.6.0` (draft, 2026-10-05)
 
 Tag `v0.6.0` at `7b661ca` (app code identical to 0.6.0-dev5, `2399ee8`; later commits change docs and the release
