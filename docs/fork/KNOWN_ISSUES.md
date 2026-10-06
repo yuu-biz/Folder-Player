@@ -84,7 +84,8 @@ Found by static review, reproduced by tests first (see VERIFICATION.md 5.11).
   was already safe (its cancellation took effect).
 - Favourites: a sync held the favourites lock across its network I/O, so adding / removing a favourite from the
   browser (main thread) waited for the server. The lock is now held only to merge; changes made during a sync are
-  kept (`FavoritesSyncConcurrencyTest`).
+  kept (`FavoritesSyncConcurrencyTest`). A local-only favourite removed while the sync (or "replace remote") is
+  writing the remote is taken off the remote again, so the next sync does not bring it back.
 - Sleep timer: it lived in the screen's ViewModel. After leaving the app (activity finished) playback went on in the
   service but the timer was gone, so it never stopped playback, and the next screen showed no timer. It now runs in
   `MusicService` (`SleepTimerLifecycleTest`). Changed on the way: a time deadline that passes while playback is paused
