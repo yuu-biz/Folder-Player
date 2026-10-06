@@ -1373,6 +1373,16 @@ class PlayerViewModel : ViewModel() {
         )
         // Nothing of an older request is applied from here on (queue, folder, Default playlist, saved state).
         if (!isCurrent(generation)) return
+        if (items.isEmpty()) {
+            // Shuffle at a root / artist folder, next folder, or a restore can land on a folder with no songs of its own.
+            // What plays, the queue, the "Default" playlist and the saved state stay as they are; only the
+            // "Loading..." that playFolder showed is taken back.
+            pendingPlayIntent = null
+            pendingQueueIndex = null
+            _uiState.value = _uiState.value.copy(isBuffering = false, playRequested = false)
+            updateMetadata()
+            return
+        }
         currentFolder = folder
         player?.setMediaItems(items)
 

@@ -10,7 +10,7 @@ import androidx.media3.session.SessionCommand
 /**
  * Sleep timer of the playback, kept by [MusicService]: it lives as long as the playback does, with or without a
  * screen, and there is only one. TIME pauses at a deadline; SONGS pauses when the given number of songs has ended
- * (automatic moves to the next track). Both end when the queue ends. Screens start / cancel it with custom session
+ * (automatic moves to the next track). SONGS ends with the queue; TIME runs to its deadline. Screens start / cancel it with custom session
  * commands and show the state the session publishes in its extras ([state]). Like before, it is not kept when the app
  * process ends.
  *
@@ -96,7 +96,9 @@ internal class SleepTimer(
     }
 
     override fun onPlaybackStateChanged(playbackState: Int) {
-        if (playbackState == Player.STATE_ENDED) cancel()
+        // A TIME timer is about the clock: with "next folder" on, the queue ends and the next folder starts at once,
+        // and a timer cancelled here would let it play on all night. If nothing plays at the deadline, it ends unused.
+        if (playbackState == Player.STATE_ENDED && type != TYPE_TIME) cancel()
     }
 
     companion object {

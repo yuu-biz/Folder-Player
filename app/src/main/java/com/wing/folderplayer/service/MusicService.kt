@@ -169,14 +169,29 @@ class MusicService : MediaLibraryService() {
         val wait = lastNotificationAt + MIN_NOTIFICATION_INTERVAL_MS - SystemClock.uptimeMillis()
         if (wait <= 0) {
             lastNotificationAt = SystemClock.uptimeMillis()
-            super.onUpdateNotification(session, startInForegroundRequired)
+            updateNotificationSafely(session, startInForegroundRequired)
             return
         }
         pendingNotification = Runnable {
             pendingNotification = null
             lastNotificationAt = SystemClock.uptimeMillis()
-            super.onUpdateNotification(session, startInForegroundRequired)
+            updateNotificationSafely(session, startInForegroundRequired)
         }.also { notificationHandler.postDelayed(it, wait) }
+    }
+
+    /**
+     * Android 12+ refuses startForeground() from the background. A network retry (the player went IDLE after the error,
+     * so Media3 left the foreground, and the retry starts it again with the screen off) can hit that; the exception
+     * must not take the app down, playback goes on and the next update tries again.
+     */
+    private fun updateNotificationSafely(session: MediaSession, startInForegroundRequired: Boolean) {
+        try {
+            super.onUpdateNotification(session, startInForegroundRequired)
+        } catch (e: IllegalStateException) {
+            if (android.os.Build.VERSION.SDK_INT >= 31 && e is android.app.ForegroundServiceStartNotAllowedException) {
+                android.util.Log.w("MusicService", "foreground start not allowed in the background; notification not updated")
+            } else throw e
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {

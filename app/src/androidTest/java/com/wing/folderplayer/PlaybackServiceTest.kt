@@ -151,6 +151,37 @@ class PlaybackServiceTest : ServiceTestBase() {
 
     }
 
+    /** Shuffle at a root / artist folder lands on a folder with no songs of its own: nothing is torn down. */
+    @Test fun folderWithoutSongsOfItsOwnKeepsThePlayback() {
+        main { vm.playFolder(SourceRef(local, "/Music/fixture/Long"), null) }
+        waitFor(15_000, "Long playing") { state.isPlaying && state.currentMediaId?.contains("Long") == true }
+        val id = state.currentMediaId
+        val queue = state.playlist.size
+        val defaultItems = state.activePlaylistItems.size
+        main { vm.playFolder(SourceRef(local, "/Music/fixture/Many"), null) } // subfolders only
+        Thread.sleep(2_500)
+        assertTrue("still playing", state.isPlaying)
+        assertEquals("same track", id, state.currentMediaId)
+        assertEquals("queue untouched", queue, state.playlist.size)
+        assertEquals("Default playlist untouched", defaultItems, state.activePlaylistItems.size)
+        assertTrue(state.currentTitle != "Loading...")
+        assertFalse("no dead 'loading' request left", state.playRequested)
+    }
+
+    /** With "next folder" on the queue ends and another one starts: a clock timer must still be there to stop it. */
+    @Test fun timeTimerSurvivesTheEndOfTheQueue() {
+        val twoShort = listOf(file(local, "/Music/fixture/Many/Folder 020/track 020.flac"), file(local, "/Music/fixture/Many/Folder 021/track 021.flac"))
+        main { vm.startSleepTimer(TimerType.TIME, 30) }
+        waitFor(5_000, "timer set") { state.sleepTimerActive }
+        main { vm.playCustomList(twoShort, 0) }
+        waitFor(15_000, "second track reached") { state.currentMediaId?.contains("021") == true }
+        waitFor(20_000, "queue ended") { !state.isPlaying }
+        Thread.sleep(1_500)
+        assertTrue("TIME timer still running after the queue ended", state.sleepTimerActive)
+        main { vm.resetSleepTimer() }
+        waitFor(5_000, "timer cancelled") { !state.sleepTimerActive }
+    }
+
     /** Headphones unplugged (ACTION_AUDIO_BECOMING_NOISY) pauses playback. */
     @Test fun headphoneUnplugPauses() {
         main { vm.playFolder(SourceRef(local, "/Music/fixture/Long"), null) }
