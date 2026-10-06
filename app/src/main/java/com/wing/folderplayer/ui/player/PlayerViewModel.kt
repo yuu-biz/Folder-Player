@@ -185,9 +185,8 @@ class PlayerViewModel : ViewModel() {
     private val audioInfoCache = mutableMapOf<String, String>()
     private var appContext: Context? = null
 
-    // Sleep Timer internals
+    /** End of the service's time sleep timer (SystemClock.elapsedRealtime), for the minutes shown. */
     private var sleepTimerDeadlineMs: Long = 0L
-    private var remainingSongsCount: Int = 0
 
     private fun repo(): PlayerRepository = repository!!
 
@@ -275,7 +274,12 @@ class PlayerViewModel : ViewModel() {
         )
 
         val sessionToken = SessionToken(context, ComponentName(context, MusicService::class.java))
-        mediaControllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
+        mediaControllerFuture = MediaController.Builder(context, sessionToken)
+            .setListener(object : MediaController.Listener {
+                // The service publishes its sleep timer in the session extras.
+                override fun onExtrasChanged(controller: MediaController, extras: android.os.Bundle) = showSleepTimer(extras)
+            })
+            .buildAsync()
         // Tests can delay the handling of the connection (a slow service bind) to check what the UI does meanwhile.
         val connectDelay = controllerConnectDelayMsForTest
         val onConnected: java.util.concurrent.Executor = if (connectDelay > 0) {
@@ -287,6 +291,8 @@ class PlayerViewModel : ViewModel() {
                 player = controller
                 setupPlayerListener()
                 updatePlaybackState()
+                // A timer may be running from an earlier screen (the activity was left, the playback went on).
+                sendSleepTimerCommand(com.wing.folderplayer.service.SleepTimer.COMMAND_GET, android.os.Bundle.EMPTY)
 
                 currentFolder = playbackPreferences?.getLastFolder()
 
@@ -427,26 +433,12 @@ class PlayerViewModel : ViewModel() {
                 if (mediaItem == null && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
                     checkAndPlayNextFolder()
                 }
-
-                // Sleep Timer: Songs
-                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && _uiState.value.sleepTimerActive && _uiState.value.sleepTimerType == TimerType.SONGS) {
-                    remainingSongsCount--
-                    if (remainingSongsCount <= 0) {
-                        player?.pause()
-                        resetSleepTimer()
-                    } else {
-                        _uiState.value = _uiState.value.copy(
-                            sleepTimerValue = remainingSongsCount,
-                            sleepTimerLabel = "$remainingSongsCount songs"
-                        )
-                    }
-                }
+                // The sleep timer (songs / time) runs in MusicService; its state arrives through the session extras.
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED) {
                     checkAndPlayNextFolder()
-                    resetSleepTimer()
                 }
                 // Update buffering state
                 val buffering = playbackState == Player.STATE_BUFFERING
@@ -517,25 +509,48 @@ class PlayerViewModel : ViewModel() {
         }
     }
 
+    /** Remaining minutes of a time timer, for the label (the service decides when it ends). */
     private fun checkSleepTimer() {
         val state = _uiState.value
         if (!state.sleepTimerActive || state.sleepTimerType != TimerType.TIME) return
-
-        val now = System.currentTimeMillis()
-        if (now >= sleepTimerDeadlineMs) {
-            player?.pause()
-            resetSleepTimer()
-        } else {
-            val remainingMins = ((sleepTimerDeadlineMs - now + 59999) / 60000).toInt()
-            if (remainingMins != state.sleepTimerValue) {
-                _uiState.value = _uiState.value.copy(
-                    sleepTimerValue = remainingMins,
-                    sleepTimerLabel = "$remainingMins min"
-                )
-            }
+        val remainingMins = sleepTimerMinutesLeft()
+        if (remainingMins != state.sleepTimerValue) {
+            _uiState.value = _uiState.value.copy(sleepTimerValue = remainingMins, sleepTimerLabel = "$remainingMins min")
         }
     }
 
+    private fun sleepTimerMinutesLeft(): Int =
+        ((sleepTimerDeadlineMs - android.os.SystemClock.elapsedRealtime() + 59999) / 60000).toInt().coerceAtLeast(0)
+
+    /** Shows the timer state published by MusicService (session extras, or the answer to a command). */
+    private fun showSleepTimer(state: android.os.Bundle) {
+        val t = com.wing.folderplayer.service.SleepTimer
+        if (!state.containsKey(t.KEY_ACTIVE)) return
+        val active = state.getBoolean(t.KEY_ACTIVE)
+        sleepTimerDeadlineMs = state.getLong(t.KEY_DEADLINE)
+        if (!active) {
+            _uiState.value = _uiState.value.copy(sleepTimerActive = false, sleepTimerValue = 0, sleepTimerLabel = "0 min")
+            return
+        }
+        val type = if (state.getString(t.KEY_TYPE) == t.TYPE_SONGS) TimerType.SONGS else TimerType.TIME
+        val value = if (type == TimerType.TIME) sleepTimerMinutesLeft() else state.getInt(t.KEY_SONGS_LEFT)
+        _uiState.value = _uiState.value.copy(
+            sleepTimerActive = true,
+            sleepTimerType = type,
+            sleepTimerValue = value,
+            sleepTimerLabel = if (type == TimerType.TIME) "$value min" else "$value songs",
+        )
+    }
+
+    private fun sendSleepTimerCommand(command: androidx.media3.session.SessionCommand, args: android.os.Bundle) {
+        viewModelScope.launch(exceptionHandler) {
+            val controller = awaitPlayer() as? MediaController ?: return@launch
+            val result = runCatching { controller.sendCustomCommand(command, args).await() }.getOrNull() ?: return@launch
+            if (result.resultCode == androidx.media3.session.SessionResult.RESULT_SUCCESS) showSleepTimer(result.extras)
+        }
+    }
+
+    /** The timer runs in MusicService, so it ends playback also when no screen is left. */
     fun startSleepTimer(type: TimerType, value: Int) {
         if (value <= 0) {
             resetSleepTimer()
@@ -549,12 +564,12 @@ class PlayerViewModel : ViewModel() {
             sleepTimerValue = value,
             sleepTimerLabel = label
         )
-
-        if (type == TimerType.TIME) {
-            sleepTimerDeadlineMs = System.currentTimeMillis() + (value * 60 * 1000L)
-        } else {
-            remainingSongsCount = value
-        }
+        if (type == TimerType.TIME) sleepTimerDeadlineMs = android.os.SystemClock.elapsedRealtime() + value * 60_000L
+        val t = com.wing.folderplayer.service.SleepTimer
+        sendSleepTimerCommand(t.COMMAND_START, android.os.Bundle().apply {
+            putString(t.ARG_TYPE, if (type == TimerType.TIME) t.TYPE_TIME else t.TYPE_SONGS)
+            putInt(t.ARG_VALUE, value)
+        })
     }
 
     fun resetSleepTimer() {
@@ -564,7 +579,7 @@ class PlayerViewModel : ViewModel() {
             sleepTimerLabel = "0 min"
         )
         sleepTimerDeadlineMs = 0L
-        remainingSongsCount = 0
+        sendSleepTimerCommand(com.wing.folderplayer.service.SleepTimer.COMMAND_CANCEL, android.os.Bundle.EMPTY)
     }
 
     private fun updateMetadata() {
