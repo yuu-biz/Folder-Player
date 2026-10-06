@@ -15,19 +15,18 @@ import coil.size.Dimension
 import com.wing.folderplayer.data.source.SourceException
 import com.wing.folderplayer.data.source.SourceRegistry
 import com.wing.folderplayer.data.source.SourceUris
-import com.wing.folderplayer.data.source.readBytes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 import okio.Buffer
 import okio.Path.Companion.toOkioPath
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.security.MessageDigest
 
 /**
  * Coil fetcher for `fpsrc://` images. Credentials are resolved by sourceId in [SourceRegistry] (no shared auth state).
- * Small requests (thumbnails) are downsampled and cached on disk under a key made of source URI, image size/mtime
- * (the `?v=` part), requested size and the artwork settings revision — never credentials.
+ * Small requests (thumbnails) are downsampled and cached on disk ([ThumbnailDiskCache]) under a key made of source URI,
+ * image size/mtime (the `?v=` part), bucketed requested size and the artwork settings revision (a directory) — never credentials.
+ * The image bytes come from the memory cache when cover validation just read them ([ArtworkImageBytes]).
  */
 class SourceImageFetcher(
     private val uri: Uri,
@@ -38,22 +37,26 @@ class SourceImageFetcher(
     override suspend fun fetch(): FetchResult {
         val raw = uri.toString()
         val ref = SourceUris.parse(raw) ?: throw SourceException.NotFound("bad image uri")
-        val target = requestedPx()
-        val cacheFile = if (target in 1..THUMB_MAX_PX) thumbFile(raw, target) else null
+        val requested = requestedPx()
+        val repo = ThumbnailRepository.get(context)
+        val diskCache = repo.thumbnailCache
+        val cacheFile = if (requested in 1..THUMB_MAX_PX) diskCache.file(raw, requested, repo.settings.revision) else null
         if (cacheFile != null && cacheFile.exists()) {
+            diskCache.markUsed(cacheFile)
             return SourceResult(ImageSource(cacheFile.toOkioPath(), okio.FileSystem.SYSTEM), "image/jpeg", DataSource.DISK)
         }
-        val bytes = runInterruptible(Dispatchers.IO) {
-            SourceRegistry.fileSystem(ref).readBytes(ref.path, ThumbnailRepository.MAX_IMAGE_BYTES)
-        }
+        // Cover validation may have read this image already: then the bytes come from memory, not from the source.
+        val bytes = runInterruptible(Dispatchers.IO) { ThumbnailRepository.imageBytes.load(raw, ref) }
         if (cacheFile != null) {
-            val thumb = runInterruptible(Dispatchers.Default) { downsample(bytes, target) }
+            // Cut to the bucket size, not the requested one, so the file serves every request of that bucket.
+            val thumb = runInterruptible(Dispatchers.Default) { downsample(bytes, diskCache.bucketOf(requested)) }
             if (thumb != null) {
                 runCatching {
                     cacheFile.parentFile?.mkdirs()
                     val tmp = File(cacheFile.path + ".tmp")
                     tmp.writeBytes(thumb)
                     tmp.renameTo(cacheFile)
+                    diskCache.stored(cacheFile)
                 }
                 return SourceResult(ImageSource(Buffer().write(thumb), context), "image/jpeg", DataSource.NETWORK)
             }
@@ -65,12 +68,6 @@ class SourceImageFetcher(
         val w = (options.size.width as? Dimension.Pixels)?.px ?: return -1
         val h = (options.size.height as? Dimension.Pixels)?.px ?: return -1
         return maxOf(w, h)
-    }
-
-    private fun thumbFile(raw: String, px: Int): File {
-        val rev = ThumbnailRepository.get(context).settings.revision
-        val digest = MessageDigest.getInstance("SHA-1").digest("$raw|$px|$rev".toByteArray()).joinToString("") { "%02x".format(it) }
-        return File(File(context.cacheDir, THUMB_DIR), "$digest.jpg")
     }
 
     class Factory(private val context: Context) : Fetcher.Factory<Uri> {

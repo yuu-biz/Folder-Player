@@ -6,8 +6,6 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.wing.folderplayer.data.source.MusicFile
 import com.wing.folderplayer.data.source.SourceRef
 import com.wing.folderplayer.data.source.SourceRegistry
@@ -17,10 +15,7 @@ import com.wing.folderplayer.data.source.readBytes
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Semaphore
@@ -53,43 +48,18 @@ object ImageUris {
  */
 class ThumbnailRepository private constructor(private val context: Context) {
     val settings = ArtworkSettings(context)
-    private val gson = Gson()
-    private val indexFile = File(context.filesDir, "artwork-index.json")
     private val semaphore = Semaphore(4)
     private val inFlight = ConcurrentHashMap<String, CompletableDeferred<ArtworkResult>>()
     private val negative = ConcurrentHashMap<String, Long>()
-    private val positive: MutableMap<String, IndexEntry> by lazy { loadIndex() }
 
-    private data class IndexEntry(val image: String = "", val name: String = "", val size: Long = 0, val mtime: Long = 0)
-
-    private fun loadIndex(): MutableMap<String, IndexEntry> = try {
-        if (indexFile.exists()) ConcurrentHashMap(gson.fromJson<Map<String, IndexEntry>>(indexFile.readText(), object : TypeToken<Map<String, IndexEntry>>() {}.type).orEmpty())
-        else ConcurrentHashMap()
-    } catch (e: Exception) {
-        ConcurrentHashMap()
-    }
-
-    // Folder thumbnails are resolved from the UI's coroutines, so the index is written on an I/O thread, and coalesced:
-    // scrolling through many folders writes the file once instead of once per image found.
+    // Index file reads / writes and thumbnail clean-up run here, never on the caller's (often the main) thread.
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val saveLock = Any()
-    private var pendingSave: Job? = null
 
-    private fun scheduleSave() {
-        synchronized(saveLock) {
-            pendingSave?.cancel()
-            pendingSave = ioScope.launch { delay(SAVE_DELAY_MS); saveIndex() }
-        }
-    }
+    // Positive results: read from disk in the background as soon as the repository exists; written coalesced.
+    private val positive = ArtworkIndex(File(context.filesDir, "artwork-index.json"), ioScope, SAVE_DELAY_MS)
 
-    @Synchronized
-    private fun saveIndex() {
-        runCatching {
-            val tmp = File(indexFile.path + ".tmp")
-            tmp.writeText(gson.toJson(HashMap(positive)))
-            tmp.renameTo(indexFile)
-        }
-    }
+    /** Downsampled thumbnails on disk (bucketed sizes, size-limited, one directory per artwork settings revision). */
+    val thumbnailCache = ThumbnailDiskCache(File(context.cacheDir, SourceImageFetcher.THUMB_DIR), ioScope)
 
     fun isOnWifi(): Boolean {
         val cm = context.getSystemService(ConnectivityManager::class.java) ?: return false
@@ -115,7 +85,7 @@ class ThumbnailRepository private constructor(private val context: Context) {
 
     suspend fun resolve(folder: SourceRef, known: List<MusicFile>?): ArtworkResult {
         val key = key(folder)
-        positive[key]?.let { e ->
+        positive.get(key)?.let { e ->
             val image = SourceUris.parse(e.image)
             // With a fresh listing we can tell that the cached image was replaced or removed.
             val stillValid = known == null || known.any { it.name == e.name && it.size == e.size && it.lastModified == e.mtime } ||
@@ -149,8 +119,7 @@ class ThumbnailRepository private constructor(private val context: Context) {
                 ArtworkResult.Failed(ArtworkResult.Kind.PERMISSION, "image access not granted (READ_MEDIA_IMAGES)") else raw
             when (result) {
                 is ArtworkResult.Found -> {
-                    positive[key] = IndexEntry(result.image.toUriString(), result.entry.name, result.entry.size, result.entry.lastModified)
-                    scheduleSave()
+                    positive.put(key, ArtworkIndex.Entry(result.image.toUriString(), result.entry.name, result.entry.size, result.entry.lastModified))
                 }
                 ArtworkResult.None -> negative[key] = System.currentTimeMillis()
                 else -> Unit
@@ -167,7 +136,7 @@ class ThumbnailRepository private constructor(private val context: Context) {
 
     private val resolver = ArtworkResolver(
         lister = { ref -> SourceRegistry.fileSystem(ref).list(ref.path) },
-        validate = { entry -> validateImage(SourceRef(entry.sourceId, entry.path)) },
+        validate = { entry -> validateImage(entry) },
     )
 
     private fun localImagesRestricted(sourceId: String): Boolean {
@@ -175,46 +144,38 @@ class ThumbnailRepository private constructor(private val context: Context) {
         return com.wing.folderplayer.utils.PermissionDiagnostics.report(context).images != com.wing.folderplayer.utils.PermissionDiagnostics.Access.GRANTED
     }
 
-    /** Reads (≤ [MAX_IMAGE_BYTES]) and fully decodes a small sample; false means the image itself is broken. */
-    private fun validateImage(ref: SourceRef): Boolean {
-        val bytes = try {
-            SourceRegistry.fileSystem(ref).readBytes(ref.path, MAX_IMAGE_BYTES)
-        } catch (e: com.wing.folderplayer.data.source.SourceException.TooLarge) {
-            return false
-        }
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return false
-        val opts = BitmapFactory.Options().apply { inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, 64) }
-        val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: return false
-        bmp.recycle()
-        return true
+    /**
+     * Reads (≤ [MAX_IMAGE_BYTES]) and fully decodes a small sample; false means the image itself is broken. A good
+     * image's bytes stay in [imageBytes] so that showing it does not read the source again.
+     */
+    private fun validateImage(entry: MusicFile): Boolean = try {
+        imageBytes.validate(entry, ::decodesAsImage)
+    } catch (e: com.wing.folderplayer.data.source.SourceException.TooLarge) {
+        false
     }
 
     fun invalidate(folder: SourceRef) {
         val prefix = folder.toUriString() + "|"
-        positive.keys.removeIf { it.startsWith(prefix) }
+        positive.removePrefix(prefix)
         negative.keys.removeIf { it.startsWith(prefix) }
-        scheduleSave()
     }
 
     fun invalidateSource(sourceId: String) {
         val prefix = SourceUris.toUri(sourceId, "/").removeSuffix("/")
-        positive.keys.removeIf { it.startsWith(prefix) }
+        positive.removePrefix(prefix)
         negative.keys.removeIf { it.startsWith(prefix) }
-        scheduleSave()
+        imageBytes.cache.removePrefix(prefix)
     }
 
     /** Forget every "no image" result (after a permission grant or settings change). */
     fun invalidateNegatives() = negative.clear()
 
     /** Clears image index and thumbnail files only — sources, settings and playlists are untouched. */
-    @Synchronized // with saveIndex: a write in progress cannot bring the deleted file back with old entries
+    @Synchronized // the index's clear is also serialized with its save: a write in progress cannot bring the file back
     fun clearCaches() {
-        synchronized(saveLock) { pendingSave?.cancel() }
         positive.clear()
         negative.clear()
-        indexFile.delete()
+        imageBytes.cache.clear()
         File(context.cacheDir, SourceImageFetcher.THUMB_DIR).deleteRecursively()
     }
 
@@ -227,6 +188,27 @@ class ThumbnailRepository private constructor(private val context: Context) {
         @Volatile private var instance: ThumbnailRepository? = null
         fun get(context: Context): ThumbnailRepository =
             instance ?: synchronized(this) { instance ?: ThumbnailRepository(context.applicationContext).also { instance = it } }
+
+        /**
+         * Image bytes shared by cover validation and display (Coil fetcher, notification): a cover read for validation is
+         * not read again for display. Process-wide, bounded, see [ValidatedImageCache].
+         */
+        val imageBytes = ArtworkImageBytes(
+            ValidatedImageCache(),
+            read = { ref -> SourceRegistry.fileSystem(ref).readBytes(ref.path, MAX_IMAGE_BYTES) },
+            revisionOf = { id -> SourceRegistry.get(id)?.revision ?: 0 },
+        )
+
+        /** True when [bytes] decode to a bitmap (a small sample is fully decoded). */
+        fun decodesAsImage(bytes: ByteArray): Boolean {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return false
+            val opts = BitmapFactory.Options().apply { inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, 64) }
+            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: return false
+            bmp.recycle()
+            return true
+        }
 
         fun sampleSize(w: Int, h: Int, target: Int): Int {
             var s = 1
