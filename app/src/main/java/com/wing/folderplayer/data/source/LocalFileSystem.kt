@@ -63,27 +63,34 @@ class LocalFileSystem(override val config: SourceConfig, private val context: an
      * images the app may read); anything else, or a failing query, gives nothing and the sort falls back to the
      * modification time. Needs a context (without one, e.g. in JVM tests, the map is empty).
      */
-    private fun addedTimes(dir: File?): Map<String, Long> {
-        val ctx = context ?: return emptyMap()
-        if (dir == null) return emptyMap()
+    private fun addedTimes(dir: File?): Map<String, Long> = if (dir == null) emptyMap() else addedTimesFor(dir).byName
+
+    /** The media library's answer for one folder: the times by name, and how many rows the query returned (test hook). */
+    internal class AddedTimes(val byName: Map<String, Long>, val rowsReturned: Int)
+
+    internal fun addedTimesFor(dir: File): AddedTimes {
+        val ctx = context ?: return AddedTimes(emptyMap(), 0)
         val prefix = dir.absolutePath.trimEnd('/') + "/"
-        return runCatching {
+        var rows = 0
+        val map = runCatching {
             val out = HashMap<String, Long>()
             val data = android.provider.MediaStore.MediaColumns.DATA
             ctx.contentResolver.query(
                 android.provider.MediaStore.Files.getContentUri("external"),
                 arrayOf(data, android.provider.MediaStore.MediaColumns.DATE_ADDED),
-                "$data LIKE ? AND $data NOT LIKE ?", arrayOf("$prefix%", "$prefix%/%"), null,
+                "$data LIKE ? ESCAPE '\\' AND $data NOT LIKE ? ESCAPE '\\'", arrayOf(likeEscape(prefix) + "%", likeEscape(prefix) + "%/%"), null,
             )?.use { c ->
                 while (c.moveToNext()) {
+                    rows++
                     val p = c.getString(0) ?: continue
                     val sec = c.getLong(1)
-                    // LIKE treats "_" and "%" of the folder name as wildcards: check the prefix and the depth again.
+                    // (Belt and braces: LIKE ignores case, so a sibling folder that differs only in case is returned too.)
                     if (sec > 0 && p.startsWith(prefix) && !p.substring(prefix.length).contains('/')) out[p.substring(prefix.length)] = sec * 1000
                 }
             }
             out
         }.getOrDefault(emptyMap())
+        return AddedTimes(map, rows)
     }
 
     override fun stat(path: String): MusicFile? {
@@ -165,3 +172,9 @@ class LocalFileSystem(override val config: SourceConfig, private val context: an
         return super.testConnection()
     }
 }
+
+/**
+ * [s] as a literal in a `LIKE ? ESCAPE '\'` pattern: "%" and "_" of a folder name (and the escape character itself) must not
+ * act as wildcards, or the query for "p%c" also returns the files of "pXc" and one for "%" everything below its parent.
+ */
+internal fun likeEscape(s: String): String = s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

@@ -114,6 +114,21 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.17 LIKE wildcards in folder names of the creation-time query (1.0.0-dev6, 2026-10-06)
+
+Review point: `LocalFileSystem` asks the media library for the dates added of one folder with `_data LIKE 'folder/%' AND _data NOT LIKE
+'folder/%/%'`; a folder name with `%` or `_` makes those wildcards. Emulator API 34 only; only the related tests were run.
+
+| Check | Result |
+|---|---|
+| "The correct rows are dropped by the `NOT LIKE`" — `CreatedSortTest#d` (new): folders `p%c`, `u_d`, `%` with decoy siblings `pXc`, `uXd` (and files of the same names made at other times), two files each, created one after the other with opposite modification times; every file must get the date added of that very file (compared with an exact `_data = ?` query) and the creation order must differ from the modification order | PASS on the unchanged code too: not reproducible, and it cannot happen: the second pattern needs one more `/` than a direct child has, and wildcards never create a `/` |
+| What does happen — more rows than the folder's own: `CreatedSortTest#e` (new) counts the rows the query returns for `p%c`, `u_d`, `%`, `plain` (two files each) | on the unchanged code FAIL: `p%c` returned 4 rows (its own 2 + those of `pXc`); a folder called `%` asks for every folder below its parent. The answer was right only because the result was filtered afterwards |
+| Fix | the prefix is escaped (`%`, `_` and the escape character itself) and the query uses `LIKE ? ESCAPE '\' AND NOT LIKE ? ESCAPE '\'`; still one query per listed folder, now matching only that folder's rows (the count test shows 2 rows where it was 4), so nothing wider is scanned. The check afterwards stays (LIKE ignores case, so a sibling folder differing only in case is returned and dropped) |
+| After the fix | `CreatedSortTest` 5/5 PASS (a local order, b SMB, c WebDAV fallback, d, e: 2 rows for every folder); `LikeEscapeTest` (JVM, new: escaping, and a small LIKE implementation shows an escaped folder matches itself and no sibling, nested files are excluded by the second pattern) PASS |
+| Related | `NavigationUiTest#n15` (lengths of local rows), `LibraryUiTest#a20`, `BrowserUiTest#a18` PASS; two `BrowserUiTest` methods need the SMB fixture arguments and were skipped in this run (they passed with the dev5 code in the full run; SMB is not touched) |
+| `testDebugUnitTest` / `lintDebug` | 180 tests, 21 skipped, 0 failures / 0 errors, 61 warnings + 5 hints |
+| Signed release build `-PfpVersionName=1.0.0-dev6 -PfpVersionCode=1000006` | `FolderPlayerFork-1.0.0-dev6.apk` (not committed; no tag, no release), SHA-256 `85f61f7f44f87f395a607188f168ac97b9b00e87bba377163c6e02b0bc1d304c`; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; arm64-v8a + x86_64; `zipalign -c -P 16` and `check-16k.sh` PASS. Not installed on the emulator (the code is the one tested above) |
+
 ### 5.16 Sort by creation date (1.0.0-dev5, 2026-10-06)
 
 Local and SMB give a creation time, every other source falls back to the modification time (what was asked for). Emulator API 34 only.

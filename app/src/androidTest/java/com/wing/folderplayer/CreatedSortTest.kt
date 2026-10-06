@@ -36,6 +36,7 @@ class CreatedSortTest : UiTestBase() {
 
     @After fun cleanup() {
         Fx.shell("rm -rf $dir")
+        Fx.shell("rm -rf /sdcard/Music/fixture/WildcardSort")
     }
 
     private fun open(ref: SourceRef) {
@@ -91,6 +92,69 @@ class CreatedSortTest : UiTestBase() {
         assertEquals("CREATED", SourcePreferences(Fx.ctx).getDirectorySort(ref)?.field)
         // The list shows the creation date beside the format while sorted by it.
         assertTrue(text("info_c1.flac").contains("FLAC") && text("info_c1.flac").contains("-"))
+    }
+
+    /**
+     * Folder names with LIKE wildcards ("%", "_") and decoy siblings that such a name would match as a pattern ("pXc" for "p%c"):
+     * every file gets the media library's time of that very file (checked against an exact `_data = ?` query), and the creation
+     * order differs from the modification order.
+     */
+    @Test fun d_folderNamesWithLikeWildcardsGetTheirOwnCreationTimes() {
+        val base = "/sdcard/Music/fixture/WildcardSort"
+        Fx.shell("rm -rf $base")
+        Fx.shell("mkdir -p $base")
+        val dirs = listOf("pXc", "uXd", "p%c", "u_d", "%")   // decoys first: they are older
+        for (d in dirs) {
+            Fx.shell("mkdir -p $base/$d")
+            for (n in listOf("w1.flac", "w2.flac")) {
+                Fx.shell("cp /sdcard/Music/fixture/Album-B/track.flac $base/$d/$n")
+                Thread.sleep(1_100)
+            }
+            Fx.shell("touch -t 203101020000 $base/$d/w1.flac")   // w1 modified later than w2, created earlier
+            Fx.shell("touch -t 203101010000 $base/$d/w2.flac")
+        }
+        Fx.shell("content call --uri content://media/external/file --method scan_volume --arg external_primary")
+        Thread.sleep(1_500)
+        val resolver = Fx.ctx.contentResolver
+        fun addedMs(path: String): Long? = resolver.query(
+            android.provider.MediaStore.Files.getContentUri("external"), arrayOf(android.provider.MediaStore.MediaColumns.DATE_ADDED),
+            "_data = ?", arrayOf(path), null,
+        )?.use { c -> if (c.moveToFirst()) c.getLong(0) * 1000 else null }
+        for (d in dirs) {
+            val ref = SourceRef(local, "/Music/fixture/WildcardSort/$d")
+            val listed = SourceRegistry.fileSystem(ref).list(ref.path).filter { !it.isDirectory }.associateBy { it.name }
+            assertEquals("$d: both files listed", setOf("w1.flac", "w2.flac"), listed.keys)
+            for ((name, f) in listed) {
+                val expected = addedMs("/storage/emulated/0/Music/fixture/WildcardSort/$d/$name")
+                assertTrue("$d/$name: the media library knows the file", expected != null)
+                assertEquals("$d/$name: its own date added", expected, f.createdAt)
+            }
+            assertTrue("$d: created order w1 before w2 (${listed["w1.flac"]!!.createdAt} vs ${listed["w2.flac"]!!.createdAt})",
+                listed["w1.flac"]!!.createdOrModified < listed["w2.flac"]!!.createdOrModified)
+            assertTrue("$d: modified order is the other way", listed["w1.flac"]!!.lastModified > listed["w2.flac"]!!.lastModified)
+        }
+    }
+
+    /**
+     * The query for a folder must not pull in the rows of other folders just because a name has a LIKE wildcard: a folder called
+     * "%" would otherwise ask for everything below its parent (the result was filtered afterwards, but every row was read).
+     */
+    @Test fun e_theQueryForAFolderReturnsOnlyItsOwnFiles() {
+        val base = "/sdcard/Music/fixture/WildcardSort"
+        Fx.shell("rm -rf $base")
+        Fx.shell("mkdir -p $base")
+        for (d in listOf("pXc", "uXd", "p%c", "u_d", "%", "plain")) {
+            Fx.shell("mkdir -p $base/$d")
+            for (n in listOf("w1.flac", "w2.flac")) Fx.shell("cp /sdcard/Music/fixture/Album-B/track.flac $base/$d/$n")
+        }
+        Fx.shell("content call --uri content://media/external/file --method scan_volume --arg external_primary")
+        Thread.sleep(2_000)
+        val fs = SourceRegistry.fileSystem(SourceRef(local, "/")) as com.wing.folderplayer.data.source.LocalFileSystem
+        for (d in listOf("p%c", "u_d", "%", "plain")) {
+            val r = fs.addedTimesFor(java.io.File("/storage/emulated/0/Music/fixture/WildcardSort/$d"))
+            assertEquals("$d: the two files", setOf("w1.flac", "w2.flac"), r.byName.keys)
+            assertEquals("$d: rows the query returned (only its own files)", 2, r.rowsReturned)
+        }
     }
 
     @Test fun b_smbTellsTheCreationTime() {
