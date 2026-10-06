@@ -73,7 +73,10 @@ class SourcePreferences(context: Context) {
 
     data class SortOption(val field: String, val ascending: Boolean)
 
-    /** Safe-mode reset (Music/Init folder present), as in public main: clears everything in this file. */
+    /**
+     * Safe-mode reset of debug builds (Music/Init folder present, see DevSafeMode), as in public main: clears everything
+     * in this file, including the source list kept here by SourceRegistry (their stored passwords are left behind).
+     */
     fun clearAll() {
         prefs.edit { clear(); putInt("sources_schema", 2) }
     }

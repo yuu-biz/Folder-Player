@@ -38,11 +38,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import android.os.Environment
-import java.io.File
 
 enum class TimerType { TIME, SONGS }
 
@@ -233,12 +233,9 @@ class PlayerViewModel : ViewModel() {
         }
         if (mediaControllerFuture != null) return
 
-        // Safety Check: Detect "Init" folder trigger
-        val musicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
-        val resetTrigger = File(musicDir, "Init")
-        val resetTriggerLower = File(musicDir, "init")
-
-        if (resetTrigger.exists() || resetTriggerLower.exists()) {
+        // Development builds only: a Music/Init folder resets saved state (see DevSafeMode). Release builds never look.
+        val musicDir = if (com.wing.folderplayer.BuildConfig.DEBUG) Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC) else null
+        if (com.wing.folderplayer.utils.DevSafeMode.requested(musicDir, com.wing.folderplayer.BuildConfig.DEBUG)) {
             android.util.Log.w("PlayerViewModel", "Safe Mode Trigger Detected! Clearing persistence.")
             playbackPreferences?.clearAll()
             sourcePreferences?.clearAll()
