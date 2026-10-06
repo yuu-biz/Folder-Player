@@ -145,7 +145,6 @@
     <string name="perm_images_help">Sans accès complet aux images, les pochettes à côté des morceaux locaux peuvent être invisibles. Autorisez les photos ou ajoutez le dossier de musique comme dossier SAF (nécessaire aussi pour les fichiers .lrc / .nfo et les dossiers .nomedia).</string>
     <string name="perm_request">Demander les autorisations</string>
     <string name="perm_open_settings">Réglages de l\'application</string>
-    <string name="settings_lyrics">Paroles</string>
     <string name="settings_lyric_api">URL de l\'API de paroles</string>
     <string name="settings_ai_lyrics_auto">Rechercher les paroles par IA automatiquement</string>
     <string name="settings_lyrics_local_first">Local / LRC d\'abord</string>
@@ -157,7 +156,6 @@
     <string name="settings_ai_base_url">URL de base de l\'API</string>
     <string name="settings_ai_key">Clé API</string>
     <string name="settings_ai_model">Nom du modèle</string>
-    <string name="settings_playback_extras">Diffusion et enregistrement</string>
     <string name="settings_dlna">Diffusion DLNA / UPnP</string>
     <string name="settings_auto_save">Enregistrer les morceaux réseau écoutés jusqu\'au bout</string>
     <string name="settings_auto_save_help">Les fichiers complets sont enregistrés dans Music/%1$s/ après un téléchargement intégral vérifié.</string>

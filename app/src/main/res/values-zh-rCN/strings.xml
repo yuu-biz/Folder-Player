@@ -145,7 +145,6 @@
     <string name="perm_images_help">没有完整的图片访问权限时，本地歌曲旁的封面可能不可见。请允许照片权限，或将音乐文件夹添加为 SAF 文件夹（读取 .lrc / .nfo 文件和 .nomedia 文件夹也需要）。</string>
     <string name="perm_request">请求权限</string>
     <string name="perm_open_settings">应用设置</string>
-    <string name="settings_lyrics">歌词</string>
     <string name="settings_lyric_api">歌词 API 地址</string>
     <string name="settings_ai_lyrics_auto">自动使用 AI 获取歌词</string>
     <string name="settings_lyrics_local_first">本地 / LRC 优先</string>
@@ -157,7 +156,6 @@
     <string name="settings_ai_base_url">API 基础地址</string>
     <string name="settings_ai_key">API 密钥</string>
     <string name="settings_ai_model">模型名称</string>
-    <string name="settings_playback_extras">投放与保存</string>
     <string name="settings_dlna">DLNA / UPnP 投放</string>
     <string name="settings_auto_save">保存完整播放的网络歌曲</string>
     <string name="settings_auto_save_help">完整下载并校验后，文件保存到 Music/%1$s/。</string>

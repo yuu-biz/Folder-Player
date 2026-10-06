@@ -66,7 +66,7 @@ def esc(s):
 
 T = {}
 # Keys that became <plurals> (still present in the tables below for history, ignored on output).
-DROPPED = {"common_on", "common_off", "browser_search_status", "browser_search_skipped", "browser_favorites_count",
+DROPPED = {"settings_lyrics", "settings_playback_extras", "common_on", "common_off", "browser_search_status", "browser_search_skipped", "browser_favorites_count",
            "source_test_ok", "player_timer_minutes", "player_timer_songs_count"}
 
 T["zh-rCN"] = {

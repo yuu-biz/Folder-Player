@@ -145,7 +145,6 @@
     <string name="perm_images_help">沒有完整的圖片存取權時，本機歌曲旁的封面可能無法顯示。請允許相片權限，或將音樂資料夾新增為 SAF 資料夾（讀取 .lrc / .nfo 檔案與 .nomedia 資料夾也需要）。</string>
     <string name="perm_request">要求權限</string>
     <string name="perm_open_settings">應用程式設定</string>
-    <string name="settings_lyrics">歌詞</string>
     <string name="settings_lyric_api">歌詞 API 位址</string>
     <string name="settings_ai_lyrics_auto">自動使用 AI 取得歌詞</string>
     <string name="settings_lyrics_local_first">本機 / LRC 優先</string>
@@ -157,7 +156,6 @@
     <string name="settings_ai_base_url">API 基礎位址</string>
     <string name="settings_ai_key">API 金鑰</string>
     <string name="settings_ai_model">模型名稱</string>
-    <string name="settings_playback_extras">投放與儲存</string>
     <string name="settings_dlna">DLNA / UPnP 投放</string>
     <string name="settings_auto_save">儲存完整播放的網路歌曲</string>
     <string name="settings_auto_save_help">完整下載並驗證後，檔案會儲存到 Music/%1$s/。</string>

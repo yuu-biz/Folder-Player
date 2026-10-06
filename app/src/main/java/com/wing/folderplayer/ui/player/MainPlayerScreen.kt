@@ -222,7 +222,9 @@ private fun PortraitPlayerLayout(
                 )
                 
                 // In a pane the cover must leave room for title, lyrics and controls: the pane is narrower and not taller than a phone.
-                val maxCoverSize = if (docked) minOf(screenHeight * 0.4f, viewportWidth * 0.85f) else screenHeight * 0.6f
+                // A large font needs more room for texts and times: the cover gives way (so the title never ends up with no height).
+                val fontShrink = (1.15f / density.fontScale).coerceIn(0.5f, 1f)
+                val maxCoverSize = (if (docked) minOf(screenHeight * 0.4f, viewportWidth * 0.85f) else screenHeight * 0.6f) * fontShrink
 
                 Box(
                     modifier = Modifier
