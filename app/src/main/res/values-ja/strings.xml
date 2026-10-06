@@ -145,7 +145,6 @@
     <string name="perm_images_help">画像へのフルアクセスがないと、ローカルの曲のカバーが表示されないことがあります。写真へのアクセスを許可するか、音楽フォルダを SAF フォルダとして追加してください（.lrc / .nfo ファイルや .nomedia フォルダを使う場合にも必要です）。</string>
     <string name="perm_request">権限をリクエスト</string>
     <string name="perm_open_settings">アプリの設定</string>
-    <string name="settings_lyrics">歌詞</string>
     <string name="settings_lyric_api">歌詞 API の URL</string>
     <string name="settings_ai_lyrics_auto">AI で歌詞を自動取得</string>
     <string name="settings_lyrics_local_first">ローカル / LRC を優先</string>
@@ -157,7 +156,6 @@
     <string name="settings_ai_base_url">API のベース URL</string>
     <string name="settings_ai_key">API キー</string>
     <string name="settings_ai_model">モデル名</string>
-    <string name="settings_playback_extras">キャストと保存</string>
     <string name="settings_dlna">DLNA / UPnP キャスト</string>
     <string name="settings_auto_save">最後まで再生したネットワーク上の曲を保存</string>
     <string name="settings_auto_save_help">ダウンロードが完了し検証できたファイルを Music/%1$s/ に保存します。</string>

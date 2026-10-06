@@ -247,8 +247,9 @@ is taken from the memory cache.
 **Fold / unfold, rotation, resize.** `density` and `fontScale` were added to the activity's `configChanges` (as
 `screenSize`, `screenLayout`, `orientation` already were), so the activity is not recreated; playback, queue, position,
 browser place and controller are untouched. The sheet's logical state (`expanded`) is kept while the window is wide and
-shows again when it is narrow again. If the window changes while the sheet is being dragged or is moving,
-`PlayerSheetState.settle()` lands it on the nearer end.
+shows again when it is narrow again. If the window changes while a finger holds the sheet part-way,
+`PlayerSheetState.settle()` lands it on the nearer end; a move that goes on by itself already heads for an end and
+continues.
 
 **Back (wide).** Dialogs and sheets (own windows) → the landscape playlist overlay of the pane → search → folder
 hierarchy (parent folder, source root, source list) → the system. Settings: page → category → browser. The player pane is

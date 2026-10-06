@@ -416,13 +416,12 @@ object PlayerTitles {
  * The seek bar for TalkBack and other accessibility services: one adjustable control named "Playback position" whose
  * state reads "1:23 of 4:00" (it is drawn and dragged by hand, so it has no slider semantics of its own).
  */
-@Composable
-fun Modifier.seekSemantics(positionMs: Long, durationMs: Long, onSeekFraction: (Float) -> Unit): Modifier {
+fun Modifier.seekSemantics(positionMs: Long, durationMs: Long, onSeekFraction: (Float) -> Unit): Modifier = composed {
     val label = stringResource(R.string.player_seek)
     val state = stringResource(R.string.player_seek_state, formatTime(positionMs), formatTime(durationMs))
     val fraction = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
     val seek by rememberUpdatedState(onSeekFraction)
-    return semantics {
+    Modifier.semantics {
         contentDescription = label
         stateDescription = state
         progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)

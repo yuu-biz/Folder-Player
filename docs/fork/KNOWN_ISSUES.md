@@ -3,6 +3,30 @@
 The two issues known at the first public release (0.6.0) are fixed in 1.0.0-dev2; see the next section for what changed
 and what is left. Older fixes follow below.
 
+## UI polish and wide windows (1.0.0-dev3): changes and open points
+
+See "1.0.0 UI polish" in [UI_REDESIGN.md](UI_REDESIGN.md) for what the screens do now. Limits and things not checked:
+
+- **Hinge / fold posture is not used.** In a wide window the browser pane is 40 % of the width (320–480 dp), wherever a
+  physical hinge is. A vertical hinge may run through the
+  browser or the player pane on a real foldable; nothing in the app knows where it is. No Flex-mode / tabletop layout.
+- **Real foldables and tablets were not available**: wide windows were tested by changing the window size of an API 34
+  phone emulator (`wm size`, which gives the same configuration changes as a fold / unfold, a split-screen resize and a
+  rotation). Not checked on a device: the animation of a real fold, a different density on the inner display (`density` is
+  handled in place now, `configChanges`), freeform windows.
+- **TalkBack was not run**: the semantics (names, states, the seek bar as a slider, headings, roles) were written
+  for it and the seek bar slider is asserted in a test, but no screen reader session was done. Contrast and touch targets were checked by
+  numbers and screenshots, not with an accessibility scanner.
+- **Wide threshold**: 640 × 480 dp of the window's own (non-decor) size. A 7-inch tablet in portrait (600 dp) keeps the
+  phone UI; a phone in landscape does too. The Settings window switches to two panes at 600 dp of its own width.
+- When the window turns wide while the full player is open on the phone, the sheet's state is kept: turning narrow again
+  shows the full player again (not the mini player).
+- The mini player's height grows with the font size, so with a very large font it takes more of the list than before.
+- Browser rows no longer show the size and the modification time; they are in the long-press sheet (and next to the
+  format while sorted by size / date).
+- A very long title in the player is still shrunk sideways to fit one line (`TextCompressed`, unchanged); with a large
+  font the cover is made smaller so the title keeps its room.
+
 ## Quality hardening toward 1.0.0 (1.0.0-dev2): fixed
 
 ### Cast: Play / Pause / Seek outside the session ordering

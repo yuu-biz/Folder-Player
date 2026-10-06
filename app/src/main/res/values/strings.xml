@@ -155,7 +155,6 @@
     <string name="perm_images_help">Without full image access, covers next to local songs may be invisible. Allow photos, or add the music folder as a SAF folder (also needed for .lrc / .nfo files and .nomedia folders).</string>
     <string name="perm_request">Request permissions</string>
     <string name="perm_open_settings">App settings</string>
-    <string name="settings_lyrics">Lyrics</string>
     <string name="settings_lyric_api">Lyric API URL</string>
     <string name="settings_ai_lyrics_auto">Fetch lyrics with AI automatically</string>
     <string name="settings_lyrics_local_first">Local / LRC first</string>
@@ -167,7 +166,6 @@
     <string name="settings_ai_base_url">API base URL</string>
     <string name="settings_ai_key">API key</string>
     <string name="settings_ai_model">Model name</string>
-    <string name="settings_playback_extras">Casting &amp; saving</string>
     <string name="settings_dlna">DLNA / UPnP casting</string>
     <string name="settings_auto_save">Save network songs played to the end</string>
     <string name="settings_auto_save_help">Complete files are saved to Music/%1$s/ after a full verified download.</string>

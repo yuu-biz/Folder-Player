@@ -111,11 +111,12 @@ class PlayerSheetState internal constructor(
     fun collapse() = animateTo(false)
 
     /**
-     * The window changed size while the player may be moving (a finger on it, or on its way): stop where it is and land
-     * on the nearer end at once, so a resize never leaves it half-way. At rest nothing happens.
+     * The window changed size while a finger holds the player part-way: the finger's move cannot be followed on the new
+     * layout, so land on the nearer end at once. A move that goes on by itself already heads for an end and is left alone
+     * (a player that was opening while the phone turned still opens). At rest nothing happens.
      */
     fun settle() {
-        if (!isDragging && !isAnimating) return
+        if (!isDragging) return
         snapTo(fraction >= 0.5f)
     }
 

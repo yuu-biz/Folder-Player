@@ -145,7 +145,6 @@
     <string name="perm_images_help">Senza accesso completo alle immagini, le copertine accanto ai brani locali potrebbero non essere visibili. Consenti le foto oppure aggiungi la cartella musicale come cartella SAF (necessario anche per i file .lrc / .nfo e le cartelle .nomedia).</string>
     <string name="perm_request">Richiedi permessi</string>
     <string name="perm_open_settings">Impostazioni app</string>
-    <string name="settings_lyrics">Testi</string>
     <string name="settings_lyric_api">URL dell\'API dei testi</string>
     <string name="settings_ai_lyrics_auto">Recupera automaticamente i testi con l\'IA</string>
     <string name="settings_lyrics_local_first">Prima locale / LRC</string>
@@ -157,7 +156,6 @@
     <string name="settings_ai_base_url">URL base dell\'API</string>
     <string name="settings_ai_key">Chiave API</string>
     <string name="settings_ai_model">Nome del modello</string>
-    <string name="settings_playback_extras">Trasmissione e salvataggio</string>
     <string name="settings_dlna">Trasmissione DLNA / UPnP</string>
     <string name="settings_auto_save">Salva i brani di rete ascoltati fino alla fine</string>
     <string name="settings_auto_save_help">I file completi vengono salvati in Music/%1$s/ dopo un download completo verificato.</string>
