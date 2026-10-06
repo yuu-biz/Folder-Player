@@ -12,9 +12,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.ListeningExecutorService
 import com.google.common.util.concurrent.MoreExecutors
 import com.wing.folderplayer.data.artwork.ThumbnailRepository
-import com.wing.folderplayer.data.source.SourceRegistry
 import com.wing.folderplayer.data.source.SourceUris
-import com.wing.folderplayer.data.source.readBytes
 import java.io.IOException
 import java.util.concurrent.Executors
 
@@ -46,7 +44,7 @@ class SourceBitmapLoader(private val fallback: BitmapLoader) : BitmapLoader {
     override fun loadBitmap(uri: Uri, options: BitmapFactory.Options?): ListenableFuture<Bitmap> {
         val ref = SourceUris.parse(uri.toString()) ?: return fallback.loadBitmap(uri, options)
         return cached(uri.toString()) {
-            executor.submit<Bitmap> { decode(SourceRegistry.fileSystem(ref).readBytes(ref.path, ThumbnailRepository.MAX_IMAGE_BYTES)) }
+            executor.submit<Bitmap> { decode(ThumbnailRepository.imageBytes.load(uri.toString(), ref)) }
         }
     }
 
