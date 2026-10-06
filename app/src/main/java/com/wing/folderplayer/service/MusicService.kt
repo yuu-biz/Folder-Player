@@ -11,6 +11,10 @@ import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 import com.wing.folderplayer.MainActivity
 import com.wing.folderplayer.data.source.SourceRegistry
 import com.wing.folderplayer.playback.NetworkRetryController
@@ -21,6 +25,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.IntentFilter
 import android.media.AudioManager
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -32,6 +37,33 @@ class MusicService : MediaLibraryService() {
     private lateinit var mediaSession: MediaLibrarySession
     private lateinit var retry: NetworkRetryController
     private var exporter: PlaybackExportManager? = null
+    private lateinit var sleepTimer: SleepTimer
+
+    /** Sleep timer commands (START / CANCEL / GET) from the app's screens, on top of the default commands. */
+    private inner class SessionCallback : MediaLibrarySession.Callback {
+        override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
+            val accepted = super.onConnect(session, controller)
+            val commands = accepted.availableSessionCommands.buildUpon()
+                .add(SleepTimer.COMMAND_START).add(SleepTimer.COMMAND_CANCEL).add(SleepTimer.COMMAND_GET)
+                .build()
+            return MediaSession.ConnectionResult.accept(commands, accepted.availablePlayerCommands)
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle,
+        ): ListenableFuture<SessionResult> {
+            when (customCommand.customAction) {
+                SleepTimer.ACTION_START -> sleepTimer.start(args.getString(SleepTimer.ARG_TYPE), args.getInt(SleepTimer.ARG_VALUE))
+                SleepTimer.ACTION_CANCEL -> sleepTimer.cancel()
+                SleepTimer.ACTION_GET -> Unit
+                else -> return super.onCustomCommand(session, controller, customCommand, args)
+            }
+            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS, sleepTimer.state()))
+        }
+    }
 
     internal val becomingNoisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -106,10 +138,11 @@ class MusicService : MediaLibraryService() {
         retry = NetworkRetryController(player).also { it.attach() }
         exporter = PlaybackExportManager(applicationContext, player).also { it.attach() }
 
-        mediaSession = MediaLibrarySession.Builder(this, player, object : MediaLibraryService.MediaLibrarySession.Callback {})
+        mediaSession = MediaLibrarySession.Builder(this, player, SessionCallback())
             .setSessionActivity(pendingIntent)
             .setBitmapLoader(SourceBitmapLoader(DataSourceBitmapLoader(this)))
             .build()
+        sleepTimer = SleepTimer(player, Handler(Looper.getMainLooper()), { state -> mediaSession.setSessionExtras(state) }).also { it.attach() }
 
         setMediaNotificationProvider(object : DefaultMediaNotificationProvider(this) {
             // A MediaItem only has a display title when tag titles are used and the file has no title tag.
@@ -158,6 +191,7 @@ class MusicService : MediaLibraryService() {
         if (current === this) current = null
         pendingNotification?.let { notificationHandler.removeCallbacks(it) }
         unregisterReceiver(becomingNoisyReceiver)
+        sleepTimer.detach()
         retry.detach()
         exporter?.detach()
         mediaSession.run {
