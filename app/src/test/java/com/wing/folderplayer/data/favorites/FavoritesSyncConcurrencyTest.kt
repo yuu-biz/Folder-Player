@@ -91,6 +91,53 @@ class FavoritesSyncConcurrencyTest {
         assertTrue(remoteItems(remote.inner).any { it.path == "/new.flac" })
     }
 
+    @Test fun localOnlyEntryRemovedDuringRemoteWriteDoesNotComeBack() {
+        val r = repo()
+        r.add(localOnly) // A: local only; the remote has B only
+        val remote = GatedFs(remoteWith(remoteSong), gateWrites = true)
+        val sync = pool.submit<SyncResult> { r.sync(remote, "/fav.json") }
+        assertTrue("sync reached the remote write", remote.entered.await(5, TimeUnit.SECONDS))
+
+        pool.submit { r.remove(localOnly.ref, false) }.within(1_000, "remove during the remote write")
+
+        remote.release.countDown()
+        assertTrue(sync.get(10, TimeUnit.SECONDS) is SyncResult.Synced)
+        assertFalse("A is not left on the remote", remoteItems(remote.inner).any { it.path == "/local.flac" })
+        assertTrue(r.sync(remote, "/fav.json") is SyncResult.Synced)
+        assertFalse("A does not come back with the next sync", r.isFavorite(localOnly.ref, false))
+        assertFalse(remoteItems(remote.inner).any { it.path == "/local.flac" })
+        assertEquals(setOf("/remote.flac"), r.items.value.map { it.path }.toSet())
+    }
+
+    /** Unchanged rule: deleting an entry the remote already had is not propagated, also during the remote write. */
+    @Test fun remoteEntryRemovedDuringRemoteWriteStaysOnTheRemote() {
+        val r = repo()
+        r.add(localOnly)
+        val remote = GatedFs(remoteWith(remoteSong), gateWrites = true)
+        val sync = pool.submit<SyncResult> { r.sync(remote, "/fav.json") }
+        assertTrue(remote.entered.await(5, TimeUnit.SECONDS))
+        pool.submit { r.remove(com.wing.folderplayer.data.source.SourceRef("smb-1", "/remote.flac"), false) }
+            .within(1_000, "remove during the remote write")
+        remote.release.countDown()
+        assertTrue(sync.get(10, TimeUnit.SECONDS) is SyncResult.Synced)
+        assertEquals(setOf("/local.flac", "/remote.flac"), remoteItems(remote.inner).map { it.path }.toSet())
+        assertTrue(r.sync(remote, "/fav.json") is SyncResult.Synced)
+        assertTrue("comes back from the remote, as with any sync", r.items.value.any { it.path == "/remote.flac" })
+    }
+
+    @Test fun entryRemovedWhileReplacingTheRemoteIsNotWritten() {
+        val r = repo()
+        r.add(localOnly)
+        r.add(addedDuringSync)
+        val remote = GatedFs(remoteWith(remoteSong), gateWrites = true)
+        val replace = pool.submit<SyncResult> { r.replaceRemote(remote, "/fav.json") }
+        assertTrue(remote.entered.await(5, TimeUnit.SECONDS))
+        pool.submit { r.remove(localOnly.ref, false) }.within(1_000, "remove during replace")
+        remote.release.countDown()
+        assertTrue(replace.get(10, TimeUnit.SECONDS) is SyncResult.Synced)
+        assertEquals(setOf("/new.flac"), remoteItems(remote.inner).map { it.path }.toSet())
+    }
+
     @Test fun syncsRunOneAfterAnother() {
         val r = repo()
         r.add(localOnly)
