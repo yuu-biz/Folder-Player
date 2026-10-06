@@ -20,6 +20,8 @@ class FolderPlayerApp : Application(), ImageLoaderFactory {
         com.wing.folderplayer.utils.CrashHandler.init(this)
         // Migrates public-main data on first start of this build, then serves sources by sourceId.
         SourceRegistry.init(this)
+        // Android 13+: a language chosen in an older version moves to the system's per-app language, once.
+        com.wing.folderplayer.utils.AppLocale.migrate(this)
     }
 
     /** Coil resolves fpsrc:// images through SourceRegistry; memory cache is bounded to avoid OOM in long grids. */
