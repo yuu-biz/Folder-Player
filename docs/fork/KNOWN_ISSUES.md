@@ -1,37 +1,67 @@
 # Known issues
 
-Open issues that did not block the first public release (0.6.0). Each is to be fixed in a later version.
+The two issues known at the first public release (0.6.0) are fixed in 1.0.0-dev2; see the next section for what changed
+and what is left. Older fixes follow below.
 
-## Cast: Play / Pause / Seek outside the session ordering
+## Quality hardening toward 1.0.0 (1.0.0-dev2): fixed
 
-`cast`, `stop` and `shutdown` run one at a time and only the latest one owns the session (see `CastController`).
-Play, Pause and Seek do not take part in that: they read the active renderer when pressed and send the command
-outside the session lock, without a generation check. A command pressed just before Stop or before casting to
-another renderer can therefore still reach the old renderer after the session ended or changed (for example Play
-after Stop restarts a renderer whose relay URL is already revoked), and its result or error is written into the
-state of the new session.
+### Cast: Play / Pause / Seek outside the session ordering
 
-Fix: give the commands the session's generation and drop them (or their result) when it is no longer current.
+Was: Play, Pause and Seek read the active renderer when pressed and sent the command outside the session lock, without
+a generation check. Pressed just before Stop or before casting to another renderer they could still reach the old
+renderer (Play after Stop restarted a renderer whose relay URL was already revoked) and write their result or error into
+the new session's state.
 
-## Android 13+: app language changed in the system settings
+Now: the commands take the session lock like cast / stop, remember the generation and the renderer they were pressed for,
+and are dropped (not sent) when a stop or another cast was requested since or the renderer is no longer the active one.
+A command already talking to the renderer cannot be recalled, but stop / cast wait for it (so the old renderer is never
+operated while the new session starts), and its late success or error is not written into a newer session
+(`CastSessionOrderTest`: command → Stop and command → cast to another renderer, each with a late success and a late
+failure, queued commands, a command pressed while the Stop is running).
 
-On Android 13 and newer the language chosen in Settings › Language is stored by the app (`AppLocale`, preference
-`app_language`) and also handed to the system as the per-app language. When the language is changed outside the app
-(system Settings › Apps › Folder Player Fork › Language), the app's own preference is not updated:
+Behaviour changes: commands are sent one at a time in the order pressed (before: concurrently, unordered). A command
+pressed while a cast is starting waits for that cast and is then dropped if it was meant for the previous renderer.
+A hung renderer (control timeout 10 s) delays a following Stop / cast by up to that timeout, as a hung cast already did.
 
-- the activity context is still wrapped with the stored language (`AppLocale.wrap`), so the app can keep showing the
-  old language instead of the one chosen in the system settings;
-- texts built outside the activity (`Strings.get`, notifications, error messages) use the stored language as well;
-- Settings › Language in the app still highlights the old choice.
+### Android 13+: app language changed in the system settings
 
-Choosing the language again inside the app brings both back in line. Android 12 and older are not affected (there is
-no system per-app language).
+Was: the app kept its own copy of the language (`app_language`), so a change in Settings › Apps › Folder Player Fork ›
+Language was not reflected in the activity, in `Strings.get` / notifications / error texts, nor in Settings › Language.
 
-Fix: on Android 13+ read the language from `LocaleManager.applicationLocales` (and stop wrapping the context there),
-keeping the preference only for older versions.
+Now: on Android 13+ the system's per-app language (`LocaleManager.applicationLocales`) is the only source of truth.
+`AppLocale.get` reads it (mapped to the app's language list; `zh-Hans-CN`, `fr-FR`… are matched), `AppLocale.set`
+writes only the system setting, and the activity context is no longer wrapped there. Android 12 and older keep the
+preference + wrapped context. A language stored by an older version is handed to the system once at start
+(`AppLocale.migrate`, flag `app_language_os_migrated`), only if the system has no per-app language of its own; the
+preference is never read again afterwards, so "System default" chosen in the system settings stays.
+Checked on API 34 in both directions (`AppLocaleOsTest`), the migration cases in `AppLocaleMigrationTest`, the mapping in
+`AppLocaleTest` (JVM). The unchanged code failed the system-settings direction.
 
-Both issues above are still open; the navigation redesign (0.6.0-dev1, [UI_REDESIGN.md](UI_REDESIGN.md)) does not
-touch them.
+Open points: (a) a user already on Android 13+ with an older build of this app who had reset the language in the system
+settings to "System default" while the app's own copy still held a language gets that old language once more at the first
+start of the new version (the two cases cannot be told apart); (b) the application context follows a system-side change
+a moment after the activity does (the test waits up to 5 s for `Strings.get`); a text built in that gap is in the old
+language.
+
+### Artwork / thumbnails
+
+- A cover on a network source was read twice (validation, then display): now once. Measured with a counting source on
+  API 34: 2 reads → 1; two sizes of the same cover 3 → 1 (`ArtworkIoTest`). The bytes are kept in a bounded LRU memory
+  cache (12 MB total, 3 MB per image; larger images are read again for display). Only complete reads of decodable
+  images are kept (never a failed, cancelled, permission-denied or broken read); the key is the image URI with its
+  size/mtime version and the source revision, no credentials.
+- The first `positive` lookup read and parsed `artwork-index.json` on the calling (often main) thread: now read on an
+  I/O thread when the repository is created; lookups wait for it, changes made meanwhile are merged, saves stay
+  debounced (`ArtworkIndexTest`).
+- Thumbnail files were keyed by the exact requested pixels: now rounded up to 128 / 192 / 288 / 512 px, never below the
+  request (3 sizes of one image: 3 files → 1, `ArtworkIoTest`). Files live in `thumbs/r<revision>/`; a new artwork
+  settings revision deletes older generations and the flat files of earlier versions. The cache is limited to 64 MB
+  (trimmed to 48 MB, least recently used first, on an I/O thread). `clearCaches()` still removes everything.
+  Reasons for the values: [VERIFICATION.md](VERIFICATION.md) 5.12.
+
+Open points: the memory cache is not shared with Coil's own bitmap cache; images above 3 MB are still read twice;
+the bucket and cache limits come from the current UI sizes and an estimate of file sizes, not from measurements on
+a large real library.
 
 ## Fixed by the navigation redesign (0.6.0-dev1)
 
