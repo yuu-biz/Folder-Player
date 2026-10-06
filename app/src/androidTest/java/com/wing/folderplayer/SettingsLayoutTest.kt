@@ -108,6 +108,23 @@ class SettingsLayoutTest : UiTestBase() {
         assertFalse(exists("settings_column"))
     }
 
+    // A phone in landscape is wide but low (about 720 x 360 dp): Settings stays one pane there, as the app itself stays narrow.
+    @Test fun s05_wideButLowWindowKeepsSettingsInOnePane() {
+        windowDp(720, 360)
+        toSettings()
+        for (c in categories) assertTrue("category $c", exists("settings_cat_$c"))
+        assertFalse("no content pane beside the list", exists("dlna_enabled"))
+        click("settings_cat_playback")
+        until(5_000, "playback page") { exists("dlna_enabled") && !exists("settings_cat_playback") }
+        pressBack()
+        until(5_000, "category list") { exists("settings_cat_playback") && !exists("dlna_enabled") }
+        // The same width with enough height (780 x 600 dp is wide) shows two panes: only the height decides.
+        windowDp(780, 600)
+        until(5_000, "two panes") { exists("settings_cat_playback") && exists("dlna_enabled") }
+        windowDp(720, 360)
+        until(5_000, "one pane again") { exists("settings_cat_playback") && !exists("dlna_enabled") }
+    }
+
     // Narrow window, large font: every control of every page stays inside the window and can be scrolled to.
     @Test fun s03_narrowWindowAndLargeFontKeepEverythingReachable() {
         windowDp(320, 640)

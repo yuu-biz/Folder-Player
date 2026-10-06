@@ -18,7 +18,7 @@ See "1.0.0 UI polish" in [UI_REDESIGN.md](UI_REDESIGN.md) for what the screens d
   for it and the seek bar slider is asserted in a test, but no screen reader session was done. Contrast and touch targets were checked by
   numbers and screenshots, not with an accessibility scanner.
 - **Wide threshold**: 640 × 480 dp of the window's own (non-decor) size. A 7-inch tablet in portrait (600 dp) keeps the
-  phone UI; a phone in landscape does too. The Settings window switches to two panes at 600 dp of its own width.
+  phone UI; a phone in landscape does too. The Settings window switches to two panes at 600 × 480 dp of its own size (a phone in landscape, about 720 × 360 dp, stays one pane).
 - When the window turns wide while the full player is open on the phone, the sheet's state is kept: turning narrow again
   shows the full player again (not the mini player).
 - The mini player's height grows with the font size, so with a very large font it takes more of the list than before.
