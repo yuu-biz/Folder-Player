@@ -1,5 +1,7 @@
 package com.wing.folderplayer.utils
 
+import androidx.annotation.ChecksSdkIntAtLeast
+import androidx.annotation.RequiresApi
 import androidx.core.content.edit
 
 import android.app.LocaleManager
@@ -32,6 +34,7 @@ object AppLocale {
     /** Set once the preference of an older version was handed to the system (Android 13+). */
     private const val KEY_MIGRATED = "app_language_os_migrated"
 
+    @get:ChecksSdkIntAtLeast(api = 33)
     private val perAppLanguage get() = Build.VERSION.SDK_INT >= 33
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -68,6 +71,7 @@ object AppLocale {
     internal fun shouldHandOver(legacyTag: String, systemLanguageEmpty: Boolean): Boolean =
         legacyTag.isNotEmpty() && legacyTag in TAGS && systemLanguageEmpty
 
+    @RequiresApi(33)
     private fun osLocales(context: Context): LocaleList =
         context.getSystemService(LocaleManager::class.java)?.applicationLocales ?: LocaleList.getEmptyLocaleList()
 
