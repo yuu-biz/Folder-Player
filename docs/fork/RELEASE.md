@@ -39,6 +39,9 @@ Prototype APKs built locally for trying out a version before its release (no tag
 number above the last dev build (after `0.6.0-dev5`, tag `v0.6.0-rc6` or later), so the code never goes down. `v0.6.0-rc1` (60001) is
 therefore not used; the plan is the final `v0.6.0` (60099) directly.
 
+1.0.0 followed the same rule: dev builds `1.0.0-dev1` … `1.0.0-dev6` use 1000001 … 1000006, the final `v1.0.0` is
+versionName `1.0.0`, versionCode `1000099` (`((1*100 + 0)*100 + 0)*100 + 99`), which installs over every dev build.
+
 The real-server protocol tests and the emulator suites need the Docker fixtures and are run locally before tagging
 (see [VERIFICATION.md](VERIFICATION.md)).
 

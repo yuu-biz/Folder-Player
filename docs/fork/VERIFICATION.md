@@ -114,6 +114,38 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.18 Final audit before 1.0.0 (2026-10-07, base `d2563ac`)
+
+Four read-only code reviews (playback / service lifecycle; sources, credentials, security; persistence, caches, sorting;
+UI state, locale, API compatibility, cast) over the whole code base; every finding was checked in the code before it was
+accepted. R8 is off in release builds (`isMinifyEnabled = false`), so release runs the classes that were tested. No
+BLOCKER. The fixes are listed in [KNOWN_ISSUES.md](KNOWN_ISSUES.md) ("Final audit before 1.0.0: fixed"); what was
+accepted as a limitation is in "Limitations of 1.0.0".
+
+| Fix | Before the fix | After |
+|---|---|---|
+| Cloud backup excluded `fonts/` | `BackupRulesTest#cloudBackupSkipsFontsAndSecrets` FAIL | PASS |
+| Cast: locks released when the track ends | `CastSessionOrderTest#finishedTrackReleasesTheSessionLocksAndAReplayTakesThemAgain` FAIL (locks still held) | `CastSessionOrderTest` 18/18 |
+| DLNA switched off ends the session | `NavigationUiTest#n17` FAIL (app APK of `d2563ac` + the new test: session, relay and renderer kept running) | PASS |
+| Clock sleep timer survives the end of the queue | `PlaybackServiceTest#timeTimerSurvivesTheEndOfTheQueue` FAIL (same way) | PASS |
+| Folder without songs keeps the playback | `PlaybackServiceTest#folderWithoutSongsOfItsOwnKeepsThePlayback` FAIL (same way: playback stopped) | PASS |
+| `metadata.json` written through a temp file | no test against the old code (the helper did not exist; a kill in the middle of `writeText` cannot be staged) | `AtomicWriteTest` 3/3: replaces, creates, a failed write leaves the old content |
+| One sort with a name tie-break | no test against the old code (the function did not exist; old behaviour by reading: descending ties reversed in the queue only) | `SortOrderTest` 5/5 |
+| Refused foreground start caught in the notification update | not reproducible here (needs a retry with the screen off on API 31+); defensive, no test | builds, existing suites PASS |
+
+| Suite | Result |
+|---|---|
+| `testDebugUnitTest` / `lintDebug` | 193 tests, 21 skipped (protocol tests need the Docker servers), 0 failures; lint 0 errors, 61 warnings, 5 hints |
+| License check (`gen_notices.py --check` on `releaseRuntimeClasspath` + `coreLibraryDesugaring`, `--verify`) | 161 artifacts, all covered; notices asset current |
+| FFmpeg | `config.mak` / configure log of both ABIs: `License: LGPL version 2.1 or later`, `CONFIG_GPL`, `CONFIG_NONFREE`, `CONFIG_VERSION3` not set; script has no `--enable-gpl/nonfree/version3` and no external codec library; tarball pinned by SHA-256 |
+| API 34, the full default list of `run-suites.sh` (122 test methods) | 121 PASS, 1 FAIL on the first run: `NavigationUiTest#n15_listShowsTrackLengths` (WMA length not shown within 15 s while the emulator was busy); the same test alone: PASS, PASS (2 reruns) |
+| API 26 (Android 8.0): `NativeDecodeTest`, `PlaybackServiceTest`, `NavigationUiTest`, `CastCleanupTest`, `PlayRequestRaceTest`, `PlaylistQueueTest`, `BrowserUiTest` | 42 PASS, 2 FAIL: `NavigationUiTest#n14` (the playlist does not open) and `BrowserUiTest#a13` (Wi-Fi-only thumbnails). Both FAIL the same way with the base `d2563ac` built into the app, so they are not caused by the audit fixes. Causes on the API 26 image: `n14` fails at the synthetic Compose swipe (`timed out waiting for playlist`; the waits before it passed) and the playlist sheet opens by hand with a real touch swipe from the full player, so it is the touch injection of that image, not the app; `a13`: `svc wifi disable` does not change what the app sees as network type there. Both PASS on API 34 and API 36. `PlayerSheetUiTest` on API 26: 10 PASS, 2 FAIL: `s04` ("Failed to inject touch input", the same class as `n14`) and `s06` (seeks a FLAC track, and Android 8.0 cannot decode FLAC); not run on the base |
+| API 36 (4 KB pages): the same seven suites + `PlayerSheetUiTest` | 52 PASS; `NativeDecodeTest` 4 FAIL on the first run (a stale `Android/data/…/Formats` directory of an older install, owned by another uid: EACCES); after removing that directory 4/4 PASS |
+| API 36, 16 KB pages (`getconf PAGE_SIZE` = 16384): `NativeDecodeTest`, `PlaybackServiceTest`, `NativeIoErrorTest`, `PlayerSkipTest` | 22/22 PASS |
+
+Not run again: the JVM real-protocol tests (`protocol.*`, the 21 skipped ones: Samba / FTP / WebDAV / DLNA renderer in
+Docker). The audit fixes do not touch the protocol code; the device suites above ran against the Docker servers.
+
 ### 5.17 LIKE wildcards in folder names of the creation-time query (1.0.0-dev6, 2026-10-06)
 
 Review point: `LocalFileSystem` asks the media library for the dates added of one folder with `_data LIKE 'folder/%' AND _data NOT LIKE
