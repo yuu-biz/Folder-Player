@@ -217,6 +217,159 @@ class CastSessionOrderTest {
         assertFalse(locks.sessionHeld)
     }
 
+    // ---- Play / Pause / Seek take part in the session ordering ----
+
+    private fun startCastToA() {
+        cast.cast(a, SourceRef("m", "/a.flac"), "a", null)
+        awaitState("A playing") { it.active == a && it.lastCommand == "Play" && it.rendererState == "PLAYING" && !it.connecting }
+    }
+
+    private fun assertStoppedCleanly(what: String) {
+        awaitTrue("$what: session ended") { cast.state.value.lastCommand == "Stop" && !cast.relay.isRunning && !locks.sessionHeld }
+        Thread.sleep(200)
+        val s = cast.state.value
+        assertNull("$what: no session", s.active)
+        assertEquals("$what: the last command is the Stop, not the late one", "Stop", s.lastCommand)
+        assertNull("$what: no error from the old command", s.error)
+        assertFalse(cast.relay.isRunning)
+        assertFalse(locks.sessionHeld)
+    }
+
+    @Test fun commandInFlightWhenStoppedSucceedsLateWithoutTouchingTheStoppedState() {
+        startCastToA()
+        val gate = renderer.hold("pause:uuid:A")
+        cast.pause()
+        renderer.awaitReached("pause:uuid:A")
+        cast.stop()
+        Thread.sleep(150) // answers only after the stop / new cast had time to finish, unless that waits for it
+        gate.complete(Unit)
+
+        assertStoppedCleanly("pause then stop")
+        val calls = renderer.calls
+        assertTrue("the renderer is stopped after the late Pause", calls.lastIndexOf("stop:uuid:A") > calls.indexOf("pause:uuid:A"))
+    }
+
+    @Test fun commandInFlightWhenStoppedFailsLateWithoutWritingAnError() {
+        startCastToA()
+        val gate = renderer.hold("seek:uuid:A")
+        cast.seek(5_000)
+        renderer.awaitReached("seek:uuid:A")
+        cast.stop()
+        Thread.sleep(150)
+        gate.completeExceptionally(IOException("renderer went away"))
+
+        assertStoppedCleanly("seek then stop")
+    }
+
+    @Test fun commandInFlightWhenAnotherRendererIsCastSucceedsLateWithoutTouchingTheNewSession() {
+        startCastToA()
+        val gate = renderer.hold("pause:uuid:A")
+        cast.pause()
+        renderer.awaitReached("pause:uuid:A")
+        cast.cast(b, SourceRef("m", "/b.flac"), "b", null)
+        Thread.sleep(150)
+        gate.complete(Unit)
+
+        awaitState("B playing") { it.active == b && it.lastCommand == "Play" && it.rendererState == "PLAYING" && !it.connecting }
+        Thread.sleep(200)
+        val s = cast.state.value
+        assertEquals(b, s.active)
+        assertEquals("Play", s.lastCommand)
+        assertNull(s.error)
+        assertTrue(cast.relay.isRunning)
+        assertTrue(locks.sessionHeld)
+        assertEquals(200, httpStatus(renderer.urls.getValue(b.udn)))
+        assertFalse("B was never stopped", renderer.calls.contains("stop:uuid:B"))
+        val calls = renderer.calls
+        assertTrue("A's renderer is stopped after the late Pause", calls.lastIndexOf("stop:uuid:A") > calls.indexOf("pause:uuid:A"))
+    }
+
+    @Test fun commandInFlightWhenAnotherRendererIsCastFailsLateWithoutWritingAnError() {
+        startCastToA()
+        val gate = renderer.hold("pause:uuid:A")
+        cast.pause()
+        renderer.awaitReached("pause:uuid:A")
+        cast.cast(b, SourceRef("m", "/b.flac"), "b", null)
+        Thread.sleep(150)
+        gate.completeExceptionally(IOException("renderer A went away"))
+
+        awaitState("B playing") { it.active == b && it.lastCommand == "Play" && it.rendererState == "PLAYING" && !it.connecting }
+        Thread.sleep(200)
+        val s = cast.state.value
+        assertEquals(b, s.active)
+        assertEquals("Play", s.lastCommand)
+        assertNull("A's late failure is not reported over B", s.error)
+        assertTrue(cast.relay.isRunning)
+        assertTrue(locks.sessionHeld)
+    }
+
+    @Test fun commandsNotYetStartedAreNotSentAfterStop() {
+        startCastToA()
+        val gate = renderer.hold("pause:uuid:A")
+        cast.pause()
+        renderer.awaitReached("pause:uuid:A")
+        cast.play()  // waits behind the Pause
+        cast.seek(7_000)
+        cast.stop()
+        Thread.sleep(150)
+        gate.complete(Unit)
+
+        assertStoppedCleanly("queued commands then stop")
+        assertEquals("only the cast itself sent Play", 1, renderer.calls.count { it == "play:uuid:A" })
+        assertFalse("the queued Seek was never sent", renderer.calls.contains("seek:uuid:A"))
+    }
+
+    @Test fun commandPressedWhileStopIsRunningIsNotSent() {
+        startCastToA()
+        val gateStop = renderer.hold("stop:uuid:A")
+        cast.stop()
+        renderer.awaitReached("stop:uuid:A")
+        cast.pause() // the stop is still talking to the renderer; the session is already over
+        gateStop.complete(Unit)
+
+        assertStoppedCleanly("pause during stop")
+        assertFalse("no Pause after the stop was requested", renderer.calls.contains("pause:uuid:A"))
+    }
+
+    @Test fun commandsNotYetStartedAreNotSentToTheOldRendererAfterCastingElsewhere() {
+        startCastToA()
+        val gate = renderer.hold("pause:uuid:A")
+        cast.pause()
+        renderer.awaitReached("pause:uuid:A")
+        cast.play()
+        cast.cast(b, SourceRef("m", "/b.flac"), "b", null)
+        Thread.sleep(150)
+        gate.complete(Unit)
+
+        awaitState("B playing") { it.active == b && it.lastCommand == "Play" && it.rendererState == "PLAYING" && !it.connecting }
+        Thread.sleep(200)
+        assertEquals("only the cast itself sent Play to A", 1, renderer.calls.count { it == "play:uuid:A" })
+        assertEquals("Play", cast.state.value.lastCommand)
+        assertNull(cast.state.value.error)
+    }
+
+    @Test fun commandsOnTheCurrentSessionStillWorkAndKeepTheirOrder() {
+        startCastToA()
+        cast.pause()
+        cast.seek(3_000)
+        cast.play()
+        awaitTrue("all three sent") { renderer.calls.containsAll(listOf("pause:uuid:A", "seek:uuid:A")) && renderer.calls.count { it == "play:uuid:A" } == 2 }
+        awaitState("Play recorded last") { it.lastCommand == "Play" && it.error == null }
+        val c = renderer.calls.filter { it == "pause:uuid:A" || it == "seek:uuid:A" || it == "play:uuid:A" }
+        assertEquals(listOf("play:uuid:A", "pause:uuid:A", "seek:uuid:A", "play:uuid:A"), c)
+        assertEquals(a, cast.state.value.active)
+    }
+
+    @Test fun failedCommandOnTheCurrentSessionIsStillReported() {
+        startCastToA()
+        renderer.hold("pause:uuid:A").completeExceptionally(IOException("busy"))
+        cast.pause()
+        val s = awaitState("error shown") { it.error != null }
+        assertEquals("Pause: busy", s.error)
+        assertEquals(a, s.active)
+        assertTrue("a failed command does not end the session", cast.relay.isRunning)
+    }
+
     @Test fun failedCurrentCastEndsItsSession() {
         renderer.hold("setUri:uuid:A").completeExceptionally(IOException("no such renderer"))
         cast.cast(a, SourceRef("m", "/a.flac"), "a", null)
