@@ -114,6 +114,30 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.13 UI polish and wide windows toward 1.0.0 (1.0.0-dev3, 2026-10-06)
+
+Branch `feature/ui-adaptive-polish` from `1e8bd4b` (main after the quality hardening). Emulator API 34 only (phone
+display 1080×2400, 420 dpi); wide windows were made by `wm size` from the tests (same configuration changes as a fold /
+unfold or a split-screen resize), not on a real foldable or tablet. Suites one method per process; only the suites that
+touch the changed UI were run (the others — SafTest, NetworkPlaybackTest, NativeDecodeTest, PlaybackServiceTest, … — do
+not depend on it and were not run again; the regular CI ran). Behaviour changes: [KNOWN_ISSUES.md](KNOWN_ISSUES.md),
+the new screens: [UI_REDESIGN.md](UI_REDESIGN.md).
+
+| Check | Result |
+|---|---|
+| `AdaptiveLayoutTest` (new, 10): wide window shows browser + docked player; narrow → wide → narrow keeps activity, track, queue, folder, list position and controller count; full player open on the phone → wide → back; resize while paused and while a request is loading; Back in the wide layout (search, folders, Settings page → category → browser); Back closes the pane's landscape playlist overlay before the browser; docked gestures (seek, swipe up = playlist, swipe down does nothing, seek bar has slider semantics); notification tap in the wide layout; resize while a finger drags the sheet (lands on an end); rotation of a wide window | 10/10 PASS |
+| `SettingsLayoutTest` (new, 4): phone one-pane navigation and language order; wide two panes; 320 dp wide with font scale 2.0 (every clickable inside the window, every page reachable); keyboard does not cover the edited field | 4/4 PASS |
+| Existing suites after the change | `NavigationUiTest` 16/16, `PlayerSheetUiTest` 12/12 (s07 failed once on the first version of `settle()`, which stopped a player that was opening while the phone turned; fixed, then 12/12), `LibraryUiTest` 5/5, `BrowserUiTest` 5/5, `AppLocaleOsTest` 2/2, `JapaneseUiTest` 3/3, `LicensesUiTest` 1/1, `SourceUiTest` 2/2, `OpenPlayerColdStartTest` 2/2, `PlayerSkipTest` 4/4, `PlaylistQueueTest` 1/1, `PlayRequestRaceTest` 6/6, `SyncTagsUiTest` 2/2, `FontUiTest` 4/4 (downloads over the emulator's network) |
+| Tests changed because the UI changed | Settings controls are reached through their category (`UiTestBase.settingsReveal`); Settings Back goes up page by page; the length is its own node `duration_<name>` (was the end of `info_<name>`); the search result list ends above the keyboard (scroll to the row); Back arrow description `common_back` |
+| First runs that failed for the wrong reason | the run before the window-size tolerance was fixed (height reported by Android excludes the system bars: 50–110 dp less than requested) and a batch run while WSL had run out of memory (touch injection failed, activity never destroyed) — both re-run after the fix / on a restarted emulator, all PASS |
+| Screenshots (`ScreenshotTest`, pulled to `build/shots/`, not committed) | phone portrait (browser with long Japanese / English / Chinese / 200-character names, a short name, mini player; full player), Settings phone (list, Display, Language), 320 dp + font 2.0 (browser, full player, Settings list and Library), phone landscape (browser; full player hidden behind the system's "Viewing full screen" hint), wide 840×700 (browser + player, playlist, Settings two panes, Language), wide 1200×800, tablet portrait 800×1280. Looked at: rows wrap to two lines, length at the end, no overlap; the docked player showed no title at first (cover too tall for the pane) and the full player at font 2.0 on 320 dp had no room for the title — both fixed (cover size) and checked again |
+| `testDebugUnitTest` (incl. `StringResourcesParityTest`, `AppLocaleTest`) | exit 0, 197 test cases |
+| `lintDebug` | 0 errors, 61 warnings + 5 hints (unchanged count; 3 new warnings of the first version — a composable modifier factory and 2 unused strings — were fixed) |
+| Regular CI (`ci.yml`, manual run on the branch) | [run 37456051433](https://github.com/yuu-biz/Folder-Player/actions/runs/37456051433): success (3 min 13 s) on `eb2562b` |
+| Signed release build `-PfpVersionName=1.0.0-dev3 -PfpVersionCode=1000003` | `FolderPlayerFork-1.0.0-dev3.apk` (not committed; no tag, no release), SHA-256 `a6984fe4df88509aed81660cf31c30862cdd0ed446091556aba4039f5c567022`; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; not debuggable; arm64-v8a + x86_64; `zipalign -c -P 16` and `check-16k.sh` PASS. Installed on API 34 (after removing the debug build): starts, stays alive, no crash in the log also after switching the window to a wide size; uninstalled afterwards |
+
+Not checked: TalkBack sessions, a real foldable / tablet / hinge, API 26 / 33 / 36 emulators, the full instrumentation run.
+
 ### 5.12 Quality hardening toward 1.0.0 (1.0.0-dev2, 2026-10-06)
 
 Branch `feature/quality-hardening` from `e022aa0` (main after the stability hardening). Bugs: a failing test on the
