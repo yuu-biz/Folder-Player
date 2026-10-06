@@ -42,7 +42,7 @@ class JapaneseUiTest : UiTestBase() {
         Fx.log("system locale $system: settings shows ${str(R.string.settings_permissions)}")
         if (system.language == "ja") {
             toSettings()
-            until(10_000, "Japanese UI from the system locale") { textExists("言語") }
+            until(10_000, "Japanese UI from the system locale") { textExists("設定") }
         }
     }
 
@@ -61,7 +61,7 @@ class JapaneseUiTest : UiTestBase() {
     @Test fun b1_japaneseKeptAfterRestartThenBackToSystem() {
         assertEquals("ja", AppLocale.get(Fx.ctx))
         toSettings()
-        until(10_000, "Japanese UI after restart") { textExists("言語") }
+        until(10_000, "Japanese UI after restart") { textExists("設定") }
         assertEquals("ストレージと権限", str(R.string.settings_permissions))
         if (Build.VERSION.SDK_INT >= 33) {
             assertEquals("ja", Fx.ctx.getSystemService(LocaleManager::class.java).applicationLocales.toLanguageTags())

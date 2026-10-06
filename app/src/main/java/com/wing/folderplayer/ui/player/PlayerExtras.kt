@@ -25,6 +25,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -404,4 +410,22 @@ object PlayerTitles {
     const val NONE = "No Song Playing"
     const val LOADING = "Loading.."
     const val SWITCHING = "Switching Track.."
+}
+
+/**
+ * The seek bar for TalkBack and other accessibility services: one adjustable control named "Playback position" whose
+ * state reads "1:23 of 4:00" (it is drawn and dragged by hand, so it has no slider semantics of its own).
+ */
+@Composable
+fun Modifier.seekSemantics(positionMs: Long, durationMs: Long, onSeekFraction: (Float) -> Unit): Modifier {
+    val label = stringResource(R.string.player_seek)
+    val state = stringResource(R.string.player_seek_state, formatTime(positionMs), formatTime(durationMs))
+    val fraction = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+    val seek by rememberUpdatedState(onSeekFraction)
+    return semantics {
+        contentDescription = label
+        stateDescription = state
+        progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)
+        if (durationMs > 0) setProgress { v -> seek(v.coerceIn(0f, 1f)); true }
+    }
 }

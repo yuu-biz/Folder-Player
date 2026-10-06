@@ -58,9 +58,13 @@ fun LandscapePlayerLayout(
     uiState: PlayerUiState,
     onCollapse: () -> Unit,
     transition: PlayerTransition,
+    /** Shown in a pane beside the browser: no fold button. */
+    docked: Boolean = false,
+    /** Width / height of the area this layout fills; null = the screen. */
+    viewportRatio: Float? = null,
 ) {
     val configuration = LocalConfiguration.current
-    val screenRatio = configuration.screenWidthDp.toFloat() / configuration.screenHeightDp.toFloat()
+    val screenRatio = viewportRatio ?: (configuration.screenWidthDp.toFloat() / configuration.screenHeightDp.toFloat())
 
     // Determine split ratio
     val leftPanelWeight = when {
@@ -164,7 +168,7 @@ fun LandscapePlayerLayout(
                 AlbumInfoDialog(uiState, viewModel) { showAlbumInfo = false }
             }
             Box(Modifier.align(Alignment.TopEnd).padding(4.dp).fullPlayerContent(transition)) { CastAction(viewModel) }
-            CollapsePlayerButton(
+            if (!docked) CollapsePlayerButton(
                 onCollapse,
                 Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Left)).padding(4.dp)
                     .fullPlayerContent(transition)
@@ -274,8 +278,12 @@ fun LandscapeLeftControlPanel(
                  BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(24.dp)
+                        .height(48.dp)
                         .testTag("seek_bar")
+                        .seekSemantics(uiState.currentPosition, uiState.duration) { f ->
+                            sliderPosition = f
+                            viewModel.seekTo((f * uiState.duration).toLong())
+                        }
                         // (The callbacks are kept up to date: the duration is the current track's, not the first one's.)
                         .seekGestures(
                             onPreview = { sliderPosition = it },
@@ -307,11 +315,11 @@ fun LandscapeLeftControlPanel(
              }
 
              Row(
-                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                 modifier = Modifier.fillMaxWidth(),
                  horizontalArrangement = Arrangement.SpaceBetween
              ) {
-                 Text(formatTimeLs(uiState.currentPosition), color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelSmall)
-                 Text(formatTimeLs(uiState.duration), color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelSmall)
+                 Text(formatTimeLs(uiState.currentPosition), color = Color.White.copy(alpha = 0.75f), style = MaterialTheme.typography.labelSmall)
+                 Text(formatTimeLs(uiState.duration), color = Color.White.copy(alpha = 0.75f), style = MaterialTheme.typography.labelSmall)
              }
         }
         
@@ -423,7 +431,7 @@ fun LandscapeLyricsPanel(
         }
     } else {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_no_lyrics), color = Color.White.copy(alpha = 0.3f))
+            Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_no_lyrics), color = Color.White.copy(alpha = 0.6f))
         }
     }
     }

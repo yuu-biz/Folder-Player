@@ -171,3 +171,88 @@ Known limits:
 - While the player moves, a touch anywhere on screen (also above the panel) is taken by the player; the move takes
   about 0.3 s.
 - Smoothness on a real phone not checked yet.
+
+# 1.0.0 UI polish: Settings, browser rows, accessibility, wide windows
+
+(`feature/ui-adaptive-polish`.) The mini ⇄ full player and the browser-centred navigation above are unchanged on a
+phone; this section lists what was added or moved. Nothing in playback, the network protocols, the artwork cache or
+the stored preferences changed (every SharedPreferences key and value is as before).
+
+## Settings
+
+Categories → settings → (for long lists and text fields) a page of its own. Where the user is (category, page) is two
+saved values in `SettingsScreen`, so a recreation (language change) or a window change shows the same place.
+
+| Category | Holds |
+|---|---|
+| Playback | DLNA casting, saving network songs, decoder status |
+| Display | Language (page), Font (page), cover size, player background, track title, screen orientation, notch |
+| Library & network | default sort + direction, list / grid, grid columns, Folder thumbnails (page: per source type, Wi-Fi only) |
+| Lyrics & AI | lyric API URL, lyrics priority, AI lyrics (auto, language, translation), AI connection (page: URL, key, model) |
+| Storage & permissions | permission state and the buttons, clear image cache |
+| About | version, fork note, links, licenses, the debug-log toggle (tap the icon twice, as before) |
+
+Each row shows its name and its current value or a short description. Choices of 2–5 options stay chips on their
+category page; the language list (radio rows, whole row selects) and the font list are pages. Language order: system
+default, 简体中文, English, 日本語, 繁體中文, Français, Italiano (`AppLocale.LANGUAGES`; the OS per-app language handling is
+untouched). No row has a fixed width or height: rows grow with the text, every control is at least 48 dp high, and the
+page scrolls with the keyboard open (`imePadding`).
+
+- Phone / narrow window (< 600 dp wide): one pane. Back goes up one level: page → category → category list → browser.
+- Wide window (≥ 600 dp wide, measured on the Settings window itself): the category list stays on the left (300 dp), the
+  category's settings (or page) on the right. The first category is shown until another is chosen. Back: page →
+  category → browser (the list is always there, so there is no "up" from a category).
+
+Test tags: `settings_column` (the whole Settings window), `settings_categories`, `settings_cat_<id>`, `settings_sub_<id>`,
+`settings_up`; the controls keep their tags (`lang_*`, `font_*`, `cover_*`, `thumbs_*`, …). `UiTestBase.settingsReveal(tag)`
+opens the page that holds a tag.
+
+## Browser rows
+
+Reading order: name (up to two lines) → format (extension) → length at the end of the row. Size and modification time
+are no longer in every row: they are in the actions sheet (long press; TalkBack says "Details and actions") and, while
+the list is sorted by size or date, next to the format. Search results and favourites show the folder as the second line.
+A length that is not known is not shown (no placeholder). The row says "Playing" for the current track. A folder
+that cannot be read shows why, with Retry; an empty one says so.
+
+## Accessibility
+
+- Touch targets: sort buttons, the seek bar (48 dp high now), the playlist rename / delete icons, chips and switches.
+- TalkBack: the seek bar is one adjustable control "Playback position — 1:23 of 4:00" (slider semantics); sort buttons say
+  selected + direction; rows say "Playing"; Settings headings are headings; links and rows are buttons.
+- Large fonts: nothing has a fixed width; the mini player's height grows with the font size (half of the extra size,
+  at most 1.5×), rows wrap.
+- Contrast: lyrics (inactive lines, "no lyrics"), times and the audio line of the player are brighter.
+
+## Wide windows
+
+The layout follows the size of the window the app has now (rotation, fold / unfold, split screen), never the device:
+**wide = at least 640 dp wide and 480 dp high** (`WindowLayout`). A phone in landscape (about 400 dp high) stays narrow.
+
+| | Narrow (phone UI, as before) | Wide |
+|---|---|---|
+| Browser | page | left pane, 40 % of the width between 320 and 480 dp |
+| Player | mini player + sheet (mini ⇄ full) | right pane, docked: the same player content, always open |
+| Mini player | at the bottom | none |
+| Settings | one pane | two panes (also whenever the Settings window is ≥ 600 dp) |
+| System bars in landscape | hidden (immersive) | kept |
+
+One `PlayerViewModel`, one `MediaController`, one queue: `DockedPlayerPane` shows `MainPlayerScreen` with
+`PlayerSheetState.docked()` (fraction fixed at 1, no drag, no fold button, a swipe up still opens the playlist). The
+layout inside the pane (portrait or landscape player) follows the pane's own size. The browser is the first child of
+the same `Row` in both layouts, so a change of the window only changes its size: folder, search, favourites and list
+position stay. The large cover is requested at the same size in both layouts (rounded up to 256 px), so the picture
+is taken from the memory cache.
+
+**Fold / unfold, rotation, resize.** `density` and `fontScale` were added to the activity's `configChanges` (as
+`screenSize`, `screenLayout`, `orientation` already were), so the activity is not recreated; playback, queue, position,
+browser place and controller are untouched. The sheet's logical state (`expanded`) is kept while the window is wide and
+shows again when it is narrow again. If the window changes while the sheet is being dragged or is moving,
+`PlayerSheetState.settle()` lands it on the nearer end.
+
+**Back (wide).** Dialogs and sheets (own windows) → the landscape playlist overlay of the pane → search → folder
+hierarchy (parent folder, source root, source list) → the system. Settings: page → category → browser. The player pane is
+never "closed" by Back.
+
+**Hinge.** No fold / hinge information is used: both panes are plain rectangles. If a hinge separates the window, the
+browser pane's right edge is at 40 % of the width, not at the hinge. (Not verified on a real foldable; see KNOWN_ISSUES.)

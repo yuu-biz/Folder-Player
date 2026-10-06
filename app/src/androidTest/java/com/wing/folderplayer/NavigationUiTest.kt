@@ -17,6 +17,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -105,7 +106,7 @@ class NavigationUiTest : UiTestBase() {
         click("btn_overflow")
         click("menu_settings")
         until(10_000, "settings") { exists("settings_column") && !exists("btn_overflow") }
-        if (useScreenButton) compose.onNodeWithContentDescription(str(R.string.common_close)).performClick() else pressBack()
+        if (useScreenButton) compose.onNodeWithContentDescription(str(R.string.common_back)).performClick() else pressBack()
         until(10_000, "browser after settings") { browserShown() }
     }
 
@@ -165,6 +166,8 @@ class NavigationUiTest : UiTestBase() {
         compose.onNodeWithTag("search_field").performTextInput("track 01")
         until(30_000, "search done") { bs.search.let { !it.running && it.results.isNotEmpty() } }
         val results = bs.search.results.size
+        // The list ends above the keyboard, so a row can be below the visible part: scroll to it first.
+        compose.onNodeWithTag("file_list").performScrollToNode(androidx.compose.ui.test.hasTestTag("item_track 015.flac"))
         until(5_000, "result row") { exists("item_track 015.flac") }
         click("item_track 015.flac")
         until(5_000, "full player") { playerOpen() }
@@ -504,12 +507,11 @@ class NavigationUiTest : UiTestBase() {
         scrollList(200)
         until(5_000, "row 200") { shown("item_Folder 200") }
         toSettings()
-        compose.onNodeWithTag("lang_ja", useUnmergedTree = true).performScrollTo()
         click("lang_ja")
         try {
             until(15_000, "recreated in Japanese") { AppLocale.get(Fx.ctx) == "ja" && exists("settings_column") }
             Thread.sleep(1_500) // the permission request is sent again by the new activity; give its answer time to arrive
-            pressBack()
+            toBrowser() // Settings is still on its language page: Back goes up page by page
             until(10_000, "browser") { browserShown() }
             Thread.sleep(1_500)
             assertEquals("$fx/Many", path)
@@ -517,7 +519,6 @@ class NavigationUiTest : UiTestBase() {
             assertFalse(shown("item_Folder 000"))
         } finally {
             toSettings()
-            compose.onNodeWithTag("lang_", useUnmergedTree = true).performScrollTo()
             click("lang_")
             until(15_000, "system language again") { AppLocale.get(Fx.ctx) == "" }
         }
@@ -624,18 +625,19 @@ class NavigationUiTest : UiTestBase() {
         assertTrue("long press is not a tap", playing("Long"))
     }
 
-    private fun info(name: String) = runCatching { text("info_$name") }.getOrDefault("")
+    // The length is the trailing text of the row (a node of its own); nothing is shown while it is unknown.
+    private fun info(name: String) = runCatching { text("duration_$name") }.getOrDefault("")
 
     // Browser list: track length after size and type; local always (also the FFmpeg formats), network per switch.
     @Test fun n15_listShowsTrackLengths() {
         open("$fx/Album-A")
-        until(10_000, "lengths in Album-A: ${info("02 track.mp3")}") { info("02 track.mp3").endsWith(" • 0:30") }
-        until(10_000, "flac length: ${info("01 曲 #1+%.flac")}") { info("01 曲 #1+%.flac").endsWith(" • 1:00") }
-        assertFalse("no length for a cover image", info("cover.jpg").contains(":"))
+        until(10_000, "lengths in Album-A: ${info("02 track.mp3")}") { info("02 track.mp3") == "0:30" }
+        until(10_000, "flac length: ${info("01 曲 #1+%.flac")}") { info("01 曲 #1+%.flac") == "1:00" }
+        assertFalse("no length for a cover image", exists("duration_cover.jpg"))
         open("$fx/Long")
-        until(10_000, "10 minutes: ${info("long.flac")}") { info("long.flac").endsWith(" • 10:00") }
+        until(10_000, "10 minutes: ${info("long.flac")}") { info("long.flac") == "10:00" }
         open("$fx/Formats")
-        until(15_000, "WMA (FFmpeg): ${info("sample.wma")}") { info("sample.wma").endsWith(" • 0:20") }
+        until(15_000, "WMA (FFmpeg): ${info("sample.wma")}") { info("sample.wma") == "0:20" }
         // (APE / DSF / DFF in shared storage are not listed at all: Android shows the app only files it indexes as
         // audio. WMA takes the same FFmpeg path.)
 
@@ -647,13 +649,13 @@ class NavigationUiTest : UiTestBase() {
         try {
             thumbs.setThumbnailsEnabled(SourceType.SMB, false)
             onUi { browser.loadFolder(SourceRef(smb.id, "/Album-A")) }
-            until(15_000, "SMB folder") { path == "/Album-A" && !bs.isLoading && exists("info_02 track.mp3") }
+            until(15_000, "SMB folder") { path == "/Album-A" && !bs.isLoading && exists("item_02 track.mp3") }
             Thread.sleep(3_000)
-            assertFalse("switched off: no length (${info("02 track.mp3")})", info("02 track.mp3").contains(":"))
+            assertFalse("switched off: no length (${info("02 track.mp3")})", exists("duration_02 track.mp3"))
             thumbs.setThumbnailsEnabled(SourceType.SMB, true)
             thumbs.wifiOnly = false
             click("btn_refresh") // refresh looks again with the new setting
-            runCatching { until(20_000, "SMB length") { info("02 track.mp3").endsWith(" • 0:30") } }
+            runCatching { until(20_000, "SMB length") { info("02 track.mp3") == "0:30" } }
                 .onFailure { throw AssertionError("SMB length: '${info("02 track.mp3")}'", it) }
         } finally {
             thumbs.setThumbnailsEnabled(SourceType.SMB, false)

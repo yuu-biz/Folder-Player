@@ -37,15 +37,15 @@ class AppLocaleOsTest : UiTestBase() {
 
     private fun assertSelected(tag: String) {
         toSettings()
-        scrollTo("lang_$tag")
+        settingsReveal("lang_$tag")
         node("lang_$tag").assertIsSelected()
     }
 
 
     @Test fun inAppChangeIsStoredAsTheSystemLanguageAndShownEverywhere() {
         toSettings()
-        scrollTo("lang_fr"); click("lang_fr")
-        until(15_000, "French from the app") { AppLocale.get(Fx.ctx) == "fr" && textExists("Réglages") }
+        click("lang_fr")
+        until(15_000, "French from the app") { AppLocale.get(Fx.ctx) == "fr" && textExists("Langue") }
         assertEquals("the system's per-app language follows", "fr", osTags)
         until(5_000, "texts outside the activity in French") { Strings.get(R.string.settings_permissions) == "Stockage et autorisations" }
         assertSelected("fr")
@@ -58,7 +58,7 @@ class AppLocaleOsTest : UiTestBase() {
         until(5_000, "texts outside the activity in Japanese") { Strings.get(R.string.settings_permissions) == "ストレージと権限" }
         Fx.log("AppLocaleOsTest: Strings.get followed the system language after ${System.currentTimeMillis() - t0} ms")
         toSettings()
-        until(15_000, "activity in Japanese") { textExists("言語") }
+        until(15_000, "activity in Japanese") { textExists("設定") }
         assertEquals("ストレージと権限", str(R.string.settings_permissions))
         assertSelected("ja")
 
@@ -69,5 +69,4 @@ class AppLocaleOsTest : UiTestBase() {
         assertSelected("")
     }
 
-    private fun scrollTo(tag: String) { runCatching { compose.onNodeWithTag(tag).performScrollTo() } }
 }

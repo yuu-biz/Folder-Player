@@ -34,7 +34,6 @@ class FontUiTest : UiTestBase() {
     private val fonts get() = FontManager.get(Fx.ctx)
     private val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
 
-    private fun scrolled(tag: String) { compose.onNodeWithTag(tag, useUnmergedTree = true).performScrollTo(); compose.waitForIdle() }
 
     private fun network(on: Boolean) {
         val v = if (on) "enable" else "disable"
@@ -80,14 +79,14 @@ class FontUiTest : UiTestBase() {
 
     private fun importViaUi(name: String) {
         toSettings()
-        scrolled("font_import"); click("font_import")
+        settingsReveal("font_import"); click("font_import")
         pickFromDownloads(name)
     }
 
     @Test fun a_downloadPinnedFontAndSelect() {
         onUi { fonts.delete(AppFont.LXGW_WENKAI); fonts.select(AppFont.SYSTEM) }
         toSettings()
-        scrolled("font_dl_lxgw_wenkai"); click("font_dl_lxgw_wenkai")
+        settingsReveal("font_dl_lxgw_wenkai"); click("font_dl_lxgw_wenkai")
         until(240_000, "download finished") { fonts.states.value[AppFont.LXGW_WENKAI] == FontState.Ready || fonts.states.value[AppFont.LXGW_WENKAI] is FontState.Failed }
         assertEquals(FontState.Ready, fonts.states.value[AppFont.LXGW_WENKAI])
         val f = fonts.fileFor(AppFont.LXGW_WENKAI)!!
@@ -108,12 +107,12 @@ class FontUiTest : UiTestBase() {
         network(false)
         try {
             toSettings()
-            scrolled("font_dl_sarasa_ui_sc"); click("font_dl_sarasa_ui_sc")
+            settingsReveal("font_dl_sarasa_ui_sc"); click("font_dl_sarasa_ui_sc")
             until(90_000, "failure") { fonts.states.value[AppFont.SARASA_UI_SC] is FontState.Failed }
             Fx.log("offline download: ${fonts.states.value[AppFont.SARASA_UI_SC]}")
             assertTrue(!File(Fx.ctx.filesDir, "fonts/${AppFont.SARASA_UI_SC.fileName}.part").exists())
             assertEquals("selection unchanged", AppFont.LXGW_WENKAI, fonts.selected.value)
-            scrolled("font_status_sarasa_ui_sc")
+            settingsReveal("font_status_sarasa_ui_sc")
             assertTrue(text("font_status_sarasa_ui_sc").isNotBlank())
         } finally {
             network(true)

@@ -123,10 +123,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             val configuration = LocalConfiguration.current
 
-            // Auto hide/show status bar based on orientation
-            LaunchedEffect(configuration.orientation) {
+            // Auto hide/show status bar based on orientation: a phone in landscape goes immersive; a wide window (tablet,
+            // unfolded foldable, large split screen) keeps its bars, the browser and the player need them there.
+            val wideWindow = com.wing.folderplayer.ui.adaptive.WindowLayout.isWide(configuration.screenWidthDp, configuration.screenHeightDp)
+            LaunchedEffect(configuration.orientation, wideWindow) {
                 val controller = WindowCompat.getInsetsController(window, window.decorView)
-                if (configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+                if (configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE && !wideWindow) {
                     controller.hide(WindowInsetsCompat.Type.systemBars())
                     controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 } else {

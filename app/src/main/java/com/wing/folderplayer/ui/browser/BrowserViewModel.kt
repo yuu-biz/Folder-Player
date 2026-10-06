@@ -71,6 +71,8 @@ data class BrowserUiState(
     val search: SearchUiState = SearchUiState(),
     val favorites: List<FavoriteItem> = emptyList(),
     val message: String? = null,
+    /** The last folder could not be read (shown in place of the list, with Retry, until the next load). */
+    val loadError: String? = null,
     /** Bumped when folder images must be looked up again (refresh, permission change, cache cleared). */
     val thumbnailRevision: Int = 0,
 ) {
@@ -225,6 +227,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         _uiState.value = _uiState.value.copy(
             isLoading = true,
             currentFolder = folder,
+            loadError = null,
             showingFavorites = false,
             viewMode = sourcePreferences.getViewMode(folder),
         )
@@ -277,7 +280,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             } catch (e: Exception) {
                 android.util.Log.e("BrowserViewModel", "Error loading folder: ${e.javaClass.simpleName} ${e.message}")
                 _error.value = com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_load_failed, com.wing.folderplayer.ui.player.PlaybackErrorText.describe(e))
-                _uiState.value = _uiState.value.copy(isLoading = false, files = emptyList())
+                _uiState.value = _uiState.value.copy(isLoading = false, files = emptyList(), loadError = _error.value)
             }
         }
     }

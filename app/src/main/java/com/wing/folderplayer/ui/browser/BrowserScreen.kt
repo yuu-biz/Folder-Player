@@ -27,9 +27,14 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -188,24 +193,40 @@ fun BrowserScreen(
                                         onClick = { close(); viewModel.syncFavorites() })
                                 }
                             } else {
+                                // Little room (the browser pane beside the player, a very narrow window): view mode and refresh move into the menu.
+                                val compact = com.wing.folderplayer.ui.adaptive.isWideWindow() || LocalConfiguration.current.screenWidthDp < 360
                                 if (uiState.currentFolder != null) {
                                     IconButton(onClick = { viewModel.openSearch() }, modifier = Modifier.testTag("btn_search")) {
                                         Icon(Icons.Default.Search, contentDescription = stringResource(R.string.browser_search))
                                     }
                                 }
-                                IconButton(onClick = { viewModel.setViewMode(if (uiState.viewMode == "GRID") "LIST" else "GRID") }, modifier = Modifier.testTag("btn_view_mode")) {
+                                if (!compact) IconButton(onClick = { viewModel.setViewMode(if (uiState.viewMode == "GRID") "LIST" else "GRID") }, modifier = Modifier.testTag("btn_view_mode")) {
                                     Icon(if (uiState.viewMode == "GRID") Icons.Default.ViewList else Icons.Default.GridView,
                                         contentDescription = stringResource(R.string.browser_toggle_view))
                                 }
                                 IconButton(onClick = { viewModel.shufflePlay(onFolderPlay, onCustomPlay) }, modifier = Modifier.testTag("btn_shuffle")) {
                                     Icon(Icons.Default.Shuffle, contentDescription = stringResource(R.string.browser_shuffle))
                                 }
-                                if (uiState.currentFolder != null) {
+                                if (uiState.currentFolder != null && !compact) {
                                     IconButton(onClick = { viewModel.refresh() }, modifier = Modifier.testTag("btn_refresh")) {
                                         Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.browser_refresh))
                                     }
                                 }
                                 BrowserOverflow(onOpenSettings) { close ->
+                                    if (compact) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.browser_toggle_view)) },
+                                            leadingIcon = { Icon(if (uiState.viewMode == "GRID") Icons.Default.ViewList else Icons.Default.GridView, contentDescription = null) },
+                                            onClick = { close(); viewModel.setViewMode(if (uiState.viewMode == "GRID") "LIST" else "GRID") },
+                                            modifier = Modifier.testTag("menu_view_mode")
+                                        )
+                                        if (uiState.currentFolder != null) DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.browser_refresh)) },
+                                            leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                                            onClick = { close(); viewModel.refresh() },
+                                            modifier = Modifier.testTag("menu_refresh")
+                                        )
+                                    }
                                     DropdownMenuItem(
                                         text = { Text(stringResource(R.string.browser_back_to_sources)) },
                                         leadingIcon = { Icon(Icons.Default.Home, contentDescription = null) },
@@ -239,7 +260,7 @@ fun BrowserScreen(
                     }
                 }
 
-                Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+                Column(modifier = Modifier.fillMaxSize().padding(padding).then(if (uiState.search.active) Modifier.imePadding() else Modifier)) {
                     if (uiState.isLoading || uiState.search.running) {
                         LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     }
@@ -254,7 +275,10 @@ fun BrowserScreen(
                         )
                     }
 
-                    Box(modifier = Modifier.weight(1f)) {
+                    // The grid follows the width of the list area (a pane of the wide layout is narrow in a landscape window).
+                    var listWidth by remember { mutableStateOf(0.dp) }
+                    val listDensity = androidx.compose.ui.platform.LocalDensity.current
+                    Box(modifier = Modifier.weight(1f).onSizeChanged { listWidth = with(listDensity) { it.width.toDp() } }) {
                       androidx.compose.runtime.CompositionLocalProvider(LocalThumbnailRevision provides uiState.thumbnailRevision) {
                         val files = if (uiState.search.active) uiState.search.results else uiState.files
                         val onClick: (MusicFile) -> Unit = { viewModel.onFileClicked(it, onFolderPlay, onCustomPlay, onCuePlay) }
@@ -275,7 +299,7 @@ fun BrowserScreen(
                             )
                             uiState.viewMode == "GRID" -> FileGrid(
                                 files = files,
-                                columns = gridColumns(uiState.gridDensity),
+                                columns = gridColumns(uiState.gridDensity, listWidth),
                                 currentlyPlaying = uiState.currentlyPlayingMediaId,
                                 thumbnail = viewModel::folderThumbnail,
                                 onFileClick = onClick,
@@ -288,6 +312,7 @@ fun BrowserScreen(
                                 thumbnail = viewModel::folderThumbnail,
                                 duration = viewModel::trackDuration,
                                 showSourcePath = uiState.search.active || uiState.showingFavorites,
+                                sortField = uiState.sortField,
                                 onFileClick = onClick,
                                 onFileLongClick = onLong,
                                 modifier = Modifier.drawWithContent {
@@ -303,6 +328,10 @@ fun BrowserScreen(
                                 listState = listState
                             )
                         }
+                        // A folder that cannot be read says so (and can be tried again); an empty one says that it is empty.
+                        if (!uiState.isRoot && uiState.currentFolder != null && !uiState.isLoading && !uiState.search.active && files.isEmpty()) {
+                            FolderEmptyState(uiState.loadError, onRetry = { viewModel.refresh() }, modifier = Modifier.align(Alignment.Center))
+                        }
                       }
                     }
                 }
@@ -311,11 +340,9 @@ fun BrowserScreen(
     }
 }
 
-@Composable
-private fun gridColumns(density: Int): Int {
-    val landscape = LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-    return if (landscape) (density * 5 + 2) / 3 else density
-}
+/** Columns of the grid: the chosen density for a phone-wide list, more for a list wide as a landscape phone (about 560 dp and more). */
+private fun gridColumns(density: Int, width: androidx.compose.ui.unit.Dp): Int =
+    if (width >= 560.dp) (density * 5 + 2) / 3 else density
 
 /** ⋮ of every browser level: the level's own [items] first, Settings last. */
 @Composable
@@ -383,15 +410,16 @@ fun SortHeader(currentField: String, ascending: Boolean, onSortClick: (String) -
     ) {
         listOf("NAME" to R.string.sort_name, "DATE" to R.string.sort_date, "SIZE" to R.string.sort_size).forEach { (field, label) ->
             val isSelected = currentField == field
+            val direction = stringResource(if (ascending) R.string.settings_ascending else R.string.settings_descending)
             Surface(
                 onClick = { onSortClick(field) },
                 shape = RoundedCornerShape(8.dp),
                 color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                 contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).semantics { selected = isSelected; if (isSelected) stateDescription = direction }
             ) {
                 Row(
-                    modifier = Modifier.padding(vertical = 8.dp),
+                    modifier = Modifier.heightIn(min = 48.dp).padding(vertical = 8.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -557,12 +585,16 @@ fun FileList(
     thumbnail: suspend (SourceRef) -> ArtworkResult,
     duration: suspend (MusicFile) -> Long?,
     showSourcePath: Boolean,
+    /** Sort key: size or date is then shown beside the format, so a list sorted by it says why. */
+    sortField: String = "NAME",
     onFileClick: (MusicFile) -> Unit,
     onFileLongClick: (MusicFile) -> Unit = {},
     modifier: Modifier = Modifier,
     listState: androidx.compose.foundation.lazy.LazyListState
 ) {
     val dateFormatter = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
+    val nowPlayingLabel = stringResource(R.string.browser_now_playing)
+    val detailsLabel = stringResource(R.string.browser_row_details)
 
     LazyColumn(state = listState, modifier = modifier.testTag("file_list")) {
         items(files, key = { it.sourceId + it.path }) { file ->
@@ -572,6 +604,8 @@ fun FileList(
 
             Column {
                 Box(modifier = Modifier.fillMaxWidth()) {
+                    // Reading order: name first, then the kind of file (or where it is), then the length at the end.
+                    // Size and modification time are in the actions sheet (long press), not in every row.
                     ListItem(
                         headlineContent = {
                             Text(
@@ -582,30 +616,50 @@ fun FileList(
                                     isUnsupported -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                                     else -> Color.Unspecified
                                 },
-                                maxLines = 1,
+                                // Two lines: a long name stays readable at 320 dp and with a large font; the end is cut last.
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                                 fontWeight = if (playing || parentOfPlaying) androidx.compose.ui.text.font.FontWeight.Bold else null
                             )
                         },
-                        supportingContent = {
-                            // Track length, read only while the row is on screen (and kept); appended when known.
-                            // Refresh (revision) looks again, e.g. after network lengths were switched on.
-                            val length by produceState<Long?>(null, file.sourceId, file.path, file.size, file.lastModified, LocalThumbnailRevision.current) {
-                                if (MediaTypes.isAudio(file.name)) {
-                                    value = runCatching { duration(file) }.getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it else null }
-                                }
-                            }
-                            val lengthText = length?.let { " • " + com.wing.folderplayer.data.metadata.DurationFormat.format(it) } ?: ""
-                            when {
-                                showSourcePath -> Text((SourcePath.parent(file.path) ?: "/") + lengthText, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        supportingContent = when {
+                            showSourcePath -> ({
+                                Text(SourcePath.parent(file.path) ?: "/", maxLines = 1, overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.testTag("info_${file.name}"))
-                                !file.isDirectory -> Text(
-                                    "${formatSize(file.size)} • ${file.extension.uppercase()}$lengthText",
+                            })
+                            !file.isDirectory && file.extension.isNotEmpty() -> ({
+                                val sortValue = when {
+                                    isUnsupported -> null
+                                    sortField == "SIZE" && file.size > 0 -> formatSize(file.size)
+                                    sortField == "DATE" && file.lastModified > 0 -> dateFormatter.format(Date(file.lastModified))
+                                    else -> null
+                                }
+                                Text(
+                                    listOfNotNull(file.extension.uppercase(), sortValue).joinToString(" • "),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                     color = if (isUnsupported) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f) else Color.Unspecified,
                                     modifier = Modifier.testTag("info_${file.name}")
                                 )
-                            }
+                            })
+                            else -> null
                         },
+                        trailingContent = if (MediaTypes.isAudio(file.name)) ({
+                            // Track length, read only while the row is on screen (and kept); shown when known, nothing before
+                            // (no placeholder). Refresh (revision) looks again, e.g. after network lengths were switched on.
+                            val length by produceState<Long?>(null, file.sourceId, file.path, file.size, file.lastModified, LocalThumbnailRevision.current) {
+                                value = runCatching { duration(file) }.getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it else null }
+                            }
+                            length?.let {
+                                Text(
+                                    com.wing.folderplayer.data.metadata.DurationFormat.format(it),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.testTag("duration_${file.name}")
+                                )
+                            }
+                        }) else null,
                         leadingContent = {
                             if (file.isDirectory && !playing) {
                                 FolderThumb(file, thumbnail, Modifier.size(40.dp), 24.dp)
@@ -624,23 +678,17 @@ fun FileList(
                                 Icon(icon, contentDescription = null, tint = tint)
                             }
                         },
-                        modifier = Modifier.combinedClickable(
-                            enabled = !isUnsupported,
-                            onClick = { onFileClick(file) },
-                            onLongClick = { onFileLongClick(file) }
-                        ).testTag("item_${file.name}")
+                        modifier = Modifier
+                            .combinedClickable(
+                                enabled = !isUnsupported,
+                                role = Role.Button,
+                                onLongClickLabel = detailsLabel,
+                                onClick = { onFileClick(file) },
+                                onLongClick = { onFileLongClick(file) }
+                            )
+                            .then(if (playing) Modifier.semantics { stateDescription = nowPlayingLabel } else Modifier)
+                            .testTag("item_${file.name}")
                     )
-
-                    if (file.lastModified > 0 && !showSourcePath) {
-                        Text(
-                            text = dateFormatter.format(Date(file.lastModified)),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isUnsupported) 0.2f else 0.4f),
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(end = 16.dp, bottom = 4.dp)
-                        )
-                    }
                 }
                 Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             }
@@ -659,6 +707,8 @@ fun FileGrid(
     onFileLongClick: (MusicFile) -> Unit,
     state: androidx.compose.foundation.lazy.grid.LazyGridState,
 ) {
+    val nowPlayingLabel = stringResource(R.string.browser_now_playing)
+    val detailsLabel = stringResource(R.string.browser_row_details)
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
         state = state,
@@ -672,7 +722,8 @@ fun FileGrid(
             val unsupported = !file.isDirectory && !MediaTypes.isAudio(file.name) && !MediaTypes.isCue(file.name)
             Column(
                 modifier = Modifier
-                    .combinedClickable(enabled = !unsupported, onClick = { onFileClick(file) }, onLongClick = { onFileLongClick(file) })
+                    .combinedClickable(enabled = !unsupported, role = Role.Button, onLongClickLabel = detailsLabel, onClick = { onFileClick(file) }, onLongClick = { onFileLongClick(file) })
+                    .then(if (playing) Modifier.semantics { stateDescription = nowPlayingLabel } else Modifier)
                     .testTag("item_${file.name}"),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -727,7 +778,20 @@ private fun FileActionsSheet(
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
-            Text(file.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp), maxLines = 2)
+            Text(file.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp), maxLines = 3, overflow = TextOverflow.Ellipsis)
+            // The details left out of the list rows: format, size, modification time, and where the file is.
+            val details = remember(file) {
+                val date = if (file.lastModified > 0) SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(file.lastModified)) else null
+                listOfNotNull(
+                    file.extension.takeIf { !file.isDirectory && it.isNotEmpty() }?.uppercase(),
+                    formatSize(file.size).takeIf { !file.isDirectory && file.size > 0 },
+                    date,
+                ).joinToString(" • ")
+            }
+            if (details.isNotEmpty()) Text(details, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp).testTag("action_details"))
+            Text(SourcePath.parent(file.path) ?: "/", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp))
             ListItem(
                 headlineContent = { Text(stringResource(R.string.browser_add_to_playlist)) },
                 leadingContent = { Icon(Icons.Default.PlaylistAdd, contentDescription = null) },
@@ -775,5 +839,29 @@ fun PlaylistSelectBottomSheet(
                 }
             }
         }
+    }
+}
+
+/** Nothing to list: an unreadable folder shows why (with Retry), an empty one says so. Both are announced as one item. */
+@Composable
+private fun FolderEmptyState(error: String?, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 24.dp).testTag(if (error != null) "folder_error" else "folder_empty"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            if (error != null) Icons.Default.ErrorOutline else Icons.Default.FolderOpen,
+            contentDescription = null,
+            modifier = Modifier.size(40.dp),
+            tint = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            error ?: stringResource(R.string.browser_empty),
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (error != null) OutlinedButton(onClick = onRetry, modifier = Modifier.testTag("folder_retry")) { Text(stringResource(R.string.common_retry)) }
     }
 }

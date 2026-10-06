@@ -118,22 +118,22 @@ fun PlaylistSheetContent(
                                             playlistToRename = playlist.id
                                             renameName = playlist.name
                                             expanded = false
-                                        }, modifier = Modifier.size(24.dp)) {
+                                        }, modifier = Modifier.size(48.dp)) {
                                             Icon(
                                                 Icons.Default.Edit,
-                                                contentDescription = null,
-                                                tint = Color.White.copy(alpha = 0.5f),
-                                                modifier = Modifier.size(16.dp)
+                                                contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_rename),
+                                                tint = Color.White.copy(alpha = 0.7f),
+                                                modifier = Modifier.size(20.dp)
                                             )
                                         }
                                         IconButton(onClick = {
                                             viewModel.deletePlaylist(playlist.id)
-                                        }, modifier = Modifier.size(24.dp)) {
+                                        }, modifier = Modifier.size(48.dp)) {
                                             Icon(
                                                 Icons.Default.Delete,
-                                                contentDescription = null,
-                                                tint = Color.White.copy(alpha = 0.5f),
-                                                modifier = Modifier.size(16.dp)
+                                                contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.common_delete),
+                                                tint = Color.White.copy(alpha = 0.7f),
+                                                modifier = Modifier.size(20.dp)
                                             )
                                         }
                                     }
