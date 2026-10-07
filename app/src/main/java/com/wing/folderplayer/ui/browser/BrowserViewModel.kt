@@ -110,9 +110,16 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private val searchRepository = SearchRepository({ ref -> SourceRegistry.fileSystem(ref).list(ref.path) })
     private var loadJob: Job? = null
 
-    /** Where the folder on screen was opened from when that is not the folder above it (see [navigateUp]); null: by browsing. */
-    private enum class Origin { FAVORITES, SOURCE_LIST }
-    private var origin: Origin? = null
+    /** A place Back can lead to: the source list, the favourites list or a folder. */
+    private sealed interface Place {
+        object SourceList : Place
+        object Favorites : Place
+        data class Folder(val ref: SourceRef) : Place
+    }
+
+    /** The places left by navigating, latest last: Back goes to the previous one (see [navigateUp]). */
+    private val backStack = ArrayDeque<Place>()
+    private val MAX_BACK_STACK = 100
     /** Scroll position of the favourites list, kept for the way back from a favourite. */
     private var favoritesScroll: Pair<Int, Int> = 0 to 0
     private var searchJob: Job? = null
@@ -219,8 +226,27 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     // ---------------- navigation ----------------
 
+    private fun currentPlace(): Place = when {
+        _uiState.value.showingFavorites -> Place.Favorites
+        else -> _uiState.value.currentFolder?.let { Place.Folder(it) } ?: Place.SourceList
+    }
+
+    /** Call before leaving the current place by navigating (a refresh or Back does not). */
+    private fun rememberCurrentPlace() {
+        val here = currentPlace()
+        if (backStack.lastOrNull() == here) return
+        backStack.addLast(here)
+        while (backStack.size > MAX_BACK_STACK) backStack.removeFirst()
+    }
+
+    /** A fresh start from the source list: Back from here on leads to it. */
+    private fun startFromSourceList() {
+        backStack.clear()
+        backStack.addLast(Place.SourceList)
+    }
+
     fun selectSource(source: SourceConfig) {
-        origin = null
+        startFromSourceList()
         closeSearch()
         loadFolder(SourceRef(source.id, SourcePath.ROOT))
     }
@@ -366,32 +392,44 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Back (system Back and the arrow of the top bar). A folder opened from the favourites list or from a bookmark leads
-     * back to that list, however deep the user went since; any other folder leads to the one above it, and the source root
-     * to the source list. Going up one folder is [goUp].
+     * Back (system Back and the arrow of the top bar): the previous place, as in a browser: the folder, the favourites
+     * list or the source list the user came from, whichever way they went (a folder entered from the favourites list or
+     * a bookmark leads back to it, a folder that was entered from a folder leads back to that folder). Going up one folder
+     * is [goUp], and Back after it returns to where the user was.
      */
     fun navigateUp() {
         if (_uiState.value.search.active) { closeSearch(); return }
-        if (_uiState.value.showingFavorites) { exitSource(); return }
-        val folder = _uiState.value.currentFolder ?: return
-        when (origin) {
-            Origin.FAVORITES -> { showFavorites(restoreScroll = true); return }
-            Origin.SOURCE_LIST -> { exitSource(); return }
-            null -> Unit
+        val previous = backStack.removeLastOrNull()
+        if (previous != null) {
+            when (previous) {
+                Place.SourceList -> showSourceList()
+                Place.Favorites -> renderFavorites(restoreScroll = true)
+                is Place.Folder -> loadFolder(previous.ref, isBackNavigation = true)
+            }
+            return
         }
+        // No history (the app opened on the folder it was last in): the folder above, the source list above a source root.
+        if (_uiState.value.showingFavorites) { showSourceList(); return }
+        val folder = _uiState.value.currentFolder ?: return
         val parent = folder.parent
-        if (parent == null) exitSource() else loadFolder(parent, isBackNavigation = true)
+        if (parent == null) showSourceList() else loadFolder(parent, isBackNavigation = true)
     }
 
-    /** The arrow-up button of the top bar: the folder above, wherever the folder was opened from (Back is not changed by it). */
+    /** The arrow-up button of the top bar: the folder above (a new step: Back returns to the folder the user was in). */
     fun goUp() {
         if (_uiState.value.search.active) return
         val parent = _uiState.value.currentFolder?.parent ?: return
+        rememberCurrentPlace()
         loadFolder(parent, isBackNavigation = true)
     }
 
+    /** "Back to the sources" of the menu: the source list, with no way back from it. */
     fun exitSource() {
-        origin = null
+        backStack.clear()
+        showSourceList()
+    }
+
+    private fun showSourceList() {
         loadJob?.cancel()
         closeSearch()
         sourcePreferences.saveLastBrowsedState(null)
@@ -405,7 +443,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         onCuePlay: (SourceRef) -> Unit
     ) {
         if (file.isDirectory) {
-            if (_uiState.value.showingFavorites) origin = Origin.FAVORITES
+            rememberCurrentPlace()
             closeSearch()
             loadFolder(file.ref)
             return
@@ -496,15 +534,22 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun openBookmark(bookmark: Bookmark) {
-        origin = Origin.SOURCE_LIST
+        startFromSourceList()
         closeSearch()
         loadFolder(bookmark.ref)
     }
 
     fun removeBookmark(bookmark: Bookmark) = bookmarksRepository.remove(bookmark.ref)
 
-    fun showFavorites(restoreScroll: Boolean = false) {
-        origin = null
+    /** The favourites list (entered from the source list, or from a folder when called from elsewhere). */
+    fun showFavorites() {
+        if (!_uiState.value.showingFavorites) {
+            if (_uiState.value.currentFolder == null) startFromSourceList() else rememberCurrentPlace()
+        }
+        renderFavorites(restoreScroll = false)
+    }
+
+    private fun renderFavorites(restoreScroll: Boolean) {
         closeSearch()
         loadJob?.cancel()
         val sources = SourceRegistry.sources.value.map { it.id }.toSet()
