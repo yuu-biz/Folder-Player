@@ -105,7 +105,8 @@ object SourceRegistry {
         fileSystems[id]?.let { (c, fs) -> if (c == cfg) return fs }
         synchronized(this) {
             fileSystems[id]?.let { (c, fs) -> if (c == cfg) return fs else runCatching { fs.close() } }
-            val fs = create(cfg)
+            // Network sources count what is read through them ([NetworkStats]); a test double (factory) is used as it is.
+            val fs = create(cfg).let { if (cfg.isNetwork && fileSystemFactory == null) CountingFileSystem(it) else it }
             fileSystems[id] = cfg to fs
             return fs
         }

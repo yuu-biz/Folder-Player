@@ -98,7 +98,7 @@ class ArtworkIoTest {
     }
 
     private fun thumbFiles(): List<File> =
-        File(Fx.ctx.cacheDir, SourceImageFetcher.THUMB_DIR).walkTopDown().filter { it.isFile && it.extension == "jpg" }.toList()
+        File(Fx.ctx.cacheDir, SourceImageFetcher.IMAGE_CACHE_DIR + "/t").walkTopDown().filter { it.isFile && it.extension == "jpg" }.toList()
 
     @Test fun coverIsReadOnceForValidationAndDisplay() {
         val folder = album("Album One", "cover.jpg" to jpeg(1))
@@ -148,6 +148,7 @@ class ArtworkIoTest {
         val file = File(dir, "Album Six/cover.jpg")
         val mtime = file.lastModified()
         ThumbnailRepository.imageBytes.cache.clear()  // as if validation had not kept it (or evicted)
+        thumbs.imageCache.clear()  // and no thumbnail on disk yet (validation writes the 256 px one; a kept thumbnail is used until the image changes)
 
         // The source delivers something that is not an image, same size and time (glitch / error page).
         file.writeBytes(ByteArray(good.size) { 'x'.code.toByte() }); file.setLastModified(mtime)
@@ -165,9 +166,14 @@ class ArtworkIoTest {
     @Test fun nearbyRequestedSizesShareOneThumbnailFile() {
         val folder = album("Album Five", "cover.jpg" to jpeg(5))
         val f = found(runBlocking { thumbs.playbackCover(folder, null) })
-        for (px in listOf(104, 120, 128)) assertTrue(display(f, px))
-        val files = thumbFiles()
-        Fx.log("ArtworkIoTest thumbnail files for sizes 104/120/128: ${files.size}")
-        assertEquals("one file for sizes of the same bucket", 1, files.size)
+        assertTrue(display(f, 104))
+        val files = thumbFiles().size // the 256 px one made by the validation, the 128 px one cut from it
+        for (px in listOf(120, 128)) assertTrue(display(f, px))
+        Fx.log("ArtworkIoTest thumbnail files after sizes 104 / 120 / 128: $files / ${thumbFiles().size}")
+        assertEquals("sizes of the same bucket add no file", files, thumbFiles().size)
+        assertEquals("the two thumbnail sizes", 2, files)
+        // A larger request is served at 256 px: the file that is already there.
+        assertTrue(display(f, 400))
+        assertEquals("a request above 256 px adds no file", files, thumbFiles().size)
     }
 }

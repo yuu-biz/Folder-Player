@@ -61,6 +61,7 @@ abstract class UiTestBase {
         listOf("cover_", "bg_", "title_", "orientation_", "notch_").any { tag.startsWith(it) } -> "display" to null
         listOf("sort_", "sortdir_", "defview_", "grid_").any { tag.startsWith(it) } -> "library" to null
         tag.startsWith("thumbs_") -> "library" to "thumbnails"
+        tag.startsWith("cache") || tag.startsWith("netstat") -> "library" to "imagecache"
         tag == "clear_image_cache" || tag.startsWith("perm_") -> "storage" to null
         tag == "ai_lyrics_auto" || tag.startsWith("lyrics_priority_") -> "lyrics" to null
         tag == "dlna_enabled" || tag == "auto_save" || tag == "native_decoder_status" -> "playback" to null

@@ -45,6 +45,7 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.input.pointer.pointerInput
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
+import com.wing.folderplayer.data.artwork.SourceImageFetcher
 import com.wing.folderplayer.R
 import com.wing.folderplayer.cast.CastController
 import kotlin.math.abs
@@ -74,7 +75,9 @@ fun CoverImage(
         LaunchedEffect(Unit) { shown?.invoke() }
         return
     }
+    // Every player surface asks for the player artwork tier: one cached file (up to 2048 px) shared with the notification.
     fun request(data: Any) = ImageRequest.Builder(context).data(data).crossfade(crossfade)
+        .setParameter(SourceImageFetcher.TIER_PARAM, SourceImageFetcher.TIER_ARTWORK)
         .apply { if (requestPx != null) size(requestPx) }.build()
     SubcomposeAsyncImage(
         model = request(primary ?: fallback!!),

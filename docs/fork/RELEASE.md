@@ -93,3 +93,6 @@ is written by hand; `--check` compares it with `:app:dependencies --configuratio
 
 1.1.0 the same way: dev builds `1.1.0-dev1`, `1.1.0-dev2` use 1010001, 1010002; the final `v1.1.0` is versionName `1.1.0`,
 versionCode `1010099`, which installs over 1.0.0 and over both dev builds.
+
+1.2.0 the same way: dev builds `1.2.0-dev1`, … use 1020001, …; the final `v1.2.0` is versionName `1.2.0`, versionCode `1020099`,
+which installs over 1.1.x and over every dev build.

@@ -114,6 +114,26 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.23 Image cache in two tiers, cache limit, network account (1.2.0-dev1, 2026-10-08)
+
+Branch `feature/image-cache-1.2` (not merged, not tagged). Browser thumbnails 128 / 256 px and one player artwork file per
+image (up to 2048 px) under one user-chosen limit; a rough account of what was read from network sources. The cache rules are in
+[KNOWN_ISSUES.md](KNOWN_ISSUES.md) ("Image cache and network use"). JVM, API 34 emulator and the Docker SMB share.
+
+| Check | Result |
+|---|---|
+| `ImageDiskCacheTest` (two thumbnail sizes, names, one limit split 40 / 60 between the tiers with borrowing, lowest-first clean-up, lowering the limit, unfinished writes, clear, old cache deleted; sample sizes of the scaler) | 8/8 PASS |
+| `NetworkStatsTest` (kind of file, counters and reset, the counting wrapper: list, sequential and random-access reads, per source) | 3/3 PASS |
+| `ImageCacheUiTest` a70 on the Docker SMB share: first view reads the covers and writes thumbnails; after dropping the memory cache the folder is shown from disk and **no image is read again** (image bytes unchanged, hits up); Settings page shows limit, usage, per-source reads; 128 MB then 512 MB; counters reset; Clear empties the thumbnail files and the next view reads the covers again; playing an album makes the player artwork, asking for it again (memory cache off, 130 px and 1000 px) is served from the file twice with nothing made and no image read; playing again reads no image | PASS (first run failed only on my test's assumption that re-playing asks the cache again: the player surfaces and the notification already hold the picture; the check now asks directly) |
+| `ArtworkIoTest` ×6 (a cover read once for validation and display; failed, broken and undecodable reads never kept) | PASS. Two tests encoded the old size rule and the old premise ("no thumbnail on disk after validation") and were adapted: sizes of one bucket add no file and a request above 256 px adds none; the broken-bytes test clears the disk cache first |
+| Around it: `BrowserUiTest` a13 ×3 / a14 / a18 (thumbnail switches, Wi-Fi only, late cover, cache clear, 300 folders), `SettingsLayoutTest` s01–s05 | all PASS |
+| `lintDebug testDebugUnitTest` with the fixture servers | lint 0 errors, 61 warnings (as before; the first build had 65: three `%d files / %d hits` strings and a KTX hint, reworded); JVM 225 tests, 0 failures, 1 skipped. One failure on the way: the Japanese network-source line had no Japanese text (`StringResourcesParityTest`), fixed |
+| Trial build `-PfpVersionName=1.2.0-dev1 -PfpVersionCode=1020001` (signed) | `FolderPlayerFork-1.2.0-dev1.apk` (23.5 MB), SHA-256 `f70ba7f06579328cf497adb28c30f335ca10562bee268b4ebac48b1db884d112`; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; arm64-v8a + x86_64; `zipalign -c -P 16` and `check-16k.sh` PASS. Installs over 1.1.x |
+
+Not checked: a real NAS (Docker SMB only); other API levels; how much traffic this saves on a large real library (not
+measured); the network account against a packet capture (it is an estimate by design); the player artwork of a very large
+scan (the 2048 px reduction was run on the fixture covers only).
+
 ### 5.22 Back is the previous place; arrow-up button (1.1.1 hotfix, 2026-10-08)
 
 Back (system Back and the top-bar arrow) leads to the previous place, as in a browser: the folder, the favourites list or the

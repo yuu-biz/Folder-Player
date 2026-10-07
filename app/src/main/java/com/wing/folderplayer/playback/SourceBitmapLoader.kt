@@ -44,7 +44,11 @@ class SourceBitmapLoader(private val fallback: BitmapLoader) : BitmapLoader {
     override fun loadBitmap(uri: Uri, options: BitmapFactory.Options?): ListenableFuture<Bitmap> {
         val ref = SourceUris.parse(uri.toString()) ?: return fallback.loadBitmap(uri, options)
         return cached(uri.toString()) {
-            executor.submit<Bitmap> { decode(ThumbnailRepository.imageBytes.load(uri.toString(), ref)) }
+            // The same player artwork file the player surfaces use (made on first use, then not read from the source again).
+            executor.submit<Bitmap> {
+                val raw = uri.toString()
+                decode(ThumbnailRepository.current()?.playerArtworkBytes(raw, ref) ?: ThumbnailRepository.imageBytes.load(raw, ref))
+            }
         }
     }
 
