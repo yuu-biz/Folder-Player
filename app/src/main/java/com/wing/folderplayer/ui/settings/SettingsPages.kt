@@ -1,6 +1,7 @@
 package com.wing.folderplayer.ui.settings
 
 import android.content.Intent
+import android.text.format.Formatter
 import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -32,6 +33,9 @@ import androidx.compose.ui.unit.dp
 import com.wing.folderplayer.BuildConfig
 import com.wing.folderplayer.R
 import com.wing.folderplayer.cast.CastSettings
+import com.wing.folderplayer.data.artwork.ArtworkSettings
+import com.wing.folderplayer.data.artwork.ImageTier
+import com.wing.folderplayer.data.artwork.TierUsage
 import com.wing.folderplayer.data.artwork.ThumbnailRepository
 import com.wing.folderplayer.data.prefs.LyricPreferences
 import com.wing.folderplayer.data.prefs.NotchPreferences
@@ -39,6 +43,9 @@ import com.wing.folderplayer.data.prefs.OrientationPreferences
 import com.wing.folderplayer.data.prefs.PlaybackPreferences
 import com.wing.folderplayer.data.prefs.SourcePreferences
 import com.wing.folderplayer.data.repo.TitleMode
+import com.wing.folderplayer.data.source.NetworkStats
+import com.wing.folderplayer.data.source.ReadKind
+import com.wing.folderplayer.data.source.SourceRegistry
 import com.wing.folderplayer.data.source.SourceType
 import com.wing.folderplayer.playback.ExportSettings
 import com.wing.folderplayer.playback.NativeDecoder
@@ -46,6 +53,9 @@ import com.wing.folderplayer.ui.browser.BrowserViewModel
 import com.wing.folderplayer.ui.player.PlayerViewModel
 import com.wing.folderplayer.ui.theme.AppFont
 import com.wing.folderplayer.ui.theme.FontManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import com.wing.folderplayer.ui.theme.FontState
 import com.wing.folderplayer.utils.AppLocale
 import com.wing.folderplayer.utils.CrashHandler
@@ -83,11 +93,12 @@ internal fun SettingsCategoryPage(
 
 /** A page below a category. */
 @Composable
-internal fun SettingsSubPage(sub: SettingsSub, snackbar: SnackbarHostState, onLanguageChange: (String) -> Unit) {
+internal fun SettingsSubPage(sub: SettingsSub, snackbar: SnackbarHostState, browserViewModel: BrowserViewModel, onLanguageChange: (String) -> Unit) {
     when (sub) {
         SettingsSub.LANGUAGE -> LanguagePage(onLanguageChange)
         SettingsSub.FONT -> FontPage(snackbar)
         SettingsSub.THUMBNAILS -> ThumbnailsPage()
+        SettingsSub.IMAGE_CACHE -> ImageCachePage(snackbar, browserViewModel)
         SettingsSub.AI -> AiPage()
     }
 }
@@ -320,6 +331,12 @@ private fun LibraryPage(openSub: (SettingsSub) -> Unit, browserViewModel: Browse
             "settings_sub_${SettingsSub.THUMBNAILS.id}",
             { openSub(SettingsSub.THUMBNAILS) },
         )
+        SettingsNavRow(
+            stringResource(R.string.settings_image_cache),
+            stringResource(R.string.settings_cache_limit_summary, cacheLimitLabel(thumbs.settings.cacheLimitMb)),
+            "settings_sub_${SettingsSub.IMAGE_CACHE.id}",
+            { openSub(SettingsSub.IMAGE_CACHE) },
+        )
     }
 }
 
@@ -347,6 +364,83 @@ private fun ThumbnailsPage() {
             SettingsSwitch(stringResource(R.string.settings_thumbs_wifi_only), thumbs.settings.wifiOnly, "thumbs_wifi") { thumbs.settings.wifiOnly = it; rev++ }
         }
         SettingsHelp(stringResource(R.string.settings_thumbs_help))
+    }
+}
+
+// ---------------------------------------------------------------- Image cache and network use
+
+internal fun cacheLimitLabel(mb: Int) = if (mb >= 1024) "${mb / 1024} GB" else "$mb MB"
+
+/**
+ * One size limit for the image cache (thumbnails and player artwork are managed inside it), what is in it, and a rough
+ * account of what was read from network sources since the app started ([NetworkStats]).
+ */
+@Composable
+private fun ImageCachePage(snackbar: SnackbarHostState, browserViewModel: BrowserViewModel) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val thumbs = remember { ThumbnailRepository.get(context) }
+    var limitMb by remember { mutableIntStateOf(thumbs.settings.cacheLimitMb) }
+    var usageRev by remember { mutableIntStateOf(0) }
+    // The sizes are read from the directories on an I/O thread (not while composing), again every 2 s while the page is open.
+    val usage by produceState<Pair<TierUsage, TierUsage>?>(null, usageRev) {
+        while (true) {
+            value = withContext(Dispatchers.IO) { thumbs.imageCache.usage(ImageTier.THUMB) to thumbs.imageCache.usage(ImageTier.ARTWORK) }
+            delay(2_000)
+        }
+    }
+    val stats by produceState(NetworkStats.snapshot()) { while (true) { value = NetworkStats.snapshot(); delay(1_000) } }
+    fun size(bytes: Long): String = Formatter.formatShortFileSize(context, bytes)
+    val quiet = MaterialTheme.colorScheme.onSurfaceVariant
+    SettingsPage {
+        SettingsChoice(
+            stringResource(R.string.settings_cache_limit),
+            ArtworkSettings.CACHE_LIMITS_MB.map { it to cacheLimitLabel(it) }, limitMb, "cachecap",
+        ) { limitMb = it; thumbs.setCacheLimitMb(it); usageRev++ }
+        val u = usage
+        SettingsInfo(
+            stringResource(R.string.settings_cache_usage, u?.let { size(it.first.bytes + it.second.bytes) } ?: "…", cacheLimitLabel(limitMb)),
+            Modifier.testTag("cache_usage"),
+        )
+        SettingsInfo(stringResource(R.string.settings_cache_thumbs, size(u?.first?.bytes ?: 0), u?.first?.files ?: 0), Modifier.testTag("cache_thumbs"), quiet)
+        SettingsInfo(stringResource(R.string.settings_cache_artwork, size(u?.second?.bytes ?: 0), u?.second?.files ?: 0), Modifier.testTag("cache_artwork"), quiet)
+        OutlinedButton(
+            onClick = {
+                thumbs.clearCaches()
+                coil.Coil.imageLoader(context).memoryCache?.clear()
+                browserViewModel.onImageCacheCleared()
+                usageRev++
+                scope.launch { snackbar.showSnackbar(context.getString(R.string.settings_cache_cleared)) }
+            },
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("cache_clear"),
+        ) { Text(stringResource(R.string.settings_clear_image_cache)) }
+        SettingsHelp(stringResource(R.string.settings_cache_help))
+
+        SettingsGroupTitle(stringResource(R.string.settings_netstat_title))
+        SettingsInfo(stringResource(R.string.settings_netstat_total, size(stats.totalBytes)), Modifier.testTag("netstat_total"))
+        SettingsInfo(
+            stringResource(
+                R.string.settings_netstat_kinds,
+                size(stats.bytes[ReadKind.IMAGE] ?: 0), size(stats.bytes[ReadKind.AUDIO_META] ?: 0), size(stats.bytes[ReadKind.OTHER] ?: 0),
+            ),
+            Modifier.testTag("netstat_kinds"), quiet,
+        )
+        SettingsInfo(
+            stringResource(R.string.settings_netstat_counts, stats.folderLists, stats.thumbnailsFetched, stats.artworkFetched),
+            Modifier.testTag("netstat_counts"), quiet,
+        )
+        SettingsInfo(
+            stringResource(R.string.settings_netstat_cache, stats.hits, stats.misses, stats.hitRate?.let { "${(it * 100).toInt()}%" } ?: "–"),
+            Modifier.testTag("netstat_cache"), quiet,
+        )
+        stats.perSource.entries.sortedByDescending { it.value }.forEach { (id, bytes) ->
+            SettingsInfo(stringResource(R.string.settings_netstat_source, SourceRegistry.get(id)?.name ?: id, size(bytes)), Modifier.testTag("netstat_source_$id"), quiet)
+        }
+        OutlinedButton(
+            onClick = { NetworkStats.reset() },
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("netstat_reset"),
+        ) { Text(stringResource(R.string.settings_netstat_reset)) }
+        SettingsHelp(stringResource(R.string.settings_netstat_help))
     }
 }
 

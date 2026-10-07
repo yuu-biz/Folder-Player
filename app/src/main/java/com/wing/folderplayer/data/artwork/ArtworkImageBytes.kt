@@ -71,6 +71,8 @@ class ArtworkImageBytes(
     private val read: (SourceRef) -> ByteArray,
     private val revisionOf: (String) -> Int,
     private val decodes: (ByteArray) -> Boolean,
+    /** Called with the bytes of an image that was read from the source and decodes (also those too large for [cache]). */
+    private val onValidated: (MusicFile, ByteArray) -> Unit = { _, _ -> },
 ) {
     /** Cache key of an image URI as used by the display side (the URI carries the file's size / mtime as `?v=`). */
     fun keyOf(imageUri: String): String {
@@ -89,6 +91,7 @@ class ArtworkImageBytes(
         val bytes = read(ref)
         if (!decodes(bytes)) return false
         keepIfConsistent(key, bytes, entry.size)
+        runCatching { onValidated(entry, bytes) } // a by-product (the thumbnail): never a reason to fail the validation
         return true
     }
 

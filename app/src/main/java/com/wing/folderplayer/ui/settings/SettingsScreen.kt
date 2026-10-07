@@ -74,6 +74,7 @@ internal enum class SettingsSub(val id: String, val title: Int, val parent: Sett
     LANGUAGE("language", R.string.settings_language, SettingsCategory.DISPLAY),
     FONT("font", R.string.settings_font, SettingsCategory.DISPLAY),
     THUMBNAILS("thumbnails", R.string.settings_thumbnails, SettingsCategory.LIBRARY),
+    IMAGE_CACHE("imagecache", R.string.settings_image_cache, SettingsCategory.LIBRARY),
     AI("ai", R.string.settings_ai, SettingsCategory.LYRICS);
 
     companion object {
@@ -141,7 +142,7 @@ fun SettingsScreen(
             val pageContent: @Composable () -> Unit = {
                 when {
                     shownCategory == null -> Unit
-                    sub != null -> SettingsSubPage(sub, snackbar, onLanguageChange)
+                    sub != null -> SettingsSubPage(sub, snackbar, browserViewModel, onLanguageChange)
                     else -> SettingsCategoryPage(
                         shownCategory, openSub, snackbar, playerViewModel, browserViewModel, permissionEpoch,
                         onRequestPermissions, onOrientationChange, onNotchModeChange,

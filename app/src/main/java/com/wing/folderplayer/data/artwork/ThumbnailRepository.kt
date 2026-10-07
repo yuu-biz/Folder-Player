@@ -7,6 +7,7 @@ import android.graphics.BitmapFactory
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import com.wing.folderplayer.data.source.MusicFile
+import com.wing.folderplayer.data.source.NetworkStats
 import com.wing.folderplayer.data.source.SourceRef
 import com.wing.folderplayer.data.source.SourceRegistry
 import com.wing.folderplayer.data.source.SourceType
@@ -34,6 +35,17 @@ class ArtworkSettings(context: Context) {
         set(v) { prefs.edit { putBoolean("wifi_only", v); putInt("revision", revision + 1) } }
     val revision: Int get() = prefs.getInt("revision", 0)
     fun bumpRevision() = prefs.edit { putInt("revision", revision + 1) }
+
+    /** Total size limit of the image cache on disk (thumbnails and player artwork together), one of [CACHE_LIMITS_MB]. */
+    var cacheLimitMb: Int
+        get() = prefs.getInt("cache_limit_mb", DEFAULT_CACHE_MB).takeIf { it in CACHE_LIMITS_MB } ?: DEFAULT_CACHE_MB
+        set(v) = prefs.edit { putInt("cache_limit_mb", v) }
+    val cacheLimitBytes: Long get() = cacheLimitMb * 1024L * 1024L
+
+    companion object {
+        val CACHE_LIMITS_MB = listOf(128, 256, 512, 1024, 2048)
+        const val DEFAULT_CACHE_MB = 512
+    }
 }
 
 object ImageUris {
@@ -58,8 +70,20 @@ class ThumbnailRepository private constructor(private val context: Context) {
     // Positive results: read from disk in the background as soon as the repository exists; written coalesced.
     private val positive = ArtworkIndex(File(context.filesDir, "artwork-index.json"), ioScope, SAVE_DELAY_MS)
 
-    /** Downsampled thumbnails on disk (bucketed sizes, size-limited, one directory per artwork settings revision). */
-    val thumbnailCache = ThumbnailDiskCache(File(context.cacheDir, SourceImageFetcher.THUMB_DIR), ioScope)
+    /**
+     * Images on disk: thumbnails (128 / 256 px) and player artwork (up to 2048 px), under one user-chosen size limit. The
+     * cache of earlier versions (`thumbs`) is deleted once.
+     */
+    val imageCache = ImageDiskCache(
+        File(context.cacheDir, SourceImageFetcher.IMAGE_CACHE_DIR), ioScope, { settings.cacheLimitBytes },
+        legacyDirs = listOf(File(context.cacheDir, SourceImageFetcher.THUMB_DIR)),
+    )
+
+    /** Sets the size limit (a lower one takes effect at once: the cache is cleaned up). */
+    fun setCacheLimitMb(mb: Int) {
+        settings.cacheLimitMb = mb
+        imageCache.onLimitChanged()
+    }
 
     fun isOnWifi(): Boolean {
         val cm = context.getSystemService(ConnectivityManager::class.java) ?: return false
@@ -170,13 +194,62 @@ class ThumbnailRepository private constructor(private val context: Context) {
     /** Forget every "no image" result (after a permission grant or settings change). */
     fun invalidateNegatives() = negative.clear()
 
+    // ---- player artwork (the picture of what is playing) ----
+
+    private val artworkLocks = ConcurrentHashMap<String, Any>()
+
+    /**
+     * The player artwork file of the image [raw] (a versioned `fpsrc://` URI): kept on disk after the first time it is
+     * needed, cut down to at most [ImageScaling.PLAYER_ARTWORK_MAX_PX], and used by every surface that shows it (mini, full
+     * and wide player, notification). Until the image itself changes (its version in the URI) the source is not asked again.
+     * Null when it cannot be kept (an unversioned URI cannot tell when the picture changes; a broken image is never kept);
+     * nothing is written then. Blocks on I/O: call from an I/O thread. Concurrent callers for one image wait for the first.
+     */
+    fun playerArtworkFile(raw: String, ref: SourceRef): File? {
+        if (!raw.contains("?v=")) return null
+        val file = imageCache.file(ImageTier.ARTWORK, raw)
+        if (file.exists()) { imageCache.markUsed(file); NetworkStats.artworkHit(); return file }
+        val lock = artworkLocks.computeIfAbsent(raw) { Any() }
+        try {
+            synchronized(lock) {
+                if (file.exists()) { imageCache.markUsed(file); NetworkStats.artworkHit(); return file }
+                NetworkStats.artworkMiss()
+                val bytes = imageBytes.load(raw, ref) // the source, unless cover validation just read it
+                val art = ImageScaling.playerArtwork(bytes) ?: return null
+                imageCache.write(file, art)
+                NetworkStats.artworkFetched()
+                return file
+            }
+        } finally {
+            artworkLocks.remove(raw, lock)
+        }
+    }
+
+    /** The player artwork bytes for the notification: the cached file, else the image as read (see [playerArtworkFile]). */
+    fun playerArtworkBytes(raw: String, ref: SourceRef): ByteArray =
+        playerArtworkFile(raw, ref)?.readBytes() ?: imageBytes.load(raw, ref)
+
+    /**
+     * Called with an image the cover validation read from its source: its 256 px thumbnail is written now, so the browser
+     * never reads the same image a second time (a large cover does not fit [ValidatedImageCache]). Only a decodable image
+     * gets here; the 128 px one is cut from this file when needed.
+     */
+    internal fun storeValidatedThumbnail(entry: MusicFile, bytes: ByteArray) {
+        val uri = ImageUris.of(SourceRef(entry.sourceId, entry.path), entry)
+        val file = imageCache.file(ImageTier.THUMB, uri, ImageDiskCache.LARGE)
+        if (file.exists()) return
+        val thumb = ImageScaling.fit(bytes, ImageDiskCache.LARGE, SourceImageFetcher.THUMB_QUALITY) ?: return
+        imageCache.write(file, thumb)
+        NetworkStats.thumbnailFetched()
+    }
+
     /** Clears image index and thumbnail files only — sources, settings and playlists are untouched. */
     @Synchronized // the index's clear is also serialized with its save: a write in progress cannot bring the file back
     fun clearCaches() {
         positive.clear()
         negative.clear()
         imageBytes.cache.clear()
-        File(context.cacheDir, SourceImageFetcher.THUMB_DIR).deleteRecursively()
+        imageCache.clear()
     }
 
     companion object {
@@ -189,6 +262,9 @@ class ThumbnailRepository private constructor(private val context: Context) {
         fun get(context: Context): ThumbnailRepository =
             instance ?: synchronized(this) { instance ?: ThumbnailRepository(context.applicationContext).also { instance = it } }
 
+        /** The repository once the app created it (null before): for code that has no context (the notification's bitmap loader). */
+        fun current(): ThumbnailRepository? = instance
+
         /**
          * Image bytes shared by cover validation and display (Coil fetcher, notification): a cover read for validation is
          * not read again for display. Process-wide, bounded, see [ValidatedImageCache].
@@ -198,6 +274,7 @@ class ThumbnailRepository private constructor(private val context: Context) {
             read = { ref -> SourceRegistry.fileSystem(ref).readBytes(ref.path, MAX_IMAGE_BYTES) },
             revisionOf = { id -> SourceRegistry.get(id)?.revision ?: 0 },
             decodes = ::decodesAsImage,
+            onValidated = { entry, bytes -> instance?.storeValidatedThumbnail(entry, bytes) },
         )
 
         /** True when [bytes] decode to a bitmap (a small sample is fully decoded). */

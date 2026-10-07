@@ -41,6 +41,34 @@ What a user can run into, in one place. The sections below give the history of e
 - **Not checked**: TalkBack sessions, HyperOS devices, a NAS, a background network retry on a real phone with the
   screen off (a refused foreground start is caught and logged, see below).
 
+## Image cache and network use (1.2.0)
+
+- Images are kept on disk in two tiers under one size limit chosen in Settings → Library & network → Image cache and network
+  use (128 MB, 256 MB, 512 MB default, 1 GB, 2 GB):
+  - **Browser thumbnails**: a 128 px or a 256 px JPEG. A request above 128 px (also on a tablet's larger grid) gets the 256 px
+    one, enlarged on screen. The 256 px one is written when a cover is validated, so a large cover is read from the
+    NAS once; the 128 px one is cut from it without asking the source. A high-resolution image is never kept for the browser.
+  - **Player artwork**: one file per image, longer side at most 2048 px (an image that already fits and is at most 2 MB is
+    kept as it is, otherwise JPEG 90), made when something is played. Mini, full and wide player and the notification
+    use that one file.
+  - A file is used until the image itself changes (the size and modification time in its key); switching thumbnails on or
+    off, Wi-Fi only, or editing a source (e.g. its address) does not discard it. Clear does. Broken or unreadable images,
+    permission and network errors, and images whose URI has no version are never kept (unchanged rule).
+  - Over the limit the least recently used files go until the total is at three quarters of the limit. Thumbnails are
+    entitled to 40 % of that, player artwork to 60 %; a tier may use the other's unused room but gives way first when it holds
+    more than its share. Lowering the limit cleans up at once. The cache of earlier versions (`thumbs`, other sizes) is deleted
+    once at the first start of this version; its files would no longer be used.
+- Still read from the NAS: each cover once on the first view of a folder (the app checks that it is an image), and again once
+  per folder after a source's connection settings were edited (its folder-to-cover index is rebuilt). The cache is in the
+  app's cache directory: Android may clear it when storage runs low; the images are then made again.
+- The network account (Settings, same page) counts what the app asked network sources for through its file layer since
+  the process started: bytes by kind (images, audio and metadata, other), by source, folder lists, thumbnails and player
+  artwork fetched from a source, image cache hits and misses. It is an estimate: no protocol overhead, retransmissions or other
+  apps; local storage is not counted; it is not kept across restarts; "Reset counters" zeroes it.
+- Not checked: a real NAS (the Docker SMB share only); other API levels; how much traffic it saves on a large real library
+  (not measured). The older entry "Thumbnail files were keyed by the exact requested pixels…" below describes the cache of
+  1.0 and is superseded by this section.
+
 ## SMB search (after 1.0.0)
 
 - "Search network" in the SMB editor looks only when the button is pressed (about 12 s at most). It finds servers that
