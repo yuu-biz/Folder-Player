@@ -21,6 +21,7 @@ case "$1" in
     done
     echo "boot timeout"; docker logs --tail 30 "emu-$AVD"; exit 1
     ;;
-  stop) docker rm -f "emu-$2" >/dev/null 2>&1 || true ;;
+  # SIGTERM first: the emulator then removes its own lock files (a kill leaves them, and the next boot refuses to start).
+  stop) docker stop -t 40 "emu-$2" >/dev/null 2>&1 || true; docker rm -f "emu-$2" >/dev/null 2>&1 || true ;;
   adb) PORT="$2"; shift 2; "$ADB" -s "127.0.0.1:$PORT" "$@" ;;
 esac
