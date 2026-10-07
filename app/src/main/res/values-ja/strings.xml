@@ -41,6 +41,11 @@
     <string name="browser_add_bookmark">ブックマークに追加</string>
     <string name="browser_remove_bookmark">ブックマークから削除</string>
     <string name="browser_bookmark_folder">このフォルダをブックマークに追加</string>
+    <string name="source_discover">ネットワークから探す</string>
+    <string name="source_discover_title">このネットワークのSMBサーバー</string>
+    <string name="source_discover_searching">検索中…</string>
+    <string name="source_discover_none">SMBサーバーが見つかりません。NASと同じWi-Fiに接続しているか確認するか、アドレスを手入力してください。</string>
+    <string name="source_discover_no_lan">ローカルのWi-Fi／有線LANに接続していません。自分から名乗るサーバーのみ検索します。</string>
     <string name="browser_now_playing">再生中</string>
     <string name="browser_row_details">詳細と操作</string>
     <string name="browser_empty">ここには表示する項目がありません</string>

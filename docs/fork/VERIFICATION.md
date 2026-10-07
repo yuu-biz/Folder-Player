@@ -114,6 +114,22 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.21 SMB search (after 1.0.0, 2026-10-07)
+
+`SmbDiscoveryTest` (JVM: private-only probing, /24 cap, NetBIOS request and response parsing incl. truncated answers,
+merging, probe against a local socket) and `SmbDiscoveryUiTest` (API 34 emulator). The emulator's network has no SMB
+server, so **what the search finds on a real LAN or NAS was not checked**.
+
+| Check | Result |
+|---|---|
+| `SmbDiscoveryTest` | 7/7 PASS (first run) |
+| `SmbDiscoveryUiTest` a50: "Search network" in the SMB editor starts the search on the real `NsdManager` and the subnet probe, ends on its own with the "none found" text, closes, the editor and its host field are unchanged | PASS |
+| `SourceUiTest` a / b (the editor this change touches) | PASS |
+| `lintDebug testDebugUnitTest` | lint 0 errors, 61 warnings (as before); JVM 216 tests, 0 failures, 21 skipped |
+| Trial build `-PfpVersionName=1.1.0-dev1 -PfpVersionCode=1010001` (signed) | `FolderPlayerFork-1.1.0-dev1.apk`, SHA-256 `ac454234b4278b73af2b46c7a5b4e7b72fd1fec4415fcf65ad169b9bb30737f2`; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; arm64-v8a + x86_64; `zipalign -c -P 16` and `check-16k.sh` PASS. Installs over 1.0.0 (1000099) |
+
+Not checked: a real LAN, a real NAS, mDNS on a real router, other API levels, the full suite list.
+
 ### 5.20 Bookmarks (after 1.0.0, 2026-10-07)
 
 JVM: `BookmarksTest`. UI: `BookmarksUiTest` on the API 34 emulator (local fixture; methods run one per process).

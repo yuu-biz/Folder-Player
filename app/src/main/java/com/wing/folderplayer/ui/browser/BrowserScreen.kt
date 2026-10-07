@@ -104,6 +104,7 @@ fun BrowserScreen(
                 sourceToEdit = null
             },
             onTest = { cfg, pass -> viewModel.testConnection(cfg, pass) },
+            onDiscover = { viewModel.discoverSmb() },
         )
     }
 

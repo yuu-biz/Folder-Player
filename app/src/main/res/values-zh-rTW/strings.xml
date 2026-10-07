@@ -41,6 +41,11 @@
     <string name="browser_add_bookmark">加入書籤</string>
     <string name="browser_remove_bookmark">移除書籤</string>
     <string name="browser_bookmark_folder">將此資料夾加入書籤</string>
+    <string name="source_discover">搜尋網路</string>
+    <string name="source_discover_title">此網路上的 SMB 伺服器</string>
+    <string name="source_discover_searching">搜尋中…</string>
+    <string name="source_discover_none">找不到 SMB 伺服器。請確認本裝置與 NAS 在同一 Wi-Fi，或手動輸入位址。</string>
+    <string name="source_discover_no_lan">未連線到本機 Wi-Fi 或有線網路，只會搜尋主動廣播自身的伺服器。</string>
     <string name="browser_now_playing">正在播放</string>
     <string name="browser_row_details">詳細資料與操作</string>
     <string name="browser_empty">這裡沒有內容</string>
