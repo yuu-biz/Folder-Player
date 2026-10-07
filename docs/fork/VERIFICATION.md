@@ -114,6 +114,29 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.20 Bookmarks (after 1.0.0, 2026-10-07)
+
+JVM: `BookmarksTest`. UI: `BookmarksUiTest` on the API 34 emulator (local fixture; methods run one per process).
+
+| Check | Result |
+|---|---|
+| `BookmarksTest` (add / remove / toggle and order; paths normalised, one bookmark per folder; restart; own file, no credentials, no temporary file left; not a favourite; corrupt file kept aside; unreadable entries backed up before a rewrite; newer file version not overwritten) | 7/7 PASS |
+| `BookmarksUiTest` a40: bookmark a folder from its long-press sheet (a file has no such row), bookmark the open folder from ⋮, the source list shows a "Bookmarks" section above the sources, a tap opens the folder, a long press removes one; favourites unchanged. b40 (new process): the bookmark is still there, removing the last one removes the section | 2/2 PASS. First two runs FAILED in the test only: a removed row stays in the Compose test tree, unplaced (as `SourceUiTest` already handles), so "gone" is checked as "not displayed" |
+| Browser around it (API 34): `LibraryUiTest` a20 / b20 (favourites), `BrowserUiTest` a13 ×2 / a18, `SyncTagsUiTest` a21 / a24 (favourites sync against the Docker SMB / WebDAV / FTP servers), `NavigationUiTest` n01–n17, `SourceUiTest` a / b | all PASS. `SourceUiTest` first FAILED only because the app restored the folder last browsed by `BookmarksUiTest` (the test expects to start on the source list); after `pm clear` it passed |
+| `lintDebug testDebugUnitTest` | lint 0 errors, 61 warnings (as before); JVM 209 tests, 0 failures, 21 skipped |
+
+Not checked: other API levels, a real phone, a real NAS (the sync suites use the Docker fixture servers); the full instrumentation suite list was not rerun.
+
+### 5.19 Favourites shared between devices (after 1.0.0, 2026-10-07)
+
+`FavoritesCrossDeviceTest` (JVM, in-memory NAS, two repositories with different source ids and roots). JVM only: no
+emulator or device run for this change, and no real NAS.
+
+| Check | Result |
+|---|---|
+| Two devices, one `fav.json` (own source ids; roots `/` and `/Library`; an entry outside B's root; other sources; unchanged remote; entries of an earlier version; "replace remote"; WebDAV origin from base URL + root; broken remote) | before (old `sync`, helper calling it without an anchor): 6 of 8 FAIL — B listed nothing under its own source id, different roots were not translated, the entry outside the root and the shared form were missing; the 2 that passed are the invariants (unchanged remote not rewritten, broken remote not overwritten). After: 9/9 PASS |
+| Existing favourites suites | `FavoritesTest` 12/12, `FavoritesSyncConcurrencyTest` 7/7 PASS (no anchor: unchanged behaviour) |
+
 ### 5.18 Final audit before 1.0.0 (2026-10-07, base `d2563ac`)
 
 Four read-only code reviews (playback / service lifecycle; sources, credentials, security; persistence, caches, sorting;
@@ -264,16 +287,6 @@ Values and reasons (artwork cache):
 Not checked: a real phone or NAS (the "NAS" is a counting wrapper around local files and an in-memory file system);
 other API levels (the per-app language is Android 13+; Android 12 and older use unchanged code paths and were not run);
 the full suite list.
-
-### 5.12 Favourites shared between devices (after 1.0.0, 2026-10-07)
-
-`FavoritesCrossDeviceTest` (JVM, in-memory NAS, two repositories with different source ids and roots). JVM only: no
-emulator or device run for this change, and no real NAS.
-
-| Check | Result |
-|---|---|
-| Two devices, one `fav.json` (own source ids; roots `/` and `/Library`; an entry outside B's root; other sources; unchanged remote; entries of an earlier version; "replace remote"; WebDAV origin from base URL + root; broken remote) | before (old `sync`, helper calling it without an anchor): 6 of 8 FAIL — B listed nothing under its own source id, different roots were not translated, the entry outside the root and the shared form were missing; the 2 that passed are the invariants (unchanged remote not rewritten, broken remote not overwritten). After: 9/9 PASS |
-| Existing favourites suites | `FavoritesTest` 12/12, `FavoritesSyncConcurrencyTest` 7/7 PASS (no anchor: unchanged behaviour) |
 
 ### 5.11 Stability hardening toward 1.0.0 (1.0.0-dev1, 2026-10-06)
 

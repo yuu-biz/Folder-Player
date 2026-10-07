@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -47,6 +48,7 @@ import coil.compose.AsyncImage
 import com.wing.folderplayer.R
 import com.wing.folderplayer.data.artwork.ArtworkResult
 import com.wing.folderplayer.data.artwork.ImageUris
+import com.wing.folderplayer.data.favorites.Bookmark
 import com.wing.folderplayer.data.source.MediaTypes
 import com.wing.folderplayer.data.source.MusicFile
 import com.wing.folderplayer.data.source.SourceConfig
@@ -110,8 +112,10 @@ fun BrowserScreen(
         FileActionsSheet(
             file = selected,
             isFavorite = viewModel.isFavorite(selected),
+            isBookmarked = selected.isDirectory && uiState.isBookmarked(selected.ref),
             onAddToPlaylist = { showPlaylistPicker = true },
             onToggleFavorite = { viewModel.toggleFavorite(selected); viewModel.closePlaylistDialog() },
+            onToggleBookmark = if (selected.isDirectory) ({ viewModel.toggleBookmark(selected); viewModel.closePlaylistDialog() }) else null,
             onDismiss = { viewModel.closePlaylistDialog() },
         )
     }
@@ -229,6 +233,15 @@ fun BrowserScreen(
                                             modifier = Modifier.testTag("menu_refresh")
                                         )
                                     }
+                                    uiState.currentFolder?.let { folder ->
+                                        val marked = uiState.isBookmarked(folder)
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(if (marked) R.string.browser_remove_bookmark else R.string.browser_bookmark_folder)) },
+                                            leadingIcon = { Icon(if (marked) Icons.Default.BookmarkBorder else Icons.Default.Bookmark, contentDescription = null) },
+                                            onClick = { close(); viewModel.toggleCurrentFolderBookmark() },
+                                            modifier = Modifier.testTag("menu_bookmark")
+                                        )
+                                    }
                                     DropdownMenuItem(
                                         text = { Text(stringResource(R.string.browser_back_to_sources)) },
                                         leadingIcon = { Icon(Icons.Default.Home, contentDescription = null) },
@@ -289,6 +302,9 @@ fun BrowserScreen(
                             uiState.isRoot -> SourceList(
                                 sources = uiState.availableSources,
                                 favoritesCount = uiState.favorites.size,
+                                bookmarks = uiState.bookmarks.filter { b -> uiState.availableSources.any { it.id == b.sourceId } },
+                                onBookmarkClick = { viewModel.openBookmark(it) },
+                                onBookmarkRemove = { viewModel.removeBookmark(it) },
                                 onFavoritesClick = { viewModel.showFavorites() },
                                 onSourceClick = { viewModel.selectSource(it) },
                                 onEditSource = { sourceToEdit = it },
@@ -458,6 +474,9 @@ fun SourceList(
     sources: List<SourceConfig>,
     favoritesCount: Int,
     onFavoritesClick: () -> Unit,
+    bookmarks: List<Bookmark>,
+    onBookmarkClick: (Bookmark) -> Unit,
+    onBookmarkRemove: (Bookmark) -> Unit,
     onSourceClick: (SourceConfig) -> Unit,
     onEditSource: (SourceConfig) -> Unit,
     onDeleteSource: (SourceConfig) -> Unit,
@@ -476,6 +495,39 @@ fun SourceList(
                 modifier = Modifier.clickable { onFavoritesClick() }.testTag("entry_favorites")
             )
             Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+        }
+        if (bookmarks.isNotEmpty()) {
+            item(key = "bookmarks_header") {
+                Text(
+                    stringResource(R.string.browser_bookmarks),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp).semantics { heading() }.testTag("bookmarks_header")
+                )
+            }
+            items(bookmarks, key = { "bookmark:" + it.id }) { bookmark ->
+                var showMenu by remember { mutableStateOf(false) }
+                val sourceName = sources.firstOrNull { it.id == bookmark.sourceId }?.name.orEmpty()
+                Box {
+                    ListItem(
+                        headlineContent = { Text(bookmark.name.ifEmpty { SourcePath.name(bookmark.path) }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        supportingContent = { Text(sourceName + " · " + bookmark.path, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        leadingContent = { Icon(Icons.Default.Bookmark, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                        modifier = Modifier
+                            .combinedClickable(onClick = { onBookmarkClick(bookmark) }, onLongClick = { showMenu = true })
+                            .testTag("bookmark_${bookmark.name}")
+                    )
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.browser_remove_bookmark)) },
+                            leadingIcon = { Icon(Icons.Default.BookmarkBorder, contentDescription = null) },
+                            onClick = { onBookmarkRemove(bookmark); showMenu = false },
+                            modifier = Modifier.testTag("bookmark_remove")
+                        )
+                    }
+                }
+                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+            }
         }
         items(sources, key = { it.id }) { source ->
             var showMenu by remember { mutableStateOf(false) }
@@ -780,8 +832,11 @@ fun formatSize(size: Long): String {
 private fun FileActionsSheet(
     file: MusicFile,
     isFavorite: Boolean,
+    isBookmarked: Boolean,
     onAddToPlaylist: () -> Unit,
     onToggleFavorite: () -> Unit,
+    /** Folders only: null = no bookmark row. */
+    onToggleBookmark: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -809,6 +864,11 @@ private fun FileActionsSheet(
                 headlineContent = { Text(stringResource(if (isFavorite) R.string.browser_remove_favorite else R.string.browser_add_favorite)) },
                 leadingContent = { Icon(if (isFavorite) Icons.Default.FavoriteBorder else Icons.Default.Favorite, contentDescription = null) },
                 modifier = Modifier.clickable { onToggleFavorite() }.testTag("action_favorite")
+            )
+            if (onToggleBookmark != null) ListItem(
+                headlineContent = { Text(stringResource(if (isBookmarked) R.string.browser_remove_bookmark else R.string.browser_add_bookmark)) },
+                leadingContent = { Icon(if (isBookmarked) Icons.Default.BookmarkBorder else Icons.Default.Bookmark, contentDescription = null) },
+                modifier = Modifier.clickable { onToggleBookmark() }.testTag("action_bookmark")
             )
         }
     }

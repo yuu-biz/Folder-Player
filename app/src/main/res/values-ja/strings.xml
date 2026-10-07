@@ -37,6 +37,10 @@
     <string name="browser_add_to_playlist">プレイリストに追加</string>
     <string name="browser_add_favorite">お気に入りに追加</string>
     <string name="browser_remove_favorite">お気に入りから削除</string>
+    <string name="browser_bookmarks">ブックマーク</string>
+    <string name="browser_add_bookmark">ブックマークに追加</string>
+    <string name="browser_remove_bookmark">ブックマークから削除</string>
+    <string name="browser_bookmark_folder">このフォルダをブックマークに追加</string>
     <string name="browser_now_playing">再生中</string>
     <string name="browser_row_details">詳細と操作</string>
     <string name="browser_empty">ここには表示する項目がありません</string>

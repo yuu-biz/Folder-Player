@@ -7,6 +7,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.wing.folderplayer.data.artwork.ArtworkResult
 import com.wing.folderplayer.data.artwork.ThumbnailRepository
+import com.wing.folderplayer.data.favorites.Bookmark
+import com.wing.folderplayer.data.favorites.BookmarksRepository
 import com.wing.folderplayer.data.favorites.FavoriteItem
 import com.wing.folderplayer.data.favorites.FavoritesRepository
 import com.wing.folderplayer.data.favorites.SyncAnchor
@@ -72,6 +74,8 @@ data class BrowserUiState(
     val selectedFileForPlaylist: MusicFile? = null,
     val search: SearchUiState = SearchUiState(),
     val favorites: List<FavoriteItem> = emptyList(),
+    /** Bookmarked folders of this device (those whose source still exists are listed on the source list). */
+    val bookmarks: List<Bookmark> = emptyList(),
     val message: String? = null,
     /** The last folder could not be read (shown in place of the list, with Retry, until the next load). */
     val loadError: String? = null,
@@ -80,6 +84,8 @@ data class BrowserUiState(
 ) {
     val currentSource: SourceConfig? get() = currentFolder?.let { f -> availableSources.firstOrNull { it.id == f.sourceId } }
     val isRoot: Boolean get() = currentFolder == null && !showingFavorites
+
+    fun isBookmarked(ref: SourceRef): Boolean = bookmarks.any { it.sourceId == ref.sourceId && it.path == ref.path }
 }
 
 class BrowserViewModel(application: Application) : AndroidViewModel(application) {
@@ -100,6 +106,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private val thumbnails: ThumbnailRepository
     private val durations = com.wing.folderplayer.data.metadata.DurationRepository.get(application)
     val favoritesRepository: FavoritesRepository
+    val bookmarksRepository: BookmarksRepository
     private val searchRepository = SearchRepository({ ref -> SourceRegistry.fileSystem(ref).list(ref.path) })
     private var loadJob: Job? = null
     private var searchJob: Job? = null
@@ -116,6 +123,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         sourcePreferences = SourcePreferences(application)
         thumbnails = ThumbnailRepository.get(application)
         favoritesRepository = FavoritesRepository(File(application.filesDir, "favorites/fav.json"))
+        bookmarksRepository = BookmarksRepository(File(application.filesDir, "favorites/bookmarks.json"))
 
         viewModelScope.launch {
             SourceRegistry.sources.collect { list -> _uiState.value = _uiState.value.copy(availableSources = list) }
@@ -125,6 +133,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 _uiState.value = _uiState.value.copy(favorites = list)
                 if (_uiState.value.showingFavorites) showFavorites()
             }
+        }
+        viewModelScope.launch {
+            bookmarksRepository.items.collect { list -> _uiState.value = _uiState.value.copy(bookmarks = list) }
         }
         _uiState.value = _uiState.value.copy(gridDensity = sourcePreferences.getGridDensity())
 
@@ -426,6 +437,28 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun isFavorite(file: MusicFile): Boolean = favoritesRepository.isFavorite(file.ref, file.isDirectory)
 
     fun toggleFavorite(file: MusicFile) = favoritesRepository.toggle(file)
+
+    // ---------------- bookmarks ----------------
+
+    /** A source's root is listed under the source's name, any other folder under its own name. */
+    private fun bookmarkName(ref: SourceRef, fallback: String): String =
+        if (ref.path == SourcePath.ROOT) SourceRegistry.get(ref.sourceId)?.name ?: fallback else SourcePath.name(ref.path).ifEmpty { fallback }
+
+    fun toggleBookmark(file: MusicFile) {
+        if (file.isDirectory) bookmarksRepository.toggle(file.ref, bookmarkName(file.ref, file.name))
+    }
+
+    fun toggleCurrentFolderBookmark() {
+        val folder = _uiState.value.currentFolder ?: return
+        bookmarksRepository.toggle(folder, bookmarkName(folder, ""))
+    }
+
+    fun openBookmark(bookmark: Bookmark) {
+        closeSearch()
+        loadFolder(bookmark.ref)
+    }
+
+    fun removeBookmark(bookmark: Bookmark) = bookmarksRepository.remove(bookmark.ref)
 
     fun showFavorites() {
         closeSearch()

@@ -611,6 +611,7 @@ T["ja"] = {
 
 # Settings categories, browser row labels (1.0.0 UI polish).
 T["zh-rCN"].update({
+    "browser_bookmarks": "书签", "browser_add_bookmark": "加入书签", "browser_remove_bookmark": "移除书签", "browser_bookmark_folder": "将此文件夹加入书签",
     "sort_date": "修改日期", "sort_created": "创建日期",
     "browser_empty": "这里没有内容", "player_seek": "播放进度", "player_seek_state": "%1$s / %2$s",
     "common_back": "返回", "browser_now_playing": "正在播放", "browser_row_details": "详情和操作",
@@ -624,6 +625,7 @@ T["zh-rCN"].update({
     "settings_lyrics_priority": "歌词来源优先级", "settings_thumbs_summary": "已开启 %1$d / %2$d", "settings_not_set": "未设置",
 })
 T["zh-rTW"].update({
+    "browser_bookmarks": "書籤", "browser_add_bookmark": "加入書籤", "browser_remove_bookmark": "移除書籤", "browser_bookmark_folder": "將此資料夾加入書籤",
     "sort_date": "修改日期", "sort_created": "建立日期",
     "browser_empty": "這裡沒有內容", "player_seek": "播放進度", "player_seek_state": "%1$s / %2$s",
     "common_back": "返回", "browser_now_playing": "正在播放", "browser_row_details": "詳細資料與操作",
@@ -637,6 +639,7 @@ T["zh-rTW"].update({
     "settings_lyrics_priority": "歌詞來源優先順序", "settings_thumbs_summary": "已開啟 %1$d / %2$d", "settings_not_set": "未設定",
 })
 T["fr"].update({
+    "browser_bookmarks": "Signets", "browser_add_bookmark": "Ajouter aux signets", "browser_remove_bookmark": "Retirer des signets", "browser_bookmark_folder": "Ajouter ce dossier aux signets",
     "sort_date": "Modifié", "sort_created": "Créé",
     "browser_empty": "Rien à afficher ici", "player_seek": "Position de lecture", "player_seek_state": "%1$s sur %2$s",
     "common_back": "Retour", "browser_now_playing": "En lecture", "browser_row_details": "Détails et actions",
@@ -650,6 +653,7 @@ T["fr"].update({
     "settings_lyrics_priority": "Priorité des paroles", "settings_thumbs_summary": "Activées pour %1$d sur %2$d", "settings_not_set": "Non défini",
 })
 T["it"].update({
+    "browser_bookmarks": "Segnalibri", "browser_add_bookmark": "Aggiungi ai segnalibri", "browser_remove_bookmark": "Rimuovi dai segnalibri", "browser_bookmark_folder": "Aggiungi questa cartella ai segnalibri",
     "sort_date": "Modificato", "sort_created": "Creato",
     "browser_empty": "Niente da mostrare qui", "player_seek": "Posizione di riproduzione", "player_seek_state": "%1$s di %2$s",
     "common_back": "Indietro", "browser_now_playing": "In riproduzione", "browser_row_details": "Dettagli e azioni",
@@ -663,6 +667,7 @@ T["it"].update({
     "settings_lyrics_priority": "Priorità dei testi", "settings_thumbs_summary": "Attive per %1$d su %2$d", "settings_not_set": "Non impostato",
 })
 T["ja"].update({
+    "browser_bookmarks": "ブックマーク", "browser_add_bookmark": "ブックマークに追加", "browser_remove_bookmark": "ブックマークから削除", "browser_bookmark_folder": "このフォルダをブックマークに追加",
     "sort_date": "更新日", "sort_created": "作成日",
     "browser_empty": "ここには表示する項目がありません", "player_seek": "再生位置", "player_seek_state": "%2$s 中 %1$s",
     "common_back": "戻る", "browser_now_playing": "再生中", "browser_row_details": "詳細と操作",
