@@ -114,6 +114,23 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.22 Back from favourites / bookmarks, arrow-up button (1.1.1 hotfix, 2026-10-08)
+
+A folder opened from the favourites list or from a bookmark: Back (system Back and the top-bar arrow) now returns to that
+list, however deep the user went; the new arrow-up button next to the back arrow goes up one folder in every case. Browsing
+from the source list is unchanged (Back goes up level by level). Search results are unchanged (Back goes to the parent).
+API 34 emulator.
+
+| Check | Result |
+|---|---|
+| `OriginBackUiTest` a60 (favourites: into `/Music`, two folders deeper, one Back → favourites list; open the other favourite; arrow-up → parent, Back → favourites; Back → source list) and a61 (bookmark: arrow-up twice, Back → source list with the bookmark; a source opened from the list still goes up level by level; no arrow-up at the source root) | on the unchanged app (1.1.0 build, test APK only): both FAIL — a60 at "favourites again" (Back went to the parent folder), a61 at the arrow-up button (not there). After the change: both PASS |
+| Around it: `LibraryUiTest` a20 / b20, `BookmarksUiTest` a40 / b40, `NavigationUiTest` n01–n17 (n07 = Back up level by level) | all PASS except `n02` once: "still playing" after Back from the full player (playback, not navigation; not touched by this change). Run alone 3 times: 3/3 PASS. Treated as a one-off of the emulator under a long run, not explained |
+| `lintDebug testDebugUnitTest` with the fixture servers | lint 0 errors, 61 warnings (as before); JVM 222 tests, 0 failures, 1 skipped (no JVM test changed) |
+| Trial build `-PfpVersionName=1.1.1-dev1 -PfpVersionCode=1010101` (signed) | `FolderPlayerFork-1.1.1-dev1.apk` (23.5 MB), SHA-256 `43f961da6d74043bdc21182421f9a6a807226b8ae9862b3bda7689e7523d2266`; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; arm64-v8a + x86_64; `zipalign -c -P 16` and `check-16k.sh` PASS. Installs over 1.1.0 (1010099) |
+
+Not checked: a real phone, other API levels, the full suite list; the favourites list's scroll position on the way back is
+kept by the code (saved while the list is on screen) but the tests use two favourites, so it was not exercised.
+
 ### 5.21 SMB search and share list (after 1.0.0, 2026-10-07)
 
 `SmbDiscoveryTest` (JVM: private-only probing, /24 cap, NetBIOS request and response parsing incl. truncated answers,

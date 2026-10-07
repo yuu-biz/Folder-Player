@@ -175,8 +175,16 @@ fun BrowserScreen(
                         navigationIcon = {
                             // Same as system Back. The source list is the top level: nothing to go back to there.
                             if (!uiState.isRoot) {
-                                IconButton(onClick = { viewModel.navigateUp() }, modifier = Modifier.testTag("btn_browser_back")) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.browser_up))
+                                Row {
+                                    IconButton(onClick = { viewModel.navigateUp() }, modifier = Modifier.testTag("btn_browser_back")) {
+                                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.common_back))
+                                    }
+                                    // One folder up, whatever the folder was opened from (Back may lead to the favourites or bookmarks).
+                                    if (uiState.currentFolder?.parent != null) {
+                                        IconButton(onClick = { viewModel.goUp() }, modifier = Modifier.testTag("btn_browser_up")) {
+                                            Icon(Icons.Default.ArrowUpward, contentDescription = stringResource(R.string.browser_up))
+                                        }
+                                    }
                                 }
                             }
                         },
