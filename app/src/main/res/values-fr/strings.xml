@@ -37,6 +37,10 @@
     <string name="browser_add_to_playlist">Ajouter à une playlist</string>
     <string name="browser_add_favorite">Ajouter aux favoris</string>
     <string name="browser_remove_favorite">Retirer des favoris</string>
+    <string name="browser_bookmarks">Signets</string>
+    <string name="browser_add_bookmark">Ajouter aux signets</string>
+    <string name="browser_remove_bookmark">Retirer des signets</string>
+    <string name="browser_bookmark_folder">Ajouter ce dossier aux signets</string>
     <string name="browser_now_playing">En lecture</string>
     <string name="browser_row_details">Détails et actions</string>
     <string name="browser_empty">Rien à afficher ici</string>

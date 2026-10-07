@@ -37,6 +37,10 @@
     <string name="browser_add_to_playlist">添加到播放列表</string>
     <string name="browser_add_favorite">加入收藏</string>
     <string name="browser_remove_favorite">取消收藏</string>
+    <string name="browser_bookmarks">书签</string>
+    <string name="browser_add_bookmark">加入书签</string>
+    <string name="browser_remove_bookmark">移除书签</string>
+    <string name="browser_bookmark_folder">将此文件夹加入书签</string>
     <string name="browser_now_playing">正在播放</string>
     <string name="browser_row_details">详情和操作</string>
     <string name="browser_empty">这里没有内容</string>

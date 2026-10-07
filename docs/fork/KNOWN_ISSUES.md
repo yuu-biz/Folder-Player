@@ -39,6 +39,16 @@ What a user can run into, in one place. The sections below give the history of e
 - **Not checked**: TalkBack sessions, HyperOS devices, a NAS, a background network retry on a real phone with the
   screen off (a refused foreground start is caught and logged, see below).
 
+## Bookmarks (after 1.0.0)
+
+- Bookmarks are folders (a source root or a place inside it) kept on this device only: they are not part of `fav.json` and
+  are not synced, because which places are handy depends on the device. They are not removed when the source is removed;
+  they are hidden while their source does not exist.
+- A bookmark is a path, not a check: a folder that was renamed or deleted on the server opens as an unreadable folder (the
+  folder error with "Retry"); remove the bookmark from its long-press menu on the source list.
+- There is no reordering or renaming: bookmarks are listed in the order they were added, under the name the folder had
+  (the source's name for a source root).
+
 ## Favourites shared between devices (after 1.0.0)
 
 - A source id is a random UUID per installation, so favourites synced through a NAS `fav.json` were not shown on a second

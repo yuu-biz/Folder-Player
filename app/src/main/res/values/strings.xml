@@ -43,6 +43,10 @@
     <string name="browser_add_to_playlist">Add to playlist</string>
     <string name="browser_add_favorite">Add to favorites</string>
     <string name="browser_remove_favorite">Remove from favorites</string>
+    <string name="browser_bookmarks">Bookmarks</string>
+    <string name="browser_add_bookmark">Add to bookmarks</string>
+    <string name="browser_remove_bookmark">Remove from bookmarks</string>
+    <string name="browser_bookmark_folder">Bookmark this folder</string>
     <string name="browser_now_playing">Playing</string>
     <string name="browser_row_details">Details and actions</string>
     <string name="browser_empty">Nothing to show here</string>
