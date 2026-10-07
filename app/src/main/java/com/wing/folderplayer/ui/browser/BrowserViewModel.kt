@@ -109,6 +109,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     val bookmarksRepository: BookmarksRepository
     private val searchRepository = SearchRepository({ ref -> SourceRegistry.fileSystem(ref).list(ref.path) })
     private var loadJob: Job? = null
+
+    /** Where the folder on screen was opened from when that is not the folder above it (see [navigateUp]); null: by browsing. */
+    private enum class Origin { FAVORITES, SOURCE_LIST }
+    private var origin: Origin? = null
+    /** Scroll position of the favourites list, kept for the way back from a favourite. */
+    private var favoritesScroll: Pair<Int, Int> = 0 to 0
     private var searchJob: Job? = null
 
     /** Last [BrowserUiState.scrollTrigger] the list has scrolled for (kept here: same lifetime as the counter). */
@@ -214,6 +220,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     // ---------------- navigation ----------------
 
     fun selectSource(source: SourceConfig) {
+        origin = null
         closeSearch()
         loadFolder(SourceRef(source.id, SourcePath.ROOT))
     }
@@ -314,6 +321,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun saveScrollPosition(index: Int, offset: Int) {
+        if (_uiState.value.showingFavorites) { favoritesScroll = index to offset; return }
         val key = _uiState.value.currentFolder?.toUriString() ?: return
         directoryCache[key]?.let { entry ->
             directoryCache[key] = entry.copy(scrollIndex = index, scrollOffset = offset)
@@ -357,15 +365,33 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         _uiState.value = _uiState.value.copy(gridDensity = columns.coerceIn(2, 5))
     }
 
+    /**
+     * Back (system Back and the arrow of the top bar). A folder opened from the favourites list or from a bookmark leads
+     * back to that list, however deep the user went since; any other folder leads to the one above it, and the source root
+     * to the source list. Going up one folder is [goUp].
+     */
     fun navigateUp() {
         if (_uiState.value.search.active) { closeSearch(); return }
         if (_uiState.value.showingFavorites) { exitSource(); return }
         val folder = _uiState.value.currentFolder ?: return
+        when (origin) {
+            Origin.FAVORITES -> { showFavorites(restoreScroll = true); return }
+            Origin.SOURCE_LIST -> { exitSource(); return }
+            null -> Unit
+        }
         val parent = folder.parent
         if (parent == null) exitSource() else loadFolder(parent, isBackNavigation = true)
     }
 
+    /** The arrow-up button of the top bar: the folder above, wherever the folder was opened from (Back is not changed by it). */
+    fun goUp() {
+        if (_uiState.value.search.active) return
+        val parent = _uiState.value.currentFolder?.parent ?: return
+        loadFolder(parent, isBackNavigation = true)
+    }
+
     fun exitSource() {
+        origin = null
         loadJob?.cancel()
         closeSearch()
         sourcePreferences.saveLastBrowsedState(null)
@@ -379,6 +405,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         onCuePlay: (SourceRef) -> Unit
     ) {
         if (file.isDirectory) {
+            if (_uiState.value.showingFavorites) origin = Origin.FAVORITES
             closeSearch()
             loadFolder(file.ref)
             return
@@ -469,13 +496,15 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun openBookmark(bookmark: Bookmark) {
+        origin = Origin.SOURCE_LIST
         closeSearch()
         loadFolder(bookmark.ref)
     }
 
     fun removeBookmark(bookmark: Bookmark) = bookmarksRepository.remove(bookmark.ref)
 
-    fun showFavorites() {
+    fun showFavorites(restoreScroll: Boolean = false) {
+        origin = null
         closeSearch()
         loadJob?.cancel()
         val sources = SourceRegistry.sources.value.map { it.id }.toSet()
@@ -490,6 +519,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             files = entries,
             isLoading = false,
             viewMode = sourcePreferences.getDefaultViewMode(),
+            // Back from a favourite: the list is as it was left (kept by [saveScrollPosition]).
+            scrollToIndex = if (restoreScroll) favoritesScroll.first else _uiState.value.scrollToIndex,
+            scrollToOffset = if (restoreScroll) favoritesScroll.second else _uiState.value.scrollToOffset,
+            scrollTrigger = if (restoreScroll) _uiState.value.scrollTrigger + 1 else _uiState.value.scrollTrigger,
         )
     }
 

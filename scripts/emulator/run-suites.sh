@@ -17,7 +17,7 @@ pkill -f "[K]otlinCompileDaemon" 2>/dev/null || true
   PlaybackServiceTest NotificationSwitchTest RetryExportTest SourceUiTest BrowserUiTest NavigationUiTest PlayerSheetUiTest LibraryUiTest SyncTagsUiTest
   SafTest AiNfoUiTest FontUiTest LicensesUiTest CastCleanupTest NativeIoErrorTest JapaneseUiTest PlayerSkipTest
   OpenPlayerColdStartTest DurationRepositoryTest PlaylistQueueTest PlayRequestRaceTest
-  SleepTimerLifecycleTest) # SleepTimerLifecycleTest waits for a real 1-minute timer (about 2 min in total)
+  OriginBackUiTest SleepTimerLifecycleTest) # SleepTimerLifecycleTest waits for a real 1-minute timer (about 2 min in total)
 SDK=$("$HOME/android-sdk/platform-tools/adb" -s "$S" shell getprop ro.build.version.sdk | tr -d '\r')
 OUT="build/device-results/instrumentation/api$SDK-$(echo "$S" | tr ':.' '__')"
 mkdir -p "$OUT"
