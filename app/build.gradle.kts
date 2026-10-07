@@ -143,6 +143,9 @@ dependencies {
     
     // Network sources: SMB (SMBJ) and FTP/FTPS (Apache Commons Net)
     implementation(libs.smbj)
+    // Share list (srvsvc NetShareEnumAll over IPC$) for the SMB editor; BSD-3-Clause, Rapid7. Uses the SMBJ above.
+    // Guava stays the project's Android build (the JRE build it asks for would replace it).
+    implementation(libs.smbj.dcerpc) { exclude(group = "com.google.guava", module = "guava") }
     implementation(libs.commons.net)
     implementation(libs.slf4j.nop)
 

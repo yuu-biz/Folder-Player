@@ -28,6 +28,9 @@ import com.wing.folderplayer.data.source.ConnectionTestResult
 import com.wing.folderplayer.data.source.SmbDiscoveryLogic
 import com.wing.folderplayer.data.source.SmbDiscoveryState
 import com.wing.folderplayer.data.source.SmbHost
+import com.wing.folderplayer.data.source.SmbShare
+import com.wing.folderplayer.data.source.SmbShareFailure
+import com.wing.folderplayer.data.source.SmbShareResult
 import com.wing.folderplayer.data.source.SourceConfig
 import com.wing.folderplayer.data.source.SourceType
 import kotlinx.coroutines.CancellationException
@@ -63,6 +66,10 @@ fun SourceEditorDialog(
     onTest: suspend (SourceConfig, String?) -> ConnectionTestResult,
     /** SMB only: searches the local network (the user pressed "Search network"); cancelled when the picker closes. */
     onDiscover: () -> Flow<SmbDiscoveryState> = { emptyFlow() },
+    /** SMB only: the shares the server offers for what is typed in the form (nothing is saved). */
+    onListShares: suspend (SourceConfig, String?) -> SmbShareResult = { _, _ -> SmbShareResult.Failed(SmbShareFailure.ERROR) },
+    /** SMB only: the same for a server just found by the search, as a guest; shown only when it answers. */
+    onListSharesAsGuest: suspend (String, Int) -> SmbShareResult = { _, _ -> SmbShareResult.Failed(SmbShareFailure.ERROR) },
 ) {
     val editing = initial != null
     var type by remember { mutableStateOf(initial?.type ?: initialType) }
@@ -84,6 +91,8 @@ fun SourceEditorDialog(
     var testing by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<ConnectionTestResult?>(null) }
     var picking by remember { mutableStateOf(false) }
+    var loadingShares by remember { mutableStateOf(false) }
+    var shareResult by remember { mutableStateOf<SmbShareResult?>(null) }
     val scope = rememberCoroutineScope()
 
     fun build(): SourceConfig {
@@ -112,6 +121,15 @@ fun SourceEditorDialog(
 
     fun password(): String? = if (passTouched || !editing) pass else null
 
+    if (loadingShares || shareResult != null) {
+        SharesDialog(
+            loading = loadingShares,
+            result = shareResult,
+            onPick = { s -> share = s.name; testResult = null; shareResult = null },
+            onDismiss = { loadingShares = false; shareResult = null },
+        )
+    }
+
     if (picking) {
         SmbPickerDialog(
             onDiscover = onDiscover,
@@ -121,6 +139,11 @@ fun SourceEditorDialog(
                 if (name.isBlank() && h.name != null) name = h.name
                 testResult = null
                 picking = false
+                // A server that lists its shares to a guest: offer them at once (the others need the login typed first).
+                scope.launch {
+                    val r = onListSharesAsGuest(h.address, h.port)
+                    if (r is SmbShareResult.Ok && r.shares.isNotEmpty() && host == h.address && !picking && !loadingShares && shareResult == null) shareResult = r
+                }
             },
             onDismiss = { picking = false },
         )
@@ -158,6 +181,17 @@ fun SourceEditorDialog(
                         }
                         SourceField(port, { port = it }, stringResource(R.string.source_port_default, 445), "field_port", keyboard = KeyboardType.Number)
                         SourceField(share, { share = it }, stringResource(R.string.source_share), "field_share")
+                        OutlinedButton(
+                            onClick = {
+                                loadingShares = true; shareResult = null
+                                scope.launch {
+                                    val r = onListShares(build(), password())
+                                    if (loadingShares) { shareResult = r; loadingShares = false }
+                                }
+                            },
+                            enabled = host.isNotBlank() && !loadingShares,
+                            modifier = Modifier.testTag("btn_shares"),
+                        ) { Text(stringResource(R.string.source_shares)) }
                         SourceField(path, { path = it }, stringResource(R.string.source_root_path), "field_path", placeholder = "/Music")
                         SourceField(domain, { domain = it }, stringResource(R.string.source_domain), "field_domain")
                     }
@@ -286,6 +320,46 @@ private fun SmbPickerDialog(onDiscover: () -> Flow<SmbDiscoveryState>, onPick: (
                         supportingContent = { Text(if (h.port == SmbDiscoveryLogic.SMB_PORT) h.address else "${h.address}:${h.port}") },
                         modifier = Modifier.clickable { onPick(h) }.testTag("discover_${h.address}"),
                     )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_close)) } },
+    )
+}
+
+/** The shares a server offers; picking one fills the "Share" field. A failure says why, and that the name can be typed. */
+@Composable
+private fun SharesDialog(loading: Boolean, result: SmbShareResult?, onPick: (SmbShare) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.source_shares_title)) },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()).testTag("shares_list")) {
+                if (loading) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    Text(stringResource(R.string.source_shares_loading), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+                }
+                when (result) {
+                    is SmbShareResult.Ok -> {
+                        if (result.shares.isEmpty()) Text(stringResource(R.string.source_shares_none), modifier = Modifier.testTag("shares_none"))
+                        result.shares.forEach { s ->
+                            ListItem(
+                                headlineContent = { Text(s.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                supportingContent = if (s.remark.isNotBlank()) ({ Text(s.remark, maxLines = 1, overflow = TextOverflow.Ellipsis) }) else null,
+                                modifier = Modifier.clickable { onPick(s) }.testTag("share_${s.name}"),
+                            )
+                        }
+                    }
+                    is SmbShareResult.Failed -> Text(
+                        when (result.reason) {
+                            SmbShareFailure.AUTH_FAILED -> stringResource(R.string.source_shares_auth_failed)
+                            SmbShareFailure.NOT_ALLOWED -> stringResource(R.string.source_shares_not_allowed)
+                            SmbShareFailure.UNREACHABLE -> stringResource(R.string.source_test_unreachable)
+                            SmbShareFailure.ERROR -> stringResource(R.string.source_shares_error, result.detail)
+                        },
+                        modifier = Modifier.testTag("shares_failed"),
+                    )
+                    null -> Unit
                 }
             }
         },

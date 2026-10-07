@@ -56,11 +56,14 @@ Apache License 2.0:
   - Gson, Guava (with failureaccess, listenablefuture), JSR-305 annotations, Error Prone annotations — https://github.com/google
   - Coil — https://coil-kt.github.io/coil
   - SMBJ, ASN-One — Jeroen van Erp — https://github.com/hierynomus/smbj
-  - Apache Commons Net, Apache Commons IO — The Apache Software Foundation (NOTICE files below)
+  - Apache Commons Net, Apache Commons IO, Apache Commons Lang — The Apache Software Foundation (NOTICE files below)
   - Ktor — JetBrains s.r.o. — https://ktor.io
   - Typesafe Config — https://github.com/lightbend/config
   - Jansi — https://github.com/fusesource/jansi
   - JetBrains Java Annotations — https://github.com/JetBrains/java-annotations
+
+BSD 3-Clause License:
+  - smbj-rpc (com.rapid7.client:dcerpc) — Rapid7, Inc. — https://github.com/rapid7/smbj-rpc (lists the shares of an SMB server)
 
 Common Development and Distribution License 1.0 (CDDL-1.0):
   - jUPnP 3.0.5 (org.jupnp, org.jupnp.support), used unmodified. Source: https://github.com/jupnp/jupnp
@@ -91,6 +94,43 @@ Copyright 2002-2025 The Apache Software Foundation
 
 This product includes software developed at
 The Apache Software Foundation (https://www.apache.org/).
+
+NOTICE — Apache Commons Lang
+
+Apache Commons Lang
+Copyright 2001-2015 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+This product includes software from the Spring Framework,
+under the Apache License 2.0 (see: StringUtils.containsWhitespace())
+
+==============================================================================
+
+smbj-rpc (com.rapid7.client:dcerpc) — BSD 3-Clause License
+
+Copyright 2017, Rapid7, Inc.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
+following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this list of conditions and the following
+  disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided with the distribution.
+
+* Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote
+  products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ==============================================================================
 

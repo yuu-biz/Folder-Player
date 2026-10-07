@@ -46,6 +46,13 @@
     <string name="source_discover_searching">Ricerca in corso…</string>
     <string name="source_discover_none">Nessun server SMB trovato. Controlla che il dispositivo sia sulla stessa rete Wi-Fi del NAS, oppure inserisci l\'indirizzo a mano.</string>
     <string name="source_discover_no_lan">Nessuna rete Wi-Fi o Ethernet locale: vengono cercati solo i server che si annunciano.</string>
+    <string name="source_shares">Ottieni condivisioni</string>
+    <string name="source_shares_title">Condivisioni di questo server</string>
+    <string name="source_shares_loading">Interrogazione del server…</string>
+    <string name="source_shares_none">Questo server non offre condivisioni per questo accesso.</string>
+    <string name="source_shares_auth_failed">Accesso non riuscito. Controlla nome utente e password (o l\'opzione ospite) e riprova.</string>
+    <string name="source_shares_not_allowed">Questo server non elenca le condivisioni per questo accesso. Inserisci il nome della condivisione a mano.</string>
+    <string name="source_shares_error">Impossibile ottenere l\'elenco delle condivisioni: %1$s</string>
     <string name="browser_now_playing">In riproduzione</string>
     <string name="browser_row_details">Dettagli e azioni</string>
     <string name="browser_empty">Niente da mostrare qui</string>

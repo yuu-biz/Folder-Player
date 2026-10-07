@@ -46,6 +46,13 @@
     <string name="source_discover_searching">搜尋中…</string>
     <string name="source_discover_none">找不到 SMB 伺服器。請確認本裝置與 NAS 在同一 Wi-Fi，或手動輸入位址。</string>
     <string name="source_discover_no_lan">未連線到本機 Wi-Fi 或有線網路，只會搜尋主動廣播自身的伺服器。</string>
+    <string name="source_shares">取得共用</string>
+    <string name="source_shares_title">此伺服器上的共用</string>
+    <string name="source_shares_loading">正在詢問伺服器…</string>
+    <string name="source_shares_none">此伺服器沒有向該登入提供任何共用。</string>
+    <string name="source_shares_auth_failed">登入失敗。請檢查使用者名稱和密碼（或訪客選項）後重試。</string>
+    <string name="source_shares_not_allowed">此伺服器不向該登入列出共用。請手動輸入共用名稱。</string>
+    <string name="source_shares_error">無法取得共用清單：%1$s</string>
     <string name="browser_now_playing">正在播放</string>
     <string name="browser_row_details">詳細資料與操作</string>
     <string name="browser_empty">這裡沒有內容</string>

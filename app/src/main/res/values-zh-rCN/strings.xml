@@ -46,6 +46,13 @@
     <string name="source_discover_searching">正在搜索…</string>
     <string name="source_discover_none">未找到 SMB 服务器。请确认本设备与 NAS 在同一 Wi-Fi 下，或手动输入地址。</string>
     <string name="source_discover_no_lan">未连接到本地 Wi-Fi 或有线网络，仅搜索会主动广播自身的服务器。</string>
+    <string name="source_shares">获取共享</string>
+    <string name="source_shares_title">此服务器上的共享</string>
+    <string name="source_shares_loading">正在询问服务器…</string>
+    <string name="source_shares_none">此服务器没有向该登录提供任何共享。</string>
+    <string name="source_shares_auth_failed">登录失败。请检查用户名和密码（或访客选项）后重试。</string>
+    <string name="source_shares_not_allowed">此服务器不向该登录列出共享。请手动输入共享名。</string>
+    <string name="source_shares_error">无法获取共享列表：%1$s</string>
     <string name="browser_now_playing">正在播放</string>
     <string name="browser_row_details">详情和操作</string>
     <string name="browser_empty">这里没有内容</string>

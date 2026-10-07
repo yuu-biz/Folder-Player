@@ -19,6 +19,8 @@ All versions are fixed in `gradle/libs.versions.toml` / `app/build.gradle.kts` (
 | Artifact | Version | Why this version | License | Verified by |
 |---|---|---|---|---|
 | `com.hierynomus:smbj` | 0.15.0 | current release, SMB2/3, works on API 26 with desugaring | Apache-2.0 | SmbProtocolTest (SMB 3.1.1), NetworkPlaybackTest, PlaybackServiceTest |
+| `com.rapid7.client:dcerpc` (smbj-rpc) | 0.12.13 | share list of an SMB server (srvsvc NetShareEnumAll over `IPC$`) for the SMB editor; built against SMBJ 0.12, runs with 0.15.0 (checked against the Samba fixture); its Guava (JRE build) is excluded so the project's Guava 33.0.0-android stays | BSD-3-Clause | SmbShareListTest, SmbDiscoveryUiTest |
+| `org.apache.commons:commons-lang3` (transitive of dcerpc) | 3.4 | resolved by dcerpc | Apache-2.0 | SmbShareListTest |
 | `org.bouncycastle:bcprov-jdk18on` (transitive of SMBJ) | 1.85.2 | resolved by SMBJ; used through SMBJ's `BCSecurityProvider` (MD4/AES-CMAC on Android) | Bouncy Castle (MIT-style) | SMB auth/signing in the tests above |
 | `commons-net:commons-net` | 3.13.0 | current release; explicit FTPS (`FTPSClient`) | Apache-2.0 | FtpProtocolTest (normal/no-REST/truncating/FTPS) |
 | `org.jupnp:org.jupnp` + `org.jupnp.support` | 3.0.5 | jUPnP 3.x core; the Android/Jetty transport module is **not** used — the Fork supplies an OkHttp stream client and a no-op stream server (control point only) | CDDL-1.0 | DlnaRendererIntegrationTest (gmrender-resurrect) |

@@ -46,6 +46,13 @@
     <string name="source_discover_searching">Recherche…</string>
     <string name="source_discover_none">Aucun serveur SMB trouvé. Vérifiez que cet appareil est sur le même Wi-Fi que le NAS, ou saisissez l\'adresse à la main.</string>
     <string name="source_discover_no_lan">Pas de réseau Wi-Fi ou Ethernet local : seuls les serveurs qui s\'annoncent sont recherchés.</string>
+    <string name="source_shares">Obtenir les partages</string>
+    <string name="source_shares_title">Partages de ce serveur</string>
+    <string name="source_shares_loading">Interrogation du serveur…</string>
+    <string name="source_shares_none">Ce serveur ne propose aucun partage pour cette connexion.</string>
+    <string name="source_shares_auth_failed">Échec de la connexion. Vérifiez le nom d\'utilisateur et le mot de passe (ou l\'option invité), puis réessayez.</string>
+    <string name="source_shares_not_allowed">Ce serveur ne liste pas ses partages pour cette connexion. Saisissez le nom du partage à la main.</string>
+    <string name="source_shares_error">Impossible d\'obtenir la liste des partages : %1$s</string>
     <string name="browser_now_playing">En lecture</string>
     <string name="browser_row_details">Détails et actions</string>
     <string name="browser_empty">Rien à afficher ici</string>

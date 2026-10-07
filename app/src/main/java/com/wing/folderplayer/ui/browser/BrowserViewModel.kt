@@ -166,6 +166,17 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun moveSourceUp(sourceId: String) = SourceRegistry.move(sourceId, -1)
     fun moveSourceDown(sourceId: String) = SourceRegistry.move(sourceId, +1)
 
+    /** Shares an SMB server offers for the form of the editor ([password] null: the one stored for this source, if any). */
+    suspend fun listSmbShares(config: SourceConfig, password: String?): com.wing.folderplayer.data.source.SmbShareResult = withContext(Dispatchers.IO) {
+        val pass = password ?: SourceRegistry.get(config.id)?.let { SourceRegistry.credentials.get(it.effectiveCredentialRef) }
+        runInterruptible { com.wing.folderplayer.data.source.SmbShareLister.list(config.host, config.effectivePort, config.username, pass, config.domain, config.anonymous) }
+    }
+
+    /** The same as a guest, for a server just found by the search. */
+    suspend fun listSmbSharesAsGuest(host: String, port: Int): com.wing.folderplayer.data.source.SmbShareResult = withContext(Dispatchers.IO) {
+        runInterruptible { com.wing.folderplayer.data.source.SmbShareLister.listAsGuest(host, port) }
+    }
+
     /** Searches the local network for SMB servers (cancel the collector to stop). */
     fun discoverSmb(): kotlinx.coroutines.flow.Flow<com.wing.folderplayer.data.source.SmbDiscoveryState> =
         com.wing.folderplayer.data.source.SmbDiscovery(getApplication()).discover()

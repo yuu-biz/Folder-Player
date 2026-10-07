@@ -15,6 +15,7 @@ okhttp = "4.12.0"
 navigationCompose = "2.7.7"
 datastore = "1.0.0"
 smbj = "0.15.0"
+dcerpc = "0.12.13"
 commonsNet = "3.13.0"
 jupnp = "3.0.5"
 ktor = "2.3.13"
@@ -73,6 +74,7 @@ sardine-android = { group = "com.github.thegrizzlylabs", name = "sardine-android
 
 # Network sources (SMB, FTP/FTPS)
 smbj = { group = "com.hierynomus", name = "smbj", version.ref = "smbj" }
+smbj-dcerpc = { group = "com.rapid7.client", name = "dcerpc", version.ref = "dcerpc" }
 commons-net = { group = "commons-net", name = "commons-net", version.ref = "commonsNet" }
 slf4j-nop = { group = "org.slf4j", name = "slf4j-nop", version.ref = "slf4j" }
 

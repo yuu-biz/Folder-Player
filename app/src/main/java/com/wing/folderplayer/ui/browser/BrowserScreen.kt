@@ -105,6 +105,8 @@ fun BrowserScreen(
             },
             onTest = { cfg, pass -> viewModel.testConnection(cfg, pass) },
             onDiscover = { viewModel.discoverSmb() },
+            onListShares = { cfg, pass -> viewModel.listSmbShares(cfg, pass) },
+            onListSharesAsGuest = { host, port -> viewModel.listSmbSharesAsGuest(host, port) },
         )
     }
 

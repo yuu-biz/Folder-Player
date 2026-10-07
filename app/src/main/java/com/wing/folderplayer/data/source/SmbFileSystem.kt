@@ -25,6 +25,25 @@ import java.net.UnknownHostException
 import java.util.EnumSet
 import java.util.concurrent.TimeUnit
 
+/** SMB client settings; guest / anonymous sessions have no session key, which SMB 3.x signing and encryption need, so they use SMB 2.x. */
+internal fun smbClientConfig(anonymous: Boolean, timeoutSeconds: Long = 30, soTimeoutSeconds: Long = 45): SmbConfig = SmbConfig.builder()
+    .withDialects(
+        *if (anonymous) arrayOf(SMB2Dialect.SMB_2_1, SMB2Dialect.SMB_2_0_2)
+        else arrayOf(SMB2Dialect.SMB_3_1_1, SMB2Dialect.SMB_3_0_2, SMB2Dialect.SMB_3_0, SMB2Dialect.SMB_2_1, SMB2Dialect.SMB_2_0_2)
+    )
+    .withSecurityProvider(BCSecurityProvider())
+    .withTimeout(timeoutSeconds, TimeUnit.SECONDS)
+    .withSoTimeout(soTimeoutSeconds, TimeUnit.SECONDS)
+    .withReadBufferSize(1 shl 20)
+    .withSigningEnabled(!anonymous)
+    .build()
+
+internal fun smbAuthentication(username: String, password: String?, domain: String, anonymous: Boolean): AuthenticationContext = when {
+    anonymous && username.isBlank() -> AuthenticationContext.anonymous()
+    anonymous -> AuthenticationContext.guest()
+    else -> AuthenticationContext(username, (password ?: "").toCharArray(), domain.ifBlank { null })
+}
+
 /**
  * One SMB2/3 connection + session + share per source, reused across requests and torn down after [idleMillis]
  * without use or when the source's connection settings change. SMB1 is not offered (SMBJ does not implement it).
@@ -45,18 +64,7 @@ class SmbConnectionManager(
     fun handleOpened() { openHandles.incrementAndGet() }
     fun handleClosed() { openHandles.decrementAndGet() }
 
-    private fun smbConfig(): SmbConfig = SmbConfig.builder()
-        .withDialects(
-            // Guest/anonymous sessions have no session key, which SMB 3.x signing/encryption key derivation needs.
-            *if (config.anonymous) arrayOf(SMB2Dialect.SMB_2_1, SMB2Dialect.SMB_2_0_2)
-            else arrayOf(SMB2Dialect.SMB_3_1_1, SMB2Dialect.SMB_3_0_2, SMB2Dialect.SMB_3_0, SMB2Dialect.SMB_2_1, SMB2Dialect.SMB_2_0_2)
-        )
-        .withSecurityProvider(BCSecurityProvider())
-        .withTimeout(30, TimeUnit.SECONDS)
-        .withSoTimeout(45, TimeUnit.SECONDS)
-        .withReadBufferSize(1 shl 20)
-        .withSigningEnabled(!config.anonymous)
-        .build()
+    private fun smbConfig(): SmbConfig = smbClientConfig(config.anonymous)
 
     @Synchronized
     fun share(): DiskShare {
@@ -74,11 +82,7 @@ class SmbConnectionManager(
             client = c
             val conn = c.connect(config.host, config.effectivePort)
             connection = conn
-            val auth = when {
-                config.anonymous && config.username.isBlank() -> AuthenticationContext.anonymous()
-                config.anonymous -> AuthenticationContext.guest()
-                else -> AuthenticationContext(config.username, (password ?: "").toCharArray(), config.domain.ifBlank { null })
-            }
+            val auth = smbAuthentication(config.username, password, config.domain, config.anonymous)
             val s = conn.authenticate(auth)
             session = s
             val sh = s.connectShare(config.share) as? DiskShare ?: throw SourceException.ShareNotFound("${config.share} is not a disk share")

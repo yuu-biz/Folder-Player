@@ -36,11 +36,14 @@ COMPONENTS = {
         "Gson, Guava (with failureaccess, listenablefuture), JSR-305 annotations, Error Prone annotations — https://github.com/google",
         "Coil — https://coil-kt.github.io/coil",
         "SMBJ, ASN-One — Jeroen van Erp — https://github.com/hierynomus/smbj",
-        "Apache Commons Net, Apache Commons IO — The Apache Software Foundation (NOTICE files below)",
+        "Apache Commons Net, Apache Commons IO, Apache Commons Lang — The Apache Software Foundation (NOTICE files below)",
         "Ktor — JetBrains s.r.o. — https://ktor.io",
         "Typesafe Config — https://github.com/lightbend/config",
         "Jansi — https://github.com/fusesource/jansi",
         "JetBrains Java Annotations — https://github.com/JetBrains/java-annotations",
+    ],
+    "BSD 3-Clause License": [
+        "smbj-rpc (com.rapid7.client:dcerpc) — Rapid7, Inc. — https://github.com/rapid7/smbj-rpc (lists the shares of an SMB server)",
     ],
     "Common Development and Distribution License 1.0 (CDDL-1.0)": [
         "jUPnP 3.0.5 (org.jupnp, org.jupnp.support), used unmodified. Source: https://github.com/jupnp/jupnp",
@@ -72,6 +75,8 @@ COVERAGE = [
     (r"com\.hierynomus:(smbj|asn-one)", "SMBJ, ASN-One"),
     (r"commons-net:commons-net", "Apache Commons Net"),
     (r"commons-io:commons-io", "Apache Commons IO"),
+    (r"org\.apache\.commons:commons-lang3", "Apache Commons Lang"),
+    (r"com\.rapid7\.client:dcerpc", "smbj-rpc"),
     (r"io\.ktor:.*", "Ktor"),
     (r"com\.typesafe:config", "Typesafe Config"),
     (r"org\.fusesource\.jansi:jansi", "Jansi"),
@@ -133,7 +138,9 @@ from the upstream repository, where their SIL Open Font License texts are publis
         lines += ["  - " + i for i in items]
     parts.append("\n".join(lines))
     parts.append("NOTICE — Apache Commons Net\n\n" + text("NOTICE-commons-net-3.13.0.txt")
-                 + "\n\nNOTICE — Apache Commons IO\n\n" + text("NOTICE-commons-io-2.21.0.txt"))
+                 + "\n\nNOTICE — Apache Commons IO\n\n" + text("NOTICE-commons-io-2.21.0.txt")
+                 + "\n\nNOTICE — Apache Commons Lang\n\n" + text("NOTICE-commons-lang3-3.4.txt"))
+    parts.append(text("BSD-3-rapid7.txt"))
     parts.append("SLF4J\n\n" + text("MIT-slf4j.txt"))
     parts.append("MBassador\n\n" + text("MIT-mbassador.txt"))
     parts.append(text("MIT-checker-qual.txt"))
