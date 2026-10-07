@@ -90,3 +90,6 @@ changing dependencies) and shown in the app under Settings → Open source licen
 is written by hand; `--check` compares it with `:app:dependencies --configuration releaseRuntimeClasspath` (plus
 `coreLibraryDesugaring`) and fails on any library without a notice. See also
 [DEPENDENCIES.md](DEPENDENCIES.md).
+
+1.1.0 the same way: dev builds `1.1.0-dev1`, `1.1.0-dev2` use 1010001, 1010002; the final `v1.1.0` is versionName `1.1.0`,
+versionCode `1010099`, which installs over 1.0.0 and over both dev builds.

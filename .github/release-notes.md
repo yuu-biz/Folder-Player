@@ -1,6 +1,15 @@
 Folder Player Fork {VERSION} — an unofficial personal fork of
 [Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000. It is not affiliated with the original
-project. This release follows 0.6.0.
+project. This release follows 1.0.0.
+
+## What's new in 1.1.0
+
+- **Find your NAS**: in the SMB editor, "Search network" lists SMB servers on the local network (servers that announce
+  themselves and hosts answering on port 445) and fills in the address; "Get shares" lists the shares of the server for
+  the login you typed, so the host and the share no longer have to be typed by hand. Only when you press the buttons.
+- **Favourites on several devices**: devices that point at the same `fav.json` on a NAS now show the same favourites, however
+  each one reaches the NAS (name, address, different root folder).
+- **Bookmarks**: shortcuts to the folders you open often, kept on the device, listed above the sources.
 
 ## Install
 
@@ -21,8 +30,7 @@ project. This release follows 0.6.0.
 - **Large screens and foldables**: on a tablet, an unfolded foldable or a wide window the browser and the player sit
   side by side, and Settings has two panes. The layout follows the window, so folding, rotating or resizing keeps
   playback and your place in the browser.
-- **Search, favourites and playlists**: search below the current folder, favourites (optional `fav.json` sync),
-  playlists with drag reordering, track lengths in the list.
+- **Search, favourites and playlists**: search below the current folder, favourites (optional `fav.json` that several devices can share), bookmarks for folders, playlists with drag reordering, track lengths in the list.
 - **Cover artwork**: folder image first, then the embedded picture, in the player, notification and lock screen for
   every source; grid or list with thumbnails (thumbnails of network sources are opt-in and Wi-Fi only).
 - **Sorting**: by name, modified time, created time or size, remembered per folder. "Created" is the time a local file
@@ -50,7 +58,12 @@ Details: [docs/fork/FEATURES.md]({REPO}/blob/{VERSION_TAG}/docs/fork/FEATURES.md
 - The "songs" sleep timer ends with the queue; use the minutes timer together with "next folder".
 - "Created" is not a true file birth time (Android does not give apps one); see Sorting above.
 - Android 8.0 cannot decode FLAC (no platform decoder); DSF / DFF cannot be cast.
-- Tested on emulators (Android 8.0 to 16) and on one phone; not with a NAS, a screen reader or HyperOS devices.
+- SMB search and the share list were tested with logic tests and a Samba server in Docker, not on a real LAN or NAS. Many NAS
+  boxes and Windows PCs do not list their shares to a guest: log in first, or type the share name. The address that was found
+  is what is saved: if the router gives the NAS a new address, search again.
+- Favourites are shared through the source that holds `fav.json`; favourites on other sources stay on their device.
+  Entries that version 1.0.0 wrote on another device stay hidden until that device has synced once with this version.
+- Tested on emulators (Android 8.0 to 16) and on one phone; not with a real NAS, a screen reader or HyperOS devices.
 
 Full list: [docs/fork/KNOWN_ISSUES.md]({REPO}/blob/{VERSION_TAG}/docs/fork/KNOWN_ISSUES.md).
 
@@ -60,7 +73,7 @@ Full list: [docs/fork/KNOWN_ISSUES.md]({REPO}/blob/{VERSION_TAG}/docs/fork/KNOWN
 - The app contains FFmpeg 7.1.5 (LGPL-2.1-or-later), built unmodified from the official source tarball, which is
   attached to this release (`ffmpeg-7.1.5.tar.xz`). The complete source of this version, including the scripts to
   rebuild FFmpeg and relink the app, is the source archive of this release.
-- Other libraries are under the Apache 2.0, MIT, CDDL 1.0 and GPL-2.0-with-Classpath-Exception licenses. The full
+- Other libraries are under the Apache 2.0, BSD 3-Clause, MIT, CDDL 1.0 and GPL-2.0-with-Classpath-Exception licenses. The full
   notices are in the app under Settings → Open source licenses and in
   [docs/fork/DEPENDENCIES.md]({REPO}/blob/{VERSION_TAG}/docs/fork/DEPENDENCIES.md).
 
