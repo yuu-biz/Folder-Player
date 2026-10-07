@@ -1,15 +1,21 @@
 Folder Player Fork {VERSION} — an unofficial personal fork of
 [Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000. It is not affiliated with the original
-project. This release follows 1.0.0.
+project. This release follows 1.1.0.
 
-## What's new in 1.1.0
+## What's new in 1.2.0
 
-- **Find your NAS**: in the SMB editor, "Search network" lists SMB servers on the local network (servers that announce
-  themselves and hosts answering on port 445) and fills in the address; "Get shares" lists the shares of the server for
-  the login you typed, so the host and the share no longer have to be typed by hand. Only when you press the buttons.
-- **Favourites on several devices**: devices that point at the same `fav.json` on a NAS now show the same favourites, however
-  each one reaches the NAS (name, address, different root folder).
-- **Bookmarks**: shortcuts to the folders you open often, kept on the device, listed above the sources.
+- **Images that a NAS is not asked for again**: folder thumbnails are kept at 128 / 256 px and the picture of what is playing
+  as one file of up to 2048 px, shared by the mini, full and wide player and the notification. A file is kept until the
+  image itself changes. One size limit (128 MB, 256 MB, 512 MB by default, 1 GB or 2 GB) is shared by both, under
+  Settings → Library & network → Image cache and network use, where the usage and "Clear" are too.
+- **Network use at a glance**: the same page shows a rough account of what the app read from network sources since it was
+  started (images, audio and metadata, other; per source; folder lists; image cache hits and misses), with a reset.
+- **Back is the previous place**: from a folder opened from the favourites list or a bookmark (and the folders you enter after
+  it), Back goes back step by step: the folder, then the list. A new arrow-up button next to the back arrow goes up one
+  folder; Back after it returns to where you were.
+
+Since 1.0.0 (1.1.0): "Search network" and "Get shares" in the SMB editor, the same favourites on several devices through one
+`fav.json` on a NAS, and bookmarks for the folders you open often.
 
 ## Install
 
@@ -51,7 +57,12 @@ Details: [docs/fork/FEATURES.md]({REPO}/blob/{VERSION_TAG}/docs/fork/FEATURES.md
 
 - Folds and hinges are not taken into account: on a foldable the browser pane is a fixed share of the width, wherever
   the hinge is. Wide layouts were tested by resizing windows on emulators, not on a real foldable or tablet.
-- Opening a folder from search results or favourites leaves that list (Back goes to the folder's parent).
+- Opening a folder from search results leaves the results: Back goes to the folder the search was run in (the results are
+  not restored).
+- Images are made from the NAS once; the first view of a folder still reads each cover once, and again once per folder after a
+  source's address or other connection setting is edited. Android may clear the cache when storage runs low (the images are
+  then made again). The network account is an estimate, not the bytes on the wire. The cache and the account were tested with
+  a Samba server in Docker, not with a real NAS, and the saving on a large real library was not measured.
 - Settings shows no mini player.
 - DLNA casting sends the current track only (nothing advances to the next one) and was tested with a software
   renderer, not a real TV or speaker.
