@@ -6,8 +6,9 @@ What a user can run into, in one place. The sections below give the history of e
 
 - **Foldables / hinge**: no fold or hinge information is used; the layout follows the window size. Not checked on a real
   foldable or tablet (window resizing on emulators only).
-- **Navigation**: opening a folder from search results leaves the results (Back goes to the folder's parent; the arrow-up button
-  goes up one folder as well). A folder opened from favourites or a bookmark leads back to that list;
+- **Navigation**: Back is the previous place (the folder, favourites list or source list the user came from, step by step); the
+  arrow-up button goes up one folder and Back after it returns to where the user was. A folder opened from search results
+  leads back to the folder the search was run in, not to the results;
   Settings shows no mini player.
 - **Sorting "Created"**: Android gives apps no file birth time. Local files: the time added to the media library;
   SMB: the share's creation time; WebDAV, FTP, SAF folders: the modification time. Files with equal times are ordered by

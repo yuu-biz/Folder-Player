@@ -114,22 +114,26 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
-### 5.22 Back from favourites / bookmarks, arrow-up button (1.1.1 hotfix, 2026-10-08)
+### 5.22 Back is the previous place; arrow-up button (1.1.1 hotfix, 2026-10-08)
 
-A folder opened from the favourites list or from a bookmark: Back (system Back and the top-bar arrow) now returns to that
-list, however deep the user went; the new arrow-up button next to the back arrow goes up one folder in every case. Browsing
-from the source list is unchanged (Back goes up level by level). Search results are unchanged (Back goes to the parent).
-API 34 emulator.
+Back (system Back and the top-bar arrow) leads to the previous place, as in a browser: the folder, the favourites list or the
+source list the user came from, step by step (favourites → folder A → folder B: Back → A → favourites list → source list; a
+bookmark likewise). The arrow-up button next to the back arrow goes up one folder; it is a step of its own, so Back after it
+returns to where the user was. Browsing from the source list goes back level by level as before. A folder opened from search
+results leads back to the folder the search was run in (it used to lead to the parent). API 34 emulator.
+
+The first version of this hotfix (trial build `1.1.1-dev1`) went from any depth straight back to the list; that was not what was
+meant (Back from B must lead to A first) and is replaced by the history described above.
 
 | Check | Result |
 |---|---|
-| `OriginBackUiTest` a60 (favourites: into `/Music`, two folders deeper, one Back → favourites list; open the other favourite; arrow-up → parent, Back → favourites; Back → source list) and a61 (bookmark: arrow-up twice, Back → source list with the bookmark; a source opened from the list still goes up level by level; no arrow-up at the source root) | on the unchanged app (1.1.0 build, test APK only): both FAIL — a60 at "favourites again" (Back went to the parent folder), a61 at the arrow-up button (not there). After the change: both PASS |
-| Around it: `LibraryUiTest` a20 / b20, `BookmarksUiTest` a40 / b40, `NavigationUiTest` n01–n17 (n07 = Back up level by level) | all PASS except `n02` once: "still playing" after Back from the full player (playback, not navigation; not touched by this change). Run alone 3 times: 3/3 PASS. Treated as a one-off of the emulator under a long run, not explained |
+| `OriginBackUiTest` a60 (favourites: `/Music` → fixture → Album-A, Back ×3 returns fixture, `/Music`, the favourites list; the other favourite, arrow-up, Back → that favourite, Back → list, Back → source list) and a61 (a bookmarked folder and a folder below it: Back → the bookmarked folder → source list; arrow-up twice then Back ×3; a source opened from the list goes back level by level; no arrow-up at the source root) | on the previous build (`1.1.1-dev1`, test APK only): both FAIL at the first Back ("back to fixture" / "back to the bookmarked folder": it went straight to the list). After the change: both PASS |
+| Around it: `LibraryUiTest` a20 / b20, `BookmarksUiTest` a40 / b40, `NavigationUiTest` n01–n17 (n07 = Back level by level; n03 = search and favourites) | 23/23 PASS in this run. (With the first version `n02` failed once on "still playing" after Back from the full player and passed 3/3 alone and in this run; not explained, treated as a one-off.) |
 | `lintDebug testDebugUnitTest` with the fixture servers | lint 0 errors, 61 warnings (as before); JVM 222 tests, 0 failures, 1 skipped (no JVM test changed) |
-| Trial build `-PfpVersionName=1.1.1-dev1 -PfpVersionCode=1010101` (signed) | `FolderPlayerFork-1.1.1-dev1.apk` (23.5 MB), SHA-256 `43f961da6d74043bdc21182421f9a6a807226b8ae9862b3bda7689e7523d2266`; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; arm64-v8a + x86_64; `zipalign -c -P 16` and `check-16k.sh` PASS. Installs over 1.1.0 (1010099) |
+| Trial build `-PfpVersionName=1.1.1-dev2 -PfpVersionCode=1010102` (signed) | `FolderPlayerFork-1.1.1-dev2.apk` (23.5 MB), SHA-256 `29eedab6273c8fab4510879b4325035a2d971f5637d26627ee77b678132b5502`; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; arm64-v8a + x86_64; `zipalign -c -P 16` and `check-16k.sh` PASS. Installs over 1.1.0 (1010099) and 1.1.1-dev1 |
 
-Not checked: a real phone, other API levels, the full suite list; the favourites list's scroll position on the way back is
-kept by the code (saved while the list is on screen) but the tests use two favourites, so it was not exercised.
+Not checked: a real phone, other API levels, the full suite list. The favourites list keeps its scroll position on the way back
+(saved while the list is on screen), but the tests use two favourites, so this was not exercised.
 
 ### 5.21 SMB search and share list (after 1.0.0, 2026-10-07)
 

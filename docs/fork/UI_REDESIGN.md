@@ -62,10 +62,12 @@ MainActivity                     ViewModels (activity scope), controller connect
 3. Full player (also while a finger holds it part-way) → folded into the mini player (browser underneath). Once it
    is folding, the next Back goes to the browser.
 4. Settings → browser.
-5. Browser: search → closed (back to the list it was opened from); favourites → source list;
-   folder → parent folder; source root → source list. A folder opened from the favourites list or a bookmark → back to that
-   list (the favourites list as it was left, the source list for a bookmark), however deep the user went; the arrow-up
-   button next to the back arrow goes up one folder in every case and leaves that way back unchanged.
+5. Browser: search → closed (back to the list it was opened from). Otherwise Back is the previous place, as in a browser:
+   the folder, the favourites list (as it was left) or the source list the user came from, step by step (favourites →
+   folder A → folder B: Back → A → favourites list → source list; bookmark likewise). Browsing from the source list goes back
+   level by level, as before, and the source root leads to the source list. The arrow-up button next to the back arrow goes up
+   one folder; it is a step of its own, so Back after it returns to the folder the user was in. A search result opened leads
+   back to the folder the search was run in. Without history (the app opened on the folder it was last in): the folder above.
 6. Source list: Back is not handled by the app (Android default: leave the app); playback continues.
 
 The on-screen arrow in the browser's top bar does the same as Back (the former "back to sources" jump moved into ⋮,
@@ -167,8 +169,8 @@ Implemented: everything above. Settings slides in from the side.
 
 Known limits:
 - Settings has no mini player.
-- Opening a folder from search results leaves the results: Back then goes to the folder's parent, not back to the results
-  (use the arrow-up button or Back as before). Favourites and bookmarks do lead back to their list.
+- Opening a folder from search results leaves the results: Back goes to the folder the search was run in (the results
+  are not restored).
 - The pages under the open full player stay composed; they are only skipped when drawing.
 - While the player moves, a touch anywhere on screen (also above the panel) is taken by the player; the move takes
   about 0.3 s.
