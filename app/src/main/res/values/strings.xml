@@ -52,6 +52,13 @@
     <string name="source_discover_searching">Searching…</string>
     <string name="source_discover_none">No SMB server found. Check that this device is on the same Wi-Fi as the NAS, or enter the address by hand.</string>
     <string name="source_discover_no_lan">Not connected to a local Wi-Fi or Ethernet network: only servers that announce themselves are searched.</string>
+    <string name="source_shares">Get shares</string>
+    <string name="source_shares_title">Shares on this server</string>
+    <string name="source_shares_loading">Asking the server…</string>
+    <string name="source_shares_none">This server offers no shares to this login.</string>
+    <string name="source_shares_auth_failed">Sign-in failed. Check the user name and password (or the guest option) and try again.</string>
+    <string name="source_shares_not_allowed">This server does not list its shares for this login. Type the share name by hand.</string>
+    <string name="source_shares_error">Could not get the share list: %1$s</string>
     <string name="browser_now_playing">Playing</string>
     <string name="browser_row_details">Details and actions</string>
     <string name="browser_empty">Nothing to show here</string>

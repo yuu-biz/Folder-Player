@@ -46,6 +46,13 @@
     <string name="source_discover_searching">検索中…</string>
     <string name="source_discover_none">SMBサーバーが見つかりません。NASと同じWi-Fiに接続しているか確認するか、アドレスを手入力してください。</string>
     <string name="source_discover_no_lan">ローカルのWi-Fi／有線LANに接続していません。自分から名乗るサーバーのみ検索します。</string>
+    <string name="source_shares">共有を取得</string>
+    <string name="source_shares_title">このサーバーの共有</string>
+    <string name="source_shares_loading">サーバーに問い合わせています…</string>
+    <string name="source_shares_none">このログインで見えるサーバーの共有はありません。</string>
+    <string name="source_shares_auth_failed">ログインに失敗しました。ユーザー名とパスワード（またはゲストの設定）を確認して、もう一度お試しください。</string>
+    <string name="source_shares_not_allowed">このサーバーは、このログインに共有一覧を返しません。共有名は手入力してください。</string>
+    <string name="source_shares_error">共有の一覧を取得できませんでした：%1$s</string>
     <string name="browser_now_playing">再生中</string>
     <string name="browser_row_details">詳細と操作</string>
     <string name="browser_empty">ここには表示する項目がありません</string>

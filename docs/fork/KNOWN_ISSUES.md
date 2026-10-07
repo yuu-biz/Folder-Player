@@ -45,12 +45,18 @@ What a user can run into, in one place. The sections below give the history of e
   announce themselves through mDNS (NAS boxes, Macs, Samba with Avahi) and hosts that answer on TCP 445 in the /24 around
   the device's Wi-Fi / Ethernet address. Only private IPv4 addresses are probed; nothing is scanned over cellular or a VPN.
 - What is stored is the **address**, not the name: if the router gives the NAS another address, edit the source or search
-  again. Share, user and password are still typed by hand (shares are not listed).
+  again. User and password are typed by hand.
+- "Get shares" (next to the Share field) asks the server which disk shares it offers for the login typed in the form (nothing
+  is saved); administrative `$` shares, printers and pipes are left out. Servers answer a logged-in user; some Samba setups
+  and routers also answer a guest, so right after a search the list is shown by itself when the server lists shares to a
+  guest. Many NAS boxes and Windows PCs do not list shares to a guest: then type the login first, or the share name by hand.
+  Samba lists shares the user cannot open (e.g. another user's share); picking one fails at "Test connection".
 - Not found: a server on another subnet or VLAN, on a Wi-Fi that isolates its clients, one that listens on a port other than
   445 and does not announce itself (use the port field), IPv6-only hosts. mDNS needs the router to pass multicast.
 - The name comes from mDNS, else from NetBIOS (UDP 137); a host that answers neither is listed by address.
 - Not checked on a real LAN or NAS: the emulator's network has no SMB server, so the tests cover the logic (addresses,
-  NetBIOS packets, merging) and that the search starts, ends and closes. A newer Android may ask for a local-network
+  NetBIOS packets, merging) and that the search starts, ends and closes. The share list was checked against Samba only (not
+  Synology, QNAP or Windows). A newer Android may ask for a local-network
   permission before apps reach LAN devices; it is not needed on API 34, the only level run for this change.
 
 ## Bookmarks (after 1.0.0)

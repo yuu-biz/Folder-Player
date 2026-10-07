@@ -114,7 +114,7 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
-### 5.21 SMB search (after 1.0.0, 2026-10-07)
+### 5.21 SMB search and share list (after 1.0.0, 2026-10-07)
 
 `SmbDiscoveryTest` (JVM: private-only probing, /24 cap, NetBIOS request and response parsing incl. truncated answers,
 merging, probe against a local socket) and `SmbDiscoveryUiTest` (API 34 emulator). The emulator's network has no SMB
@@ -124,11 +124,15 @@ server, so **what the search finds on a real LAN or NAS was not checked**.
 |---|---|
 | `SmbDiscoveryTest` | 7/7 PASS (first run) |
 | `SmbDiscoveryUiTest` a50: "Search network" in the SMB editor starts the search on the real `NsdManager` and the subnet probe, ends on its own with the "none found" text, closes, the editor and its host field are unchanged | PASS |
-| `SourceUiTest` a / b (the editor this change touches) | PASS |
-| `lintDebug testDebugUnitTest` | lint 0 errors, 61 warnings (as before); JVM 216 tests, 0 failures, 21 skipped |
-| Trial build `-PfpVersionName=1.1.0-dev1 -PfpVersionCode=1010001` (signed) | `FolderPlayerFork-1.1.0-dev1.apk`, SHA-256 `ac454234b4278b73af2b46c7a5b4e7b72fd1fec4415fcf65ad169b9bb30737f2`; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; arm64-v8a + x86_64; `zipalign -c -P 16` and `check-16k.sh` PASS. Installs over 1.0.0 (1000099) |
+| `SmbShareListerTest` (which shares are offered: no `$`, printers, pipes, temporary; sorted; failures told apart) | 2/2 PASS |
+| `SmbShareListTest` against the Docker Samba (shares music, home, alice, public; `map to guest = Bad User`) | 4/4 PASS on the first run: alice and bob each get `alice, home, music, public` (no `IPC$`); a wrong password is `AUTH_FAILED`, not an empty list; a closed port is `UNREACHABLE`; the guest attempt gets the same four. `dcerpc` 0.12.13 (built against SMBJ 0.12) works with SMBJ 0.15.0 |
+| `SmbDiscoveryUiTest` a51 (emulator, Docker Samba): "Get shares" is disabled without a host; a wrong password shows the sign-in failure text; the right one lists `music`, `home`, `alice`, `public` and no `IPC$`; picking `music` fills the Share field | PASS |
+| `SourceUiTest` a / b, `SmbDiscoveryUiTest` a50 (search) | PASS |
+| `lintDebug testDebugUnitTest` with the fixture servers up (the real-protocol tests run instead of being skipped: `SmbProtocolTest` 9/9 with the new dependency) | lint 0 errors, 61 warnings (as before); JVM 222 tests, 0 failures, 1 skipped |
+| Dependencies | `com.rapid7.client:dcerpc` 0.12.13 (BSD-3-Clause) and its `commons-lang3` 3.4 added; dcerpc's Guava (33.4.0-jre, which replaced the project's 33.0.0-android) is excluded; notices regenerated, `gen_notices.py --check` OK (163 artifacts) and `--verify` OK |
+| Trial build `-PfpVersionName=1.1.0-dev2 -PfpVersionCode=1010002` (signed) | `FolderPlayerFork-1.1.0-dev2.apk` (23.5 MB), SHA-256 `7da15d90163b45564bd911b3a5c0a20a175fccdc162ca47747f079be41926de1`; one signer `CN=Folder Player Fork`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; arm64-v8a + x86_64; `zipalign -c -P 16` and `check-16k.sh` PASS. Installs over 1.0.0 and over 1.1.0-dev1. (dev1, before the share list: SHA-256 `ac454234…0737f2`) |
 
-Not checked: a real LAN, a real NAS, mDNS on a real router, other API levels, the full suite list.
+Not checked: a real LAN, a real NAS (Synology, QNAP, Windows), mDNS on a real router, the share list against anything but Samba, other API levels, the full suite list.
 
 ### 5.20 Bookmarks (after 1.0.0, 2026-10-07)
 

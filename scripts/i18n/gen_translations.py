@@ -611,6 +611,9 @@ T["ja"] = {
 
 # Settings categories, browser row labels (1.0.0 UI polish).
 T["zh-rCN"].update({
+    "source_shares": "获取共享", "source_shares_title": "此服务器上的共享", "source_shares_loading": "正在询问服务器…",
+    "source_shares_none": "此服务器没有向该登录提供任何共享。", "source_shares_auth_failed": "登录失败。请检查用户名和密码（或访客选项）后重试。",
+    "source_shares_not_allowed": "此服务器不向该登录列出共享。请手动输入共享名。", "source_shares_error": "无法获取共享列表：%1$s",
     "source_discover": "搜索网络", "source_discover_title": "此网络上的 SMB 服务器", "source_discover_searching": "正在搜索…",
     "source_discover_none": "未找到 SMB 服务器。请确认本设备与 NAS 在同一 Wi-Fi 下，或手动输入地址。",
     "source_discover_no_lan": "未连接到本地 Wi-Fi 或有线网络，仅搜索会主动广播自身的服务器。",
@@ -628,6 +631,9 @@ T["zh-rCN"].update({
     "settings_lyrics_priority": "歌词来源优先级", "settings_thumbs_summary": "已开启 %1$d / %2$d", "settings_not_set": "未设置",
 })
 T["zh-rTW"].update({
+    "source_shares": "取得共用", "source_shares_title": "此伺服器上的共用", "source_shares_loading": "正在詢問伺服器…",
+    "source_shares_none": "此伺服器沒有向該登入提供任何共用。", "source_shares_auth_failed": "登入失敗。請檢查使用者名稱和密碼（或訪客選項）後重試。",
+    "source_shares_not_allowed": "此伺服器不向該登入列出共用。請手動輸入共用名稱。", "source_shares_error": "無法取得共用清單：%1$s",
     "source_discover": "搜尋網路", "source_discover_title": "此網路上的 SMB 伺服器", "source_discover_searching": "搜尋中…",
     "source_discover_none": "找不到 SMB 伺服器。請確認本裝置與 NAS 在同一 Wi-Fi，或手動輸入位址。",
     "source_discover_no_lan": "未連線到本機 Wi-Fi 或有線網路，只會搜尋主動廣播自身的伺服器。",
@@ -645,6 +651,9 @@ T["zh-rTW"].update({
     "settings_lyrics_priority": "歌詞來源優先順序", "settings_thumbs_summary": "已開啟 %1$d / %2$d", "settings_not_set": "未設定",
 })
 T["fr"].update({
+    "source_shares": "Obtenir les partages", "source_shares_title": "Partages de ce serveur", "source_shares_loading": "Interrogation du serveur…",
+    "source_shares_none": "Ce serveur ne propose aucun partage pour cette connexion.", "source_shares_auth_failed": "Échec de la connexion. Vérifiez le nom d'utilisateur et le mot de passe (ou l'option invité), puis réessayez.",
+    "source_shares_not_allowed": "Ce serveur ne liste pas ses partages pour cette connexion. Saisissez le nom du partage à la main.", "source_shares_error": "Impossible d'obtenir la liste des partages : %1$s",
     "source_discover": "Rechercher sur le réseau", "source_discover_title": "Serveurs SMB sur ce réseau", "source_discover_searching": "Recherche…",
     "source_discover_none": "Aucun serveur SMB trouvé. Vérifiez que cet appareil est sur le même Wi-Fi que le NAS, ou saisissez l'adresse à la main.",
     "source_discover_no_lan": "Pas de réseau Wi-Fi ou Ethernet local : seuls les serveurs qui s'annoncent sont recherchés.",
@@ -662,6 +671,9 @@ T["fr"].update({
     "settings_lyrics_priority": "Priorité des paroles", "settings_thumbs_summary": "Activées pour %1$d sur %2$d", "settings_not_set": "Non défini",
 })
 T["it"].update({
+    "source_shares": "Ottieni condivisioni", "source_shares_title": "Condivisioni di questo server", "source_shares_loading": "Interrogazione del server…",
+    "source_shares_none": "Questo server non offre condivisioni per questo accesso.", "source_shares_auth_failed": "Accesso non riuscito. Controlla nome utente e password (o l'opzione ospite) e riprova.",
+    "source_shares_not_allowed": "Questo server non elenca le condivisioni per questo accesso. Inserisci il nome della condivisione a mano.", "source_shares_error": "Impossibile ottenere l'elenco delle condivisioni: %1$s",
     "source_discover": "Cerca nella rete", "source_discover_title": "Server SMB su questa rete", "source_discover_searching": "Ricerca in corso…",
     "source_discover_none": "Nessun server SMB trovato. Controlla che il dispositivo sia sulla stessa rete Wi-Fi del NAS, oppure inserisci l'indirizzo a mano.",
     "source_discover_no_lan": "Nessuna rete Wi-Fi o Ethernet locale: vengono cercati solo i server che si annunciano.",
@@ -679,6 +691,9 @@ T["it"].update({
     "settings_lyrics_priority": "Priorità dei testi", "settings_thumbs_summary": "Attive per %1$d su %2$d", "settings_not_set": "Non impostato",
 })
 T["ja"].update({
+    "source_shares": "共有を取得", "source_shares_title": "このサーバーの共有", "source_shares_loading": "サーバーに問い合わせています…",
+    "source_shares_none": "このログインで見えるサーバーの共有はありません。", "source_shares_auth_failed": "ログインに失敗しました。ユーザー名とパスワード（またはゲストの設定）を確認して、もう一度お試しください。",
+    "source_shares_not_allowed": "このサーバーは、このログインに共有一覧を返しません。共有名は手入力してください。", "source_shares_error": "共有の一覧を取得できませんでした：%1$s",
     "source_discover": "ネットワークから探す", "source_discover_title": "このネットワークのSMBサーバー", "source_discover_searching": "検索中…",
     "source_discover_none": "SMBサーバーが見つかりません。NASと同じWi-Fiに接続しているか確認するか、アドレスを手入力してください。",
     "source_discover_no_lan": "ローカルのWi-Fi／有線LANに接続していません。自分から名乗るサーバーのみ検索します。",
