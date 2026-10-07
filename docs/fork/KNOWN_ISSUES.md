@@ -39,6 +39,20 @@ What a user can run into, in one place. The sections below give the history of e
 - **Not checked**: TalkBack sessions, HyperOS devices, a NAS, a background network retry on a real phone with the
   screen off (a refused foreground start is caught and logged, see below).
 
+## SMB search (after 1.0.0)
+
+- "Search network" in the SMB editor looks only when the button is pressed (about 12 s at most). It finds servers that
+  announce themselves through mDNS (NAS boxes, Macs, Samba with Avahi) and hosts that answer on TCP 445 in the /24 around
+  the device's Wi-Fi / Ethernet address. Only private IPv4 addresses are probed; nothing is scanned over cellular or a VPN.
+- What is stored is the **address**, not the name: if the router gives the NAS another address, edit the source or search
+  again. Share, user and password are still typed by hand (shares are not listed).
+- Not found: a server on another subnet or VLAN, on a Wi-Fi that isolates its clients, one that listens on a port other than
+  445 and does not announce itself (use the port field), IPv6-only hosts. mDNS needs the router to pass multicast.
+- The name comes from mDNS, else from NetBIOS (UDP 137); a host that answers neither is listed by address.
+- Not checked on a real LAN or NAS: the emulator's network has no SMB server, so the tests cover the logic (addresses,
+  NetBIOS packets, merging) and that the search starts, ends and closes. A newer Android may ask for a local-network
+  permission before apps reach LAN devices; it is not needed on API 34, the only level run for this change.
+
 ## Bookmarks (after 1.0.0)
 
 - Bookmarks are folders (a source root or a place inside it) kept on this device only: they are not part of `fav.json` and

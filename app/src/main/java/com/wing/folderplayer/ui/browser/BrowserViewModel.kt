@@ -166,6 +166,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun moveSourceUp(sourceId: String) = SourceRegistry.move(sourceId, -1)
     fun moveSourceDown(sourceId: String) = SourceRegistry.move(sourceId, +1)
 
+    /** Searches the local network for SMB servers (cancel the collector to stop). */
+    fun discoverSmb(): kotlinx.coroutines.flow.Flow<com.wing.folderplayer.data.source.SmbDiscoveryState> =
+        com.wing.folderplayer.data.source.SmbDiscovery(getApplication()).discover()
+
     suspend fun testConnection(config: SourceConfig, password: String?): ConnectionTestResult = withContext(Dispatchers.IO) {
         val fs = try {
             if (password == null && SourceRegistry.get(config.id) != null) SourceRegistry.create(config) else SourceRegistry.create(config, password ?: "")

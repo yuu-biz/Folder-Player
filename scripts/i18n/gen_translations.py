@@ -611,6 +611,9 @@ T["ja"] = {
 
 # Settings categories, browser row labels (1.0.0 UI polish).
 T["zh-rCN"].update({
+    "source_discover": "搜索网络", "source_discover_title": "此网络上的 SMB 服务器", "source_discover_searching": "正在搜索…",
+    "source_discover_none": "未找到 SMB 服务器。请确认本设备与 NAS 在同一 Wi-Fi 下，或手动输入地址。",
+    "source_discover_no_lan": "未连接到本地 Wi-Fi 或有线网络，仅搜索会主动广播自身的服务器。",
     "browser_bookmarks": "书签", "browser_add_bookmark": "加入书签", "browser_remove_bookmark": "移除书签", "browser_bookmark_folder": "将此文件夹加入书签",
     "sort_date": "修改日期", "sort_created": "创建日期",
     "browser_empty": "这里没有内容", "player_seek": "播放进度", "player_seek_state": "%1$s / %2$s",
@@ -625,6 +628,9 @@ T["zh-rCN"].update({
     "settings_lyrics_priority": "歌词来源优先级", "settings_thumbs_summary": "已开启 %1$d / %2$d", "settings_not_set": "未设置",
 })
 T["zh-rTW"].update({
+    "source_discover": "搜尋網路", "source_discover_title": "此網路上的 SMB 伺服器", "source_discover_searching": "搜尋中…",
+    "source_discover_none": "找不到 SMB 伺服器。請確認本裝置與 NAS 在同一 Wi-Fi，或手動輸入位址。",
+    "source_discover_no_lan": "未連線到本機 Wi-Fi 或有線網路，只會搜尋主動廣播自身的伺服器。",
     "browser_bookmarks": "書籤", "browser_add_bookmark": "加入書籤", "browser_remove_bookmark": "移除書籤", "browser_bookmark_folder": "將此資料夾加入書籤",
     "sort_date": "修改日期", "sort_created": "建立日期",
     "browser_empty": "這裡沒有內容", "player_seek": "播放進度", "player_seek_state": "%1$s / %2$s",
@@ -639,6 +645,9 @@ T["zh-rTW"].update({
     "settings_lyrics_priority": "歌詞來源優先順序", "settings_thumbs_summary": "已開啟 %1$d / %2$d", "settings_not_set": "未設定",
 })
 T["fr"].update({
+    "source_discover": "Rechercher sur le réseau", "source_discover_title": "Serveurs SMB sur ce réseau", "source_discover_searching": "Recherche…",
+    "source_discover_none": "Aucun serveur SMB trouvé. Vérifiez que cet appareil est sur le même Wi-Fi que le NAS, ou saisissez l'adresse à la main.",
+    "source_discover_no_lan": "Pas de réseau Wi-Fi ou Ethernet local : seuls les serveurs qui s'annoncent sont recherchés.",
     "browser_bookmarks": "Signets", "browser_add_bookmark": "Ajouter aux signets", "browser_remove_bookmark": "Retirer des signets", "browser_bookmark_folder": "Ajouter ce dossier aux signets",
     "sort_date": "Modifié", "sort_created": "Créé",
     "browser_empty": "Rien à afficher ici", "player_seek": "Position de lecture", "player_seek_state": "%1$s sur %2$s",
@@ -653,6 +662,9 @@ T["fr"].update({
     "settings_lyrics_priority": "Priorité des paroles", "settings_thumbs_summary": "Activées pour %1$d sur %2$d", "settings_not_set": "Non défini",
 })
 T["it"].update({
+    "source_discover": "Cerca nella rete", "source_discover_title": "Server SMB su questa rete", "source_discover_searching": "Ricerca in corso…",
+    "source_discover_none": "Nessun server SMB trovato. Controlla che il dispositivo sia sulla stessa rete Wi-Fi del NAS, oppure inserisci l'indirizzo a mano.",
+    "source_discover_no_lan": "Nessuna rete Wi-Fi o Ethernet locale: vengono cercati solo i server che si annunciano.",
     "browser_bookmarks": "Segnalibri", "browser_add_bookmark": "Aggiungi ai segnalibri", "browser_remove_bookmark": "Rimuovi dai segnalibri", "browser_bookmark_folder": "Aggiungi questa cartella ai segnalibri",
     "sort_date": "Modificato", "sort_created": "Creato",
     "browser_empty": "Niente da mostrare qui", "player_seek": "Posizione di riproduzione", "player_seek_state": "%1$s di %2$s",
@@ -667,6 +679,9 @@ T["it"].update({
     "settings_lyrics_priority": "Priorità dei testi", "settings_thumbs_summary": "Attive per %1$d su %2$d", "settings_not_set": "Non impostato",
 })
 T["ja"].update({
+    "source_discover": "ネットワークから探す", "source_discover_title": "このネットワークのSMBサーバー", "source_discover_searching": "検索中…",
+    "source_discover_none": "SMBサーバーが見つかりません。NASと同じWi-Fiに接続しているか確認するか、アドレスを手入力してください。",
+    "source_discover_no_lan": "ローカルのWi-Fi／有線LANに接続していません。自分から名乗るサーバーのみ検索します。",
     "browser_bookmarks": "ブックマーク", "browser_add_bookmark": "ブックマークに追加", "browser_remove_bookmark": "ブックマークから削除", "browser_bookmark_folder": "このフォルダをブックマークに追加",
     "sort_date": "更新日", "sort_created": "作成日",
     "browser_empty": "ここには表示する項目がありません", "player_seek": "再生位置", "player_seek_state": "%2$s 中 %1$s",

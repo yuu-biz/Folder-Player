@@ -1,10 +1,12 @@
 package com.wing.folderplayer.ui.browser
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -18,12 +20,19 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.wing.folderplayer.R
 import com.wing.folderplayer.data.source.ConnectionOutcome
 import com.wing.folderplayer.data.source.ConnectionTestResult
+import com.wing.folderplayer.data.source.SmbDiscoveryLogic
+import com.wing.folderplayer.data.source.SmbDiscoveryState
+import com.wing.folderplayer.data.source.SmbHost
 import com.wing.folderplayer.data.source.SourceConfig
 import com.wing.folderplayer.data.source.SourceType
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 
 @Composable
@@ -52,6 +61,8 @@ fun SourceEditorDialog(
     onDismiss: () -> Unit,
     onSave: (SourceConfig, String?) -> Unit,
     onTest: suspend (SourceConfig, String?) -> ConnectionTestResult,
+    /** SMB only: searches the local network (the user pressed "Search network"); cancelled when the picker closes. */
+    onDiscover: () -> Flow<SmbDiscoveryState> = { emptyFlow() },
 ) {
     val editing = initial != null
     var type by remember { mutableStateOf(initial?.type ?: initialType) }
@@ -72,6 +83,7 @@ fun SourceEditorDialog(
     var syncPath by remember { mutableStateOf(initial?.syncPath ?: "") }
     var testing by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<ConnectionTestResult?>(null) }
+    var picking by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     fun build(): SourceConfig {
@@ -100,6 +112,20 @@ fun SourceEditorDialog(
 
     fun password(): String? = if (passTouched || !editing) pass else null
 
+    if (picking) {
+        SmbPickerDialog(
+            onDiscover = onDiscover,
+            onPick = { h ->
+                host = h.address
+                port = if (h.port != SmbDiscoveryLogic.SMB_PORT) h.port.toString() else ""
+                if (name.isBlank() && h.name != null) name = h.name
+                testResult = null
+                picking = false
+            },
+            onDismiss = { picking = false },
+        )
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(if (editing) R.string.source_edit_title else R.string.source_add_title)) },
@@ -125,6 +151,11 @@ fun SourceEditorDialog(
                     }
                     SourceType.SMB -> {
                         SourceField(host, { host = it }, stringResource(R.string.source_host), "field_host", keyboard = KeyboardType.Uri)
+                        OutlinedButton(onClick = { picking = true }, modifier = Modifier.testTag("btn_discover")) {
+                            Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.source_discover))
+                        }
                         SourceField(port, { port = it }, stringResource(R.string.source_port_default, 445), "field_port", keyboard = KeyboardType.Number)
                         SourceField(share, { share = it }, stringResource(R.string.source_share), "field_share")
                         SourceField(path, { path = it }, stringResource(R.string.source_root_path), "field_path", placeholder = "/Music")
@@ -222,5 +253,42 @@ private fun SourceField(
         modifier = Modifier.fillMaxWidth().testTag(tag),
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = keyboard, imeAction = ImeAction.Next)
+    )
+}
+
+/** The servers found so far, filled in while the search runs; leaving the dialog cancels the search. */
+@Composable
+private fun SmbPickerDialog(onDiscover: () -> Flow<SmbDiscoveryState>, onPick: (SmbHost) -> Unit, onDismiss: () -> Unit) {
+    var state by remember { mutableStateOf(SmbDiscoveryState()) }
+    LaunchedEffect(Unit) {
+        try {
+            onDiscover().collect { state = it }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            state = state.copy(finished = true)
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.source_discover_title)) },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()).testTag("discover_list")) {
+                if (!state.finished) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    if (state.hosts.isEmpty()) Text(stringResource(R.string.source_discover_searching), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+                }
+                if (state.noLocalNetwork) Text(stringResource(R.string.source_discover_no_lan), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 8.dp).testTag("discover_no_lan"))
+                if (state.finished && state.hosts.isEmpty()) Text(stringResource(R.string.source_discover_none), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp).testTag("discover_none"))
+                state.hosts.forEach { h ->
+                    ListItem(
+                        headlineContent = { Text(h.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        supportingContent = { Text(if (h.port == SmbDiscoveryLogic.SMB_PORT) h.address else "${h.address}:${h.port}") },
+                        modifier = Modifier.clickable { onPick(h) }.testTag("discover_${h.address}"),
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_close)) } },
     )
 }

@@ -41,6 +41,11 @@
     <string name="browser_add_bookmark">Aggiungi ai segnalibri</string>
     <string name="browser_remove_bookmark">Rimuovi dai segnalibri</string>
     <string name="browser_bookmark_folder">Aggiungi questa cartella ai segnalibri</string>
+    <string name="source_discover">Cerca nella rete</string>
+    <string name="source_discover_title">Server SMB su questa rete</string>
+    <string name="source_discover_searching">Ricerca in corso…</string>
+    <string name="source_discover_none">Nessun server SMB trovato. Controlla che il dispositivo sia sulla stessa rete Wi-Fi del NAS, oppure inserisci l\'indirizzo a mano.</string>
+    <string name="source_discover_no_lan">Nessuna rete Wi-Fi o Ethernet locale: vengono cercati solo i server che si annunciano.</string>
     <string name="browser_now_playing">In riproduzione</string>
     <string name="browser_row_details">Dettagli e azioni</string>
     <string name="browser_empty">Niente da mostrare qui</string>
