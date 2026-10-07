@@ -265,6 +265,16 @@ Not checked: a real phone or NAS (the "NAS" is a counting wrapper around local f
 other API levels (the per-app language is Android 13+; Android 12 and older use unchanged code paths and were not run);
 the full suite list.
 
+### 5.12 Favourites shared between devices (after 1.0.0, 2026-10-07)
+
+`FavoritesCrossDeviceTest` (JVM, in-memory NAS, two repositories with different source ids and roots). JVM only: no
+emulator or device run for this change, and no real NAS.
+
+| Check | Result |
+|---|---|
+| Two devices, one `fav.json` (own source ids; roots `/` and `/Library`; an entry outside B's root; other sources; unchanged remote; entries of an earlier version; "replace remote"; WebDAV origin from base URL + root; broken remote) | before (old `sync`, helper calling it without an anchor): 6 of 8 FAIL — B listed nothing under its own source id, different roots were not translated, the entry outside the root and the shared form were missing; the 2 that passed are the invariants (unchanged remote not rewritten, broken remote not overwritten). After: 9/9 PASS |
+| Existing favourites suites | `FavoritesTest` 12/12, `FavoritesSyncConcurrencyTest` 7/7 PASS (no anchor: unchanged behaviour) |
+
 ### 5.11 Stability hardening toward 1.0.0 (1.0.0-dev1, 2026-10-06)
 
 Branch `feature/stability-hardening` from `b1c98fb` (v0.6.0 docs). Four findings of a static review, each reproduced
