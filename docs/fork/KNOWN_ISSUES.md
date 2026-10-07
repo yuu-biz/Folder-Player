@@ -39,6 +39,24 @@ What a user can run into, in one place. The sections below give the history of e
 - **Not checked**: TalkBack sessions, HyperOS devices, a NAS, a background network retry on a real phone with the
   screen off (a refused foreground start is caught and logged, see below).
 
+## Favourites shared between devices (after 1.0.0)
+
+- A source id is a random UUID per installation, so favourites synced through a NAS `fav.json` were not shown on a second
+  device (the entries arrived but pointed at the other device's source). The file now stores an entry on the source it
+  lives on as `"sourceId": "@sync"` with its path on the server (root path inside the share / FTP home; for WebDAV the base
+  URL's path plus the root path). Each device maps it to its own source and root, so a NAS reached by name on one phone
+  and by IP on another shows the same favourites. No file-format version change: an older app reads the entries, cannot
+  place them, and writes them back unchanged.
+- Entries outside a device's root: a device whose source root is deeper than the entry (root `/Library`, entry
+  `/Elsewhere/x.flac`) does not list it, and the sync keeps it in the file. "Replace remote" overwrites the file with this
+  device's list, so those entries go with the old file.
+- Favourites on other sources (a local folder, a second NAS) are still per device: their entries keep the source id and are
+  hidden on devices that do not have it. Only the source holding the `fav.json` is shared.
+- Entries a device wrote before this change use that device's source id: this device's own are rewritten in the shared form
+  by its next sync, those of other devices stay in the file, hidden, until the device that wrote them has
+  synced once with this version.
+- The match is on the path on the server and is case-sensitive. Not checked on a real NAS (in-memory file system).
+
 ## Final audit before 1.0.0: fixed
 
 Found by reading the whole code base (four independent reviews of playback, sources / credentials, storage / caches

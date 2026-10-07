@@ -4,10 +4,14 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
 import com.wing.folderplayer.data.source.MusicFile
+import com.wing.folderplayer.data.source.SourceConfig
 import com.wing.folderplayer.data.source.SourceException
 import com.wing.folderplayer.data.source.SourceFileSystem
 import com.wing.folderplayer.data.source.SourcePath
 import com.wing.folderplayer.data.source.SourceRef
+import com.wing.folderplayer.data.source.SourceType
+import com.wing.folderplayer.data.source.WebDavFileSystem
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -80,6 +84,53 @@ object FavoritesCodec {
             if (l == null || r.timestamp > l.timestamp) byKey[r.key] = r
         }
         return byKey.values.toList()
+    }
+}
+
+/**
+ * Where the shared fav.json is, as seen from this device: the source the file lives on ([sourceId]) and the location of
+ * that source's root on the server ([origin]: the root path inside the share / FTP home, for WebDAV the base URL's path
+ * plus the root path).
+ *
+ * A source id is a random UUID per installation, so another device cannot resolve it. The file therefore stores an
+ * entry on the file's own source as [SOURCE] plus its path on the server, and each device maps that back to its own
+ * source and its own root. Entries of other sources keep their ids (they mean something on this device only).
+ */
+class SyncAnchor(val sourceId: String, origin: String) {
+    val origin: String = SourcePath.normalize(origin)
+
+    /** Entries of the remote file in this device's terms, plus those it cannot show (outside this device's root). */
+    data class Incoming(val items: List<FavoriteItem>, val passthrough: List<FavoriteItem>)
+
+    fun toRemote(item: FavoriteItem): FavoriteItem =
+        if (item.sourceId == sourceId) item.copy(sourceId = SOURCE, path = SourcePath.join(origin, item.path)) else item
+
+    fun toRemote(items: List<FavoriteItem>): List<FavoriteItem> = items.map(::toRemote)
+
+    /** Entries outside [origin] cannot be addressed through this source: they are kept for the file, not listed here. */
+    fun fromRemote(items: List<FavoriteItem>): Incoming {
+        val local = ArrayList<FavoriteItem>()
+        val rest = ArrayList<FavoriteItem>()
+        for (item in items) {
+            if (item.sourceId != SOURCE) { local.add(item); continue }
+            val rel = SourcePath.relativize(origin, item.path)
+            if (rel == null) rest.add(item) else local.add(item.copy(sourceId = sourceId, path = rel))
+        }
+        return Incoming(local, rest)
+    }
+
+    companion object {
+        /** `sourceId` of an entry on the source the fav.json lives on. Cannot clash with a generated id (UUID, local-*). */
+        const val SOURCE = "@sync"
+
+        fun of(cfg: SourceConfig): SyncAnchor = SyncAnchor(cfg.id, serverOrigin(cfg))
+
+        /** Where the source's root is on the server: the same for every device that reaches the same share / folder. */
+        fun serverOrigin(cfg: SourceConfig): String {
+            if (cfg.type != SourceType.WEBDAV) return cfg.rootPath
+            val base = WebDavFileSystem.normalizeBaseUrl(cfg.url).toHttpUrlOrNull() ?: return cfg.rootPath
+            return SourcePath.normalize((base.pathSegments.filter { it.isNotEmpty() } + SourcePath.segments(cfg.rootPath)).joinToString("/", prefix = "/"))
+        }
     }
 }
 
@@ -172,8 +223,11 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
      * entry that the remote still has comes back, as with any sync: deletions are not propagated). Entries added while
      * the merged list is being written stay local and reach the remote with the next sync; entries this sync put on the
      * remote and the user removed while it was writing are taken off again ([writeRemoteFollowingRemovals]).
+     *
+     * With an [anchor] the file is shared between devices: entries on the file's own source are read and written in
+     * server terms (see [SyncAnchor]); those outside this device's root are neither listed nor dropped.
      */
-    fun sync(fs: SourceFileSystem, remotePath: String): SyncResult = synchronized(syncLock) {
+    fun sync(fs: SourceFileSystem, remotePath: String, anchor: SyncAnchor? = null): SyncResult = synchronized(syncLock) {
         val remote: FavoritesCodec.DecodeReport? = try {
             val st = fs.stat(remotePath)
             if (st == null) null else {
@@ -185,7 +239,10 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
         } catch (e: SourceException) {
             return SyncResult.Failed(e.message ?: e.javaClass.simpleName)
         }
-        val remoteItems = remote?.data?.items.orEmpty()
+        val remoteRaw = remote?.data?.items.orEmpty()
+        // Everything below runs in this device's terms; only the read above and the write convert (see [SyncAnchor]).
+        val incoming = anchor?.fromRemote(remoteRaw) ?: SyncAnchor.Incoming(remoteRaw, emptyList())
+        val remoteItems = incoming.items
         val (merged, added) = synchronized(localLock) {
             val before = _items.value
             val merged = FavoritesCodec.merge(before, remoteItems)
@@ -194,27 +251,31 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
         }
         if (remote != null && remote.rejected > 0) return SyncResult.RemoteHasUnreadableEntries(remote.rejected, added)
         // Semantically unchanged: leave the remote file (and its formatting) alone.
-        if (remote != null && merged.size == remoteItems.size && merged.toSet() == remoteItems.toSet()) return SyncResult.Synced(added, merged.size)
+        val outgoing = (anchor?.toRemote(merged) ?: merged) + incoming.passthrough
+        if (remote != null && outgoing.size == remoteRaw.size && outgoing.toSet() == remoteRaw.toSet()) return SyncResult.Synced(added, merged.size)
         val remoteKeys = remoteItems.mapTo(HashSet()) { it.key }
-        return writeRemoteFollowingRemovals(fs, remotePath, merged, added) { it.key !in remoteKeys }
+        return writeRemoteFollowingRemovals(fs, remotePath, merged, added, anchor, incoming.passthrough) { it.key !in remoteKeys }
     }
 
     /**
      * Explicit user action: overwrite the remote file with the local list (also used to repair a broken remote). The
      * write runs without [localLock]; if the list changed meanwhile (added or removed favourites), the remote is
-     * written again with the list as it is then, so it equals the local list when this returns.
+     * written again with the list as it is then, so it equals the local list when this returns. Entries the remote has
+     * outside this device's root (which a sync carries along) are part of what is replaced: they go with the old file.
      */
-    fun replaceRemote(fs: SourceFileSystem, remotePath: String): SyncResult = synchronized(syncLock) {
+    fun replaceRemote(fs: SourceFileSystem, remotePath: String, anchor: SyncAnchor? = null): SyncResult = synchronized(syncLock) {
         var written = _items.value
-        var result = writeRemote(fs, remotePath, written, 0)
+        var result = writeRemote(fs, remotePath, anchor.toRemote(written), 0, written.size)
         while (result is SyncResult.Synced) {
             val now = synchronized(localLock) { _items.value }
             if (now == written) break
             written = now
-            result = writeRemote(fs, remotePath, written, 0)
+            result = writeRemote(fs, remotePath, anchor.toRemote(written), 0, written.size)
         }
         result
     }
+
+    private fun SyncAnchor?.toRemote(items: List<FavoriteItem>): List<FavoriteItem> = this?.toRemote(items) ?: items
 
     /**
      * Writes [items] to the remote for a sync. The list was taken before the (unlocked) write, so the user may have
@@ -228,11 +289,13 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
         remotePath: String,
         items: List<FavoriteItem>,
         added: Int,
+        anchor: SyncAnchor?,
+        passthrough: List<FavoriteItem>,
         retractable: (FavoriteItem) -> Boolean,
     ): SyncResult {
         var written = items
         while (true) {
-            val result = writeRemote(fs, remotePath, written, added)
+            val result = writeRemote(fs, remotePath, anchor.toRemote(written) + passthrough, added, written.size)
             if (result !is SyncResult.Synced) return result
             val removed = synchronized(localLock) {
                 val now = _items.value.mapTo(HashSet()) { it.key }
@@ -243,7 +306,8 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
         }
     }
 
-    private fun writeRemote(fs: SourceFileSystem, remotePath: String, items: List<FavoriteItem>, added: Int): SyncResult {
+    /** [items] are written as they are (already in the file's terms); [total] is the local list size reported back. */
+    private fun writeRemote(fs: SourceFileSystem, remotePath: String, items: List<FavoriteItem>, added: Int, total: Int): SyncResult {
         val json = FavoritesCodec.encode(FavoritesData(items = items))
         // Validate what we are about to write; a broken file must never reach the sync path.
         FavoritesCodec.decode(json)
@@ -259,7 +323,7 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
                 false
             }
             if (!viaTemp) fs.write(remotePath, bytes, overwrite = true)
-            SyncResult.Synced(added, items.size)
+            SyncResult.Synced(added, total)
         } catch (e: SourceException.ReadOnly) {
             SyncResult.RemoteNotWritable(e.message ?: "read-only", added)
         } catch (e: SourceException.PermissionDenied) {

@@ -9,6 +9,7 @@ import com.wing.folderplayer.data.artwork.ArtworkResult
 import com.wing.folderplayer.data.artwork.ThumbnailRepository
 import com.wing.folderplayer.data.favorites.FavoriteItem
 import com.wing.folderplayer.data.favorites.FavoritesRepository
+import com.wing.folderplayer.data.favorites.SyncAnchor
 import com.wing.folderplayer.data.favorites.SyncResult
 import com.wing.folderplayer.data.prefs.SourcePreferences
 import com.wing.folderplayer.data.search.SearchProgress
@@ -452,7 +453,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 return@launch
             }
             val messages = targets.map { cfg ->
-                val r = runInterruptible(Dispatchers.IO) { favoritesRepository.sync(SourceRegistry.fileSystem(cfg.id), SourcePath.normalize(cfg.syncPath)) }
+                val r = runInterruptible(Dispatchers.IO) { favoritesRepository.sync(SourceRegistry.fileSystem(cfg.id), SourcePath.normalize(cfg.syncPath), SyncAnchor.of(cfg)) }
                 "${cfg.name}: " + describe(r)
             }
             _uiState.value = _uiState.value.copy(message = messages.joinToString("\n"))
@@ -462,7 +463,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun replaceRemoteFavorites(sourceId: String) {
         viewModelScope.launch(exceptionHandler) {
             val cfg = SourceRegistry.get(sourceId) ?: return@launch
-            val r = runInterruptible(Dispatchers.IO) { favoritesRepository.replaceRemote(SourceRegistry.fileSystem(cfg.id), SourcePath.normalize(cfg.syncPath)) }
+            val r = runInterruptible(Dispatchers.IO) { favoritesRepository.replaceRemote(SourceRegistry.fileSystem(cfg.id), SourcePath.normalize(cfg.syncPath), SyncAnchor.of(cfg)) }
             _uiState.value = _uiState.value.copy(message = "${cfg.name}: " + describe(r))
         }
     }
