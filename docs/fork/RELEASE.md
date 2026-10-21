@@ -46,7 +46,10 @@ The real-server protocol tests and the emulator suites need the Docker fixtures 
 (see [VERIFICATION.md](VERIFICATION.md)).
 
 The source of the release is the tag itself (GitHub's source archive). "Run workflow" on the Actions page runs the
-same steps and keeps the APK as a workflow artifact without creating a release.
+same steps and keeps the APK as a workflow artifact without creating a release. Its `version` input takes a prototype
+version such as `1.3.0-dev1`: the APK is signed with the release key and gets that dev build's versionCode (below), so it
+installs over the last release for a check on a phone before merging; left empty it is `0.0.0-ci.<run>` with a low
+versionCode that does not install over a release.
 
 `.github/workflows/ci.yml` is started by hand ("Run workflow"), once on the commit to be tagged, just before the release:
 debug build, JVM tests, lint and the license notices, read-only, no signing secrets, never a release. Pushes and pull
@@ -98,3 +101,6 @@ versionCode `1010099`, which installs over 1.0.0 and over both dev builds.
 
 1.2.0 the same way: dev builds `1.2.0-dev1`, … use 1020001, …; the final `v1.2.0` is versionName `1.2.0`, versionCode `1020099`,
 which installs over 1.1.x and over every dev build.
+
+1.3.0 the same way: dev builds `1.3.0-dev1`, … use 1030001, … (built by "Run workflow" with the `version` input, signed
+with the release key, so they install over 1.2.0); the final `v1.3.0` is versionName `1.3.0`, versionCode `1030099`.
