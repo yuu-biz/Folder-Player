@@ -86,8 +86,13 @@ abstract class UiTestBase {
         compose.waitForIdle()
     }
 
+    /** Buttons of the browser's top bar that sit in its ⋮ menu where the bar has little room (a phone held upright). */
+    private val inBrowserMenu = mapOf("btn_view_mode" to "menu_view_mode", "btn_refresh" to "menu_refresh")
+
     /** Clicks a node, scrolling it into view first when it sits in a scrollable container (dialogs, settings). */
     protected fun click(tag: String) {
+        val menuItem = inBrowserMenu[tag]
+        if (menuItem != null && !exists(tag)) { click("btn_overflow"); click(menuItem); return }
         if (exists("settings_column") && settingsRoute(tag) != null) settingsReveal(tag)
         runCatching { compose.onNodeWithTag(tag).performScrollTo() }
         compose.onNodeWithTag(tag).performClick()

@@ -34,6 +34,9 @@
     <string name="browser_search">Search</string>
     <string name="browser_search_hint">Search folders and songs below this folder</string>
     <string name="browser_search_truncated">result limit reached</string>
+    <string name="browser_filter">Filter this folder</string>
+    <string name="browser_filter_hint">Filter by name (this folder only)</string>
+    <string name="browser_filter_no_match">Nothing in this folder matches “%1$s”</string>
     <string name="browser_toggle_view">Grid / list</string>
     <string name="browser_more">More options</string>
     <string name="browser_shuffle">Shuffle play</string>

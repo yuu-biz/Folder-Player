@@ -1,6 +1,8 @@
 package com.wing.folderplayer
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.wing.folderplayer.data.source.MusicFile
@@ -8,6 +10,7 @@ import com.wing.folderplayer.data.source.SourcePath
 import com.wing.folderplayer.data.source.SourceRef
 import com.wing.folderplayer.data.source.SourceRegistry
 import com.wing.folderplayer.ui.browser.BrowserViewModel
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -16,7 +19,8 @@ import org.junit.runner.RunWith
 /**
  * Back is the previous place, as in a browser: from a folder opened from the favourites list or from a bookmark, and from
  * the folders entered after it, step by step back to that folder and then to the list. The arrow-up button of the top bar
- * goes up one folder, and Back after it returns to where the user was.
+ * goes up one folder, and Back after it returns to where the user was. The home button goes straight to the source list; the
+ * filter narrows the folder on screen and comes back with it.
  */
 @RunWith(AndroidJUnit4::class)
 class OriginBackUiTest : UiTestBase() {
@@ -102,5 +106,33 @@ class OriginBackUiTest : UiTestBase() {
         } finally {
             onUi { browser.bookmarksRepository.remove(fixture); browser.bookmarksRepository.remove(albumA) }
         }
+    }
+
+    @Test fun a62_homeGoesToTheSourceListAndTheFilterComesBackWithItsFolder() {
+        toBrowser()
+        onUi { browser.exitSource() }
+        until(5_000, "source list") { exists("source_list") }
+        click("source_Internal Storage"); at("/", "source root")
+        click("item_Music"); at("/Music", "Music")
+        click("item_fixture"); at(fx, "fixture")
+        click("btn_browser_home")
+        until(5_000, "source list from home") { bs.isRoot && exists("source_list") }
+        assertFalse("no home button on the source list", exists("btn_browser_home"))
+
+        // The filter narrows this folder only; another folder starts without it, Back brings it back with its text.
+        onUi { browser.loadFolder(SourceRef(local, fx)) }; at(fx, "fixture")
+        click("btn_filter")
+        compose.onNodeWithTag("filter_field").performTextInput("album-a")
+        until(5_000, "filtered") { exists("item_Album-A") && !exists("item_Album-B") }
+        click("item_Album-A"); at("$fx/Album-A", "Album-A")
+        assertEquals("", bs.filter)
+        assertFalse(exists("filter_field"))
+        pressBack(); at(fx, "back to the filtered folder")
+        until(5_000, "filter back") { bs.filter == "album-a" && exists("filter_field") && exists("item_Album-A") && !exists("item_Album-B") }
+
+        compose.onNodeWithTag("filter_field").performTextInput("zzz")
+        until(5_000, "no match") { exists("filter_no_match") }
+        click("filter_close")
+        until(5_000, "unfiltered") { bs.filter == "" && exists("item_Album-B") && !exists("filter_field") }
     }
 }

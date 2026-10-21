@@ -28,6 +28,9 @@
     <string name="browser_search">Cerca</string>
     <string name="browser_search_hint">Cerca cartelle e brani in questa cartella</string>
     <string name="browser_search_truncated">limite di risultati raggiunto</string>
+    <string name="browser_filter">Filtra questa cartella</string>
+    <string name="browser_filter_hint">Filtra per nome (solo questa cartella)</string>
+    <string name="browser_filter_no_match">Nessun elemento di questa cartella corrisponde a “%1$s”</string>
     <string name="browser_toggle_view">Griglia / elenco</string>
     <string name="browser_more">Altre opzioni</string>
     <string name="browser_shuffle">Riproduzione casuale</string>

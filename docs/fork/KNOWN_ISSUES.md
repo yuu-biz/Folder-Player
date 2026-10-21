@@ -7,7 +7,8 @@ What a user can run into, in one place. The sections below give the history of e
 - **Foldables / hinge**: no fold or hinge information is used; the layout follows the window size. Not checked on a real
   foldable or tablet (window resizing on emulators only).
 - **Navigation**: Back is the previous place (the folder, favourites list or source list the user came from, step by step); the
-  arrow-up button goes up one folder and Back after it returns to where the user was. A folder opened from search results
+  arrow-up button goes up one folder and Back after it returns to where the user was; the home button goes to the source
+  list with no way back from it. A folder opened from search results
   leads back to the folder the search was run in, not to the results;
   Settings shows no mini player.
 - **Sorting "Created"**: Android gives apps no file birth time. Local files: the time added to the media library;
@@ -38,6 +39,8 @@ What a user can run into, in one place. The sections below give the history of e
 - **Credentials**: a WebDAV address typed as `http://user:password@host` is stored as typed (use the user / password
   fields). Passwords entered in the fields are kept in the Android Keystore, per source. API keys of the AI feature
   read from an old (pre-0.6) settings file stay once in `files/migration-backup/` (not backed up).
+- **Filter**: names only (not tags or the folders below); not available in the favourites list or search results. The UI
+  test `OriginBackUiTest#a62` was written with it but not yet run on an emulator.
 - **Not checked**: TalkBack sessions, HyperOS devices, a NAS, a background network retry on a real phone with the
   screen off (a refused foreground start is caught and logged, see below).
 
