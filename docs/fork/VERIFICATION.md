@@ -139,6 +139,20 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.25 File viewer (1.3.0-dev2, 2026-10-21)
+
+Text, images and PDF beside the songs open in a viewer of the browser; "Open in another app" through a FileProvider copy
+(design and limits in [KNOWN_ISSUES.md](KNOWN_ISSUES.md), "File viewer"). Checked in a Claude Code cloud session (no KVM).
+
+| Check | Result |
+|---|---|
+| `FileViewerTest` (file kinds and MIME types; UTF-8 / BOM; Shift_JIS on ja, GB18030 on zh-CN, Big5 on zh-TW; encoding chosen by hand; a cut file ending inside a UTF-8 character stays UTF-8; reading stops at the limit; a copy made once and again after a change; too large / broken reads leave nothing; oldest copies go first, the one opened stays; two callers for one file get one complete copy; local file names) | 12/12 PASS |
+| `testDebugUnitTest` (no fixture servers), `lintDebug`, `compileDebugAndroidTestKotlin` | JVM 242 tests, 0 failures, 25 skipped (protocol tests without fixtures); lint 0 errors, 59 warnings, none in the new code (a `createBitmap` KTX hint of the first build was taken). `StringResourcesParityTest` failed once on two Japanese strings made of numbers only, reworded |
+| `release.yml` "Run workflow" on `69a4f2e`, `version` = `1.3.0-dev2` ([run 39653211663](https://github.com/yuu-biz/Folder-Player/actions/runs/39653211663)) | success (tests, lint, notices, signed APK); `FolderPlayerFork-1.3.0-dev2.apk`, versionCode 1030002, SHA-256 `c406dfb528a5c3cac50a4892ae4ed7db1c65aa22d7b08d455915991e74aa19cf`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; installs over 1.3.0-dev1 and 1.2.0 |
+
+Not run: `ViewerUiTest` a80–a82 (text file opened and closed by the button and by Back, images swiped 1 → 2 of 2, the
+long-press sheet of an image) on an emulator; PDF on a device (no PDF in the fixture); the 1.3.0-dev2 APK on the owner's phone.
+
 ### 5.24 Home button and name filter (1.3.0, 2026-10-21)
 
 Home button beside Back / arrow-up (source list from any depth, replaces "Back to sources" of the ⋮ menu); a filter of the
