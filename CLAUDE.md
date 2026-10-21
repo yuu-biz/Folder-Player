@@ -21,5 +21,6 @@ Kotlin package `com.wing.folderplayer`. The owner writes in Japanese; answer in 
   input `MAJOR.MINOR.PATCH-devN` (installs over the last release). It never creates a release.
 - A release: update `.github/release-notes.md`, the docs and a VERIFICATION §5 record, merge to `main`, push tag
   `vX.Y.Z`; `release.yml` builds, tests, signs and creates the GitHub release (a draft unless `FP_PUBLISH_RELEASES` is
-  `true`).
+  `true`). A Claude Code cloud session can push branches but its git proxy refuses tag pushes (HTTP 403):
+  the owner pushes the tag (`git fetch origin && git tag vX.Y.Z origin/main && git push origin vX.Y.Z`).
 - Comments and docs follow the existing style: plain sentences that say what the code does and why.
