@@ -1,21 +1,21 @@
 Folder Player Fork {VERSION} — an unofficial personal fork of
 [Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000. It is not affiliated with the original
-project. This release follows 1.1.0.
+project. This release follows 1.2.0.
 
-## What's new in 1.2.0
+## What's new in 1.3.0
 
-- **Images that a NAS is not asked for again**: folder thumbnails are kept at 128 / 256 px and the picture of what is playing
-  as one file of up to 2048 px, shared by the mini, full and wide player and the notification. A file is kept until the
-  image itself changes. One size limit (128 MB, 256 MB, 512 MB by default, 1 GB or 2 GB) is shared by both, under
-  Settings → Library & network → Image cache and network use, where the usage and "Clear" are too.
-- **Network use at a glance**: the same page shows a rough account of what the app read from network sources since it was
-  started (images, audio and metadata, other; per source; folder lists; image cache hits and misses), with a reset.
-- **Back is the previous place**: from a folder opened from the favourites list or a bookmark (and the folders you enter after
-  it), Back goes back step by step: the folder, then the list. A new arrow-up button next to the back arrow goes up one
-  folder; Back after it returns to where you were.
+- **Home button**: next to the back arrow and the arrow-up button, one tap goes from any folder straight back to the source
+  list (it replaces "Back to sources" in the ⋮ menu).
+- **Filter for the folder on screen**: the filter button left of the sort buttons narrows the folders and songs of the
+  folder you are in by name as you type, without searching the folders below it. Every word you type must appear in
+  the name; upper / lower case, full / half width and katakana / hiragana do not matter. Back to the folder brings the
+  filter back; another folder starts without it. Playing a song or shuffling uses what the filter shows.
+- On a phone held upright, "Grid / list" and "Refresh" are now in the ⋮ menu, so that the folder name keeps room in
+  the top bar.
 
-Since 1.0.0 (1.1.0): "Search network" and "Get shares" in the SMB editor, the same favourites on several devices through one
-`fav.json` on a NAS, and bookmarks for the folders you open often.
+Earlier in 1.x: 1.2.0 kept NAS images in a two-tier cache with one size limit, added a rough account of network use and
+made Back lead to the previous place (with an arrow-up button); 1.1.0 added "Search network" and "Get shares" in the SMB
+editor, favourites shared through one `fav.json` on a NAS, and bookmarks for folders.
 
 ## Install
 
@@ -36,7 +36,7 @@ Since 1.0.0 (1.1.0): "Search network" and "Get shares" in the SMB editor, the sa
 - **Large screens and foldables**: on a tablet, an unfolded foldable or a wide window the browser and the player sit
   side by side, and Settings has two panes. The layout follows the window, so folding, rotating or resizing keeps
   playback and your place in the browser.
-- **Search, favourites and playlists**: search below the current folder, favourites (optional `fav.json` that several devices can share), bookmarks for folders, playlists with drag reordering, track lengths in the list.
+- **Search, filter, favourites and playlists**: search below the current folder, a name filter for the folder on screen, favourites (optional `fav.json` that several devices can share), bookmarks for folders, playlists with drag reordering, track lengths in the list.
 - **Cover artwork**: folder image first, then the embedded picture, in the player, notification and lock screen for
   every source; grid or list with thumbnails (thumbnails of network sources are opt-in and Wi-Fi only).
 - **Sorting**: by name, modified time, created time or size, remembered per folder. "Created" is the time a local file
@@ -64,6 +64,8 @@ Details: [docs/fork/FEATURES.md]({REPO}/blob/{VERSION_TAG}/docs/fork/FEATURES.md
   then made again). The network account is an estimate, not the bytes on the wire. The cache and the account were tested with
   a Samba server in Docker, not with a real NAS, and the saving on a large real library was not measured.
 - Settings shows no mini player.
+- The filter matches the names of the folder on screen only (not tags, not the folders below); it is not offered in the
+  favourites list or in search results.
 - DLNA casting sends the current track only (nothing advances to the next one) and was tested with a software
   renderer, not a real TV or speaker.
 - The "songs" sleep timer ends with the queue; use the minutes timer together with "next folder".

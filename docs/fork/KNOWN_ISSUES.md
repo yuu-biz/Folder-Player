@@ -44,6 +44,35 @@ What a user can run into, in one place. The sections below give the history of e
 - **Not checked**: TalkBack sessions, HyperOS devices, a NAS, a background network retry on a real phone with the
   screen off (a refused foreground start is caught and logged, see below).
 
+## Playback that stops by itself (investigated after 1.2.0, nothing changed yet)
+
+Report: playback sometimes stops in the middle of a track, also with battery optimisation off for the app. A code
+reading (2026-10-21) found no bug that stops healthy playback of a local file; nothing records why playback stopped, so
+the cause on the owner's phone is not known. Candidates, most likely first:
+
+1. **Audio focus lost to another app** (a video, voice message, game, navigation): `MusicService` lets Media3 handle focus
+   (`setAudioAttributes(…, true)`); a permanent loss pauses and is not resumed. Notification sounds only duck.
+2. **Audio route dropped** (Bluetooth A2DP dropout, USB DAC re-enumerating, loose plug): the app's own
+   `ACTION_AUDIO_BECOMING_NOISY` receiver calls `player.pause()`, which looks like a user pause (reason `USER_REQUEST`).
+3. **Network source with the screen off** (the one weak spot in the code): an outage longer than the 30–60 s buffer ends in
+   a player error → `STATE_IDLE`; the player then holds no wake / Wi-Fi lock and leaves the foreground, while
+   `NetworkRetryController` schedules its retry with `Handler.postDelayed` (1 s … 30 s), which may only run when the device
+   wakes; after 5 minutes it gives up and playback stays stopped. The retry status is not shown anywhere.
+4. **A vendor process killer** after a pause (MIUI / HyperOS, ColorOS, Samsung "deep sleeping apps"; separate from the
+   Android battery-optimisation switch).
+5. By design: the sleep timer; decode errors (would repeat at the same place of the same file).
+
+How to tell them apart right after a stop: a plain pause with the notification still there → 1, 2 (or 5); an error text
+→ 3 (or a decode error); no notification and a cold start → 4. With adb: `adb shell dumpsys audio` (focus owner, device
+disconnects), `adb shell dumpsys activity exit-info com.wing.folderplayer.fork` (why the process ended),
+`adb logcat -s MusicService NetworkRetry`. The crash log of debug mode records uncaught exceptions only.
+
+Next steps proposed (not started): (a) a small persistent log in the app of `onPlayWhenReadyChanged` reasons, player
+errors, retry status and `getHistoricalProcessExitReasons` at start, shown or shareable from Settings; (b) retry network
+errors inside ExoPlayer (a `LoadErrorHandlingPolicy` with backoff) so the player stays buffering with its locks and the
+foreground notification, or at least hold a partial wake lock and Wi-Fi lock while a retry is pending; (c) optionally
+`setHandleAudioBecomingNoisy(true)` instead of the own receiver, so the pause reason is visible.
+
 ## Image cache and network use (1.2.0)
 
 - Images are kept on disk in two tiers under one size limit chosen in Settings → Library & network → Image cache and network

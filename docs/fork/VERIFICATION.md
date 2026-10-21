@@ -15,6 +15,30 @@ bash scripts/wsl-gradle.sh assembleDebug lintDebug testDebugUnitTest
 `scripts/wsl-gradle.sh` selects the JetBrains JDK 21 required by `gradle/gradle-daemon-jvm.properties`. Protocol and
 DLNA tests are skipped here (no fixture servers) and run in step 2.
 
+**In a Claude Code cloud session** (Linux container, no Android SDK, no KVM) the same check runs after a one-time setup:
+
+```
+# Android SDK (cmdline-tools from dl.google.com) and the pinned JetBrains JDK (sha256 as in ci.yml)
+mkdir -p ~/android-sdk/cmdline-tools && cd ~/android-sdk/cmdline-tools \
+  && curl -fsSL -o ct.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
+  && unzip -q ct.zip && mv cmdline-tools latest && rm ct.zip
+yes | ~/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null
+~/android-sdk/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-34" "build-tools;35.0.0"
+mkdir -p ~/jdks/jbrsdk-21.0.11-linux-x64-b1163.116 && curl -fsSL -o /tmp/jbr.tar.gz \
+  https://cache-redirector.jetbrains.com/intellij-jbr/jbrsdk-21.0.11-linux-x64-b1163.116.tar.gz \
+  && tar -xzf /tmp/jbr.tar.gz -C ~/jdks/jbrsdk-21.0.11-linux-x64-b1163.116 --strip-components=1
+chmod +x gradlew && git config core.fileMode false   # the checkout may lose the executable bit
+```
+
+Maven Central may answer 429 (Too Many Requests) through the session's proxy; a local init script
+`~/.gradle/init.d/central-mirror.gradle` that points `https://repo.maven.apache.org/maven2` repositories (in
+`settings.pluginManagement`, `settings.dependencyResolutionManagement` and `allprojects`) at Google's mirror
+`https://maven-central.storage-download.googleapis.com/maven2/` avoids it (not part of the repository). Then
+`bash scripts/wsl-gradle.sh lintDebug testDebugUnitTest compileDebugAndroidTestKotlin`. `assembleDebug` also needs
+`ndk;28.2.13676358`, `cmake;3.22.1` and `bash native/build-ffmpeg.sh`; the emulator suites (step 3) need KVM, which the
+container does not have. A signed APK to try on a phone comes from "Run workflow" of `release.yml` with the `version`
+input (e.g. `1.3.0-dev1`, see [RELEASE.md](RELEASE.md)).
+
 ## 2. Real-protocol tests
 
 ```
@@ -114,6 +138,25 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Real HyperOS hardware (debugging there waived for now), a NAS (postponed), SD cards.
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
+
+### 5.24 Home button and name filter (1.3.0, 2026-10-21)
+
+Home button beside Back / arrow-up (source list from any depth, replaces "Back to sources" of the ⋮ menu); a filter of the
+folder on screen by name (`NameFilter`: every word, case / width / kana insensitive; kept for Back to the folder); on a
+phone held upright (< 480 dp) view mode and refresh move into the ⋮ menu. `ci.yml` became manual-only; `release.yml`
+"Run workflow" got a `version` input for signed dev builds. Checked in a Claude Code cloud session (no KVM) and on the
+owner's phone.
+
+| Check | Result |
+|---|---|
+| `NameFilterTest` (blank filter, case, every word in any order incl. ideographic space, full / half width, katakana / hiragana, order kept) | 5/5 PASS |
+| `testDebugUnitTest` (no fixture servers), `lintDebug`, `compileDebugAndroidTestKotlin` | JVM 230 tests, 0 failures, 25 skipped (protocol tests without fixtures); lint 0 errors (warnings as before) |
+| `release.yml` "Run workflow" on `a713b44`, `version` = `1.3.0-dev1` ([run 39647430909](https://github.com/yuu-biz/Folder-Player/actions/runs/39647430909)) | success (tests, lint, notices, signed APK); `FolderPlayerFork-1.3.0-dev1.apk`, versionCode 1030001, SHA-256 `aded9600db2e0441c33e767b2f597f7641ee0fe2490b53612f31ff2071c374cb`, certificate SHA-256 `bd7e9920…6da3c1a` = the release key |
+| On the owner's phone (1.3.0-dev1 over 1.2.0): home button, filter, Back to a filtered folder | OK (owner's check) |
+
+Not run: the emulator suites, including the new `OriginBackUiTest#a62` (home button, filter kept for Back, no-match text,
+close) and the suites whose `click("btn_view_mode")` / `click("btn_refresh")` now go through the ⋮ menu on a narrow
+emulator (`UiTestBase.click` falls back to `menu_view_mode` / `menu_refresh`). Run them at the next emulator session.
 
 ### 5.23 Image cache in two tiers, cache limit, network account (1.2.0-dev1, 2026-10-08)
 
