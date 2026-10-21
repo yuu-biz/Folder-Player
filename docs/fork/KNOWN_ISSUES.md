@@ -41,8 +41,45 @@ What a user can run into, in one place. The sections below give the history of e
   read from an old (pre-0.6) settings file stay once in `files/migration-backup/` (not backed up).
 - **Filter**: names only (not tags or the folders below); not available in the favourites list or search results. The UI
   test `OriginBackUiTest#a62` was written with it but not yet run on an emulator.
+- **File viewer**: text shows the first 1 MB, images up to 2560 px (enough to zoom, not the full size of a large scan), GIFs
+  without animation, PDFs as pages (no text search, no links, no password-protected files); files over 200 MB are not
+  opened. Copies of images and PDFs from a source are kept in the app's cache (up to 300 MB, outside the image cache of
+  Settings). Not yet run on an emulator or a phone (see below).
 - **Not checked**: TalkBack sessions, HyperOS devices, a NAS, a background network retry on a real phone with the
   screen off (a refused foreground start is caught and logged, see below).
+
+## File viewer (after 1.3.0)
+
+Text, images and PDF beside the songs open in a viewer of the browser (a tap, or "Open" in the long-press sheet); "Open in
+another app" hands the file to an app chosen by Android. How it works and why:
+
+- **One way for every source.** Files of SMB, FTP, WebDAV and SAF sources cannot be opened by other apps, so the viewer
+  reads the file itself through the source. Text is read directly (the first 1 MB, `ViewerText.LIMIT`). Images and PDFs
+  are copied to `cache/viewer/<key>/<name>` first (`ViewerCache`): PDF needs a local file for Android's `PdfRenderer`,
+  and the same copy is what "Open in another app" shares (FileProvider `<applicationId>.viewer`, this folder only, read
+  permission per intent). The key is the file's URI, size and modification time: a file is copied once and again only
+  when it changes. The copies stay under 300 MB (oldest first out); files over 200 MB are refused with a message. Local
+  files are copied too (simple and the same for all sources; a copy of a local file is quick).
+- **Text encoding.** A byte order mark, then strict UTF-8, then the legacy encodings of the device language: Shift_JIS
+  and EUC-JP on a Japanese device, Big5 on Traditional Chinese, GB18030 elsewhere (as the lyric and CUE reader). Each is
+  taken only when every byte decodes; GB18030 accepts almost any bytes, so on an English device Shift_JIS text is shown as
+  GB18030 garbage: the ⋮ menu of the viewer picks the encoding by hand. A file cut at 1 MB may end inside a character;
+  that end is dropped instead of failing the UTF-8 check. Rip logs, NFO, CUE and checksum files use a fixed-width font
+  by default (switchable in the same menu).
+- **Images** swipe to the other images of the list on screen (in its order, the filter applied); pinch or double tap to
+  zoom, a single finger at normal size swipes. Decoded by Coil from the copy at up to 2560 px.
+- **PDF** pages are rendered one at a time on a thread of their own, at 1.5 × the screen width (at most 2048 px), so that
+  zoomed text stays readable; a vertical drag of a zoomed page that reaches its edge scrolls the pages.
+- **Long-press sheet**: a viewable file has "Open" and "Open in another app" instead of "Add to playlist" and
+  "Add to favourites" (an image or PDF already in the favourites can still be removed there).
+
+Open points:
+
+- Not run on an emulator or a phone yet: `ViewerUiTest` (text, images swiped, Back, the long-press sheet) was written and
+  compiled in a Claude Code cloud session without KVM. PDF has no device test (the fixture has no PDF); the JVM tests
+  cover the file kinds, decoding and the copies (`FileViewerTest`).
+- The viewer's copies are not part of Settings → image cache (usage and Clear); Android may clear them when storage
+  runs low. Search results list folders, songs and CUE sheets only, not files the viewer opens.
 
 ## Playback that stops by itself (investigated after 1.2.0, nothing changed yet)
 

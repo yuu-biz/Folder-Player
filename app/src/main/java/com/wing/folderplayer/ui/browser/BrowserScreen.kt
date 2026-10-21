@@ -56,6 +56,8 @@ import com.wing.folderplayer.data.source.SourceConfig
 import com.wing.folderplayer.data.source.SourcePath
 import com.wing.folderplayer.data.source.SourceRef
 import com.wing.folderplayer.data.source.SourceType
+import com.wing.folderplayer.data.viewer.ViewerKind
+import com.wing.folderplayer.data.viewer.ViewerTypes
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -111,12 +113,26 @@ fun BrowserScreen(
         )
     }
 
+    val externalOpener = rememberExternalOpener(viewModel::viewerFile)
+    ExternalOpenProgress(externalOpener)
+    uiState.viewer?.let { request ->
+        FileViewerDialog(
+            request = request,
+            loadText = viewModel::viewerText,
+            loadFile = viewModel::viewerFile,
+            onOpenExternal = { externalOpener.open(it) },
+            onDismiss = { viewModel.closeViewer() },
+        )
+    }
+
     val selected = uiState.selectedFileForPlaylist
     if (selected != null && !showPlaylistPicker) {
         FileActionsSheet(
             file = selected,
             isFavorite = viewModel.isFavorite(selected),
             isBookmarked = selected.isDirectory && uiState.isBookmarked(selected.ref),
+            onOpen = if (ViewerTypes.isViewable(selected.name)) ({ viewModel.openViewer(selected) }) else null,
+            onOpenExternal = if (ViewerTypes.isViewable(selected.name)) ({ viewModel.closePlaylistDialog(); externalOpener.open(selected) }) else null,
             onAddToPlaylist = { showPlaylistPicker = true },
             onToggleFavorite = { viewModel.toggleFavorite(selected); viewModel.closePlaylistDialog() },
             onToggleBookmark = if (selected.isDirectory) ({ viewModel.toggleBookmark(selected); viewModel.closePlaylistDialog() }) else null,
@@ -724,7 +740,7 @@ fun FileList(
         items(files, key = { it.sourceId + it.path }) { file ->
             val playing = isPlaying(file, currentlyPlaying)
             val parentOfPlaying = remember(file.path, currentlyPlaying) { isParentOfPlaying(file, currentlyPlaying) }
-            val isUnsupported = !file.isDirectory && !MediaTypes.isAudio(file.name) && !MediaTypes.isCue(file.name)
+            val isUnsupported = !file.isDirectory && !MediaTypes.isAudio(file.name) && !MediaTypes.isCue(file.name) && !ViewerTypes.isViewable(file.name)
 
             Column {
                 Box(modifier = Modifier.fillMaxWidth()) {
@@ -789,12 +805,7 @@ fun FileList(
                             if (file.isDirectory && !playing) {
                                 FolderThumb(file, thumbnail, Modifier.size(40.dp), 24.dp)
                             } else {
-                                val icon = when {
-                                    playing -> Icons.Default.PlayCircleFilled
-                                    MediaTypes.isCue(file.name) -> Icons.Default.Description
-                                    MediaTypes.isAudio(file.name) -> Icons.Default.MusicNote
-                                    else -> Icons.Default.InsertDriveFile
-                                }
+                                val icon = if (playing) Icons.Default.PlayCircleFilled else fileIcon(file)
                                 val tint = when {
                                     playing || parentOfPlaying -> MaterialTheme.colorScheme.primary
                                     isUnsupported -> LocalContentColor.current.copy(alpha = 0.3f)
@@ -844,7 +855,7 @@ fun FileGrid(
     ) {
         items(files, key = { it.sourceId + it.path }) { file ->
             val playing = isPlaying(file, currentlyPlaying) || isParentOfPlaying(file, currentlyPlaying)
-            val unsupported = !file.isDirectory && !MediaTypes.isAudio(file.name) && !MediaTypes.isCue(file.name)
+            val unsupported = !file.isDirectory && !MediaTypes.isAudio(file.name) && !MediaTypes.isCue(file.name) && !ViewerTypes.isViewable(file.name)
             Column(
                 modifier = Modifier
                     .combinedClickable(enabled = !unsupported, role = Role.Button, onLongClickLabel = detailsLabel, onClick = { onFileClick(file) }, onLongClick = { onFileLongClick(file) })
@@ -860,11 +871,7 @@ fun FileGrid(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            when {
-                                MediaTypes.isCue(file.name) -> Icons.Default.Description
-                                MediaTypes.isAudio(file.name) -> Icons.Default.MusicNote
-                                else -> Icons.Default.InsertDriveFile
-                            },
+                            fileIcon(file),
                             contentDescription = null,
                             modifier = Modifier.size(36.dp),
                             tint = if (unsupported) LocalContentColor.current.copy(alpha = 0.3f) else LocalContentColor.current
@@ -885,6 +892,18 @@ fun FileGrid(
     }
 }
 
+/** The icon of a file that is not a folder: song, CUE sheet, a file the viewer opens, or another file. */
+private fun fileIcon(file: MusicFile): androidx.compose.ui.graphics.vector.ImageVector = when {
+    MediaTypes.isCue(file.name) -> Icons.Default.Description
+    MediaTypes.isAudio(file.name) -> Icons.Default.MusicNote
+    else -> when (ViewerTypes.kind(file.name)) {
+        ViewerKind.IMAGE -> Icons.Default.Image
+        ViewerKind.PDF -> Icons.Default.PictureAsPdf
+        ViewerKind.TEXT -> Icons.Default.Article
+        null -> Icons.Default.InsertDriveFile
+    }
+}
+
 fun formatSize(size: Long): String {
     if (size <= 0) return "0 B"
     val units = arrayOf("B", "KB", "MB", "GB", "TB")
@@ -898,6 +917,9 @@ private fun FileActionsSheet(
     file: MusicFile,
     isFavorite: Boolean,
     isBookmarked: Boolean,
+    /** Files the viewer shows: null = no "Open" rows. */
+    onOpen: (() -> Unit)?,
+    onOpenExternal: (() -> Unit)?,
     onAddToPlaylist: () -> Unit,
     onToggleFavorite: () -> Unit,
     /** Folders only: null = no bookmark row. */
@@ -920,12 +942,24 @@ private fun FileActionsSheet(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp).testTag("action_details"))
             Text(SourcePath.parent(file.path) ?: "/", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp))
-            ListItem(
+            if (onOpen != null) ListItem(
+                headlineContent = { Text(stringResource(R.string.viewer_open)) },
+                leadingContent = { Icon(Icons.Default.Visibility, contentDescription = null) },
+                modifier = Modifier.clickable { onOpen() }.testTag("action_open")
+            )
+            if (onOpenExternal != null) ListItem(
+                headlineContent = { Text(stringResource(R.string.viewer_open_external)) },
+                leadingContent = { Icon(Icons.Default.OpenInNew, contentDescription = null) },
+                modifier = Modifier.clickable { onOpenExternal() }.testTag("action_open_external")
+            )
+            // Playlists and favourites hold what can be played: folders, songs and CUE sheets.
+            val playable = file.isDirectory || MediaTypes.isAudio(file.name) || MediaTypes.isCue(file.name)
+            if (playable) ListItem(
                 headlineContent = { Text(stringResource(R.string.browser_add_to_playlist)) },
                 leadingContent = { Icon(Icons.Default.PlaylistAdd, contentDescription = null) },
                 modifier = Modifier.clickable { onAddToPlaylist() }.testTag("action_add_playlist")
             )
-            ListItem(
+            if (playable || isFavorite) ListItem(
                 headlineContent = { Text(stringResource(if (isFavorite) R.string.browser_remove_favorite else R.string.browser_add_favorite)) },
                 leadingContent = { Icon(if (isFavorite) Icons.Default.FavoriteBorder else Icons.Default.Favorite, contentDescription = null) },
                 modifier = Modifier.clickable { onToggleFavorite() }.testTag("action_favorite")

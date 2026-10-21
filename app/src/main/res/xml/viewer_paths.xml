@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Files the viewer copied from a source (ViewerCache); nothing else of the app is reachable through the provider. -->
+<paths>
+    <cache-path name="viewer" path="viewer/" />
+</paths>

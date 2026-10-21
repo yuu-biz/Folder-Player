@@ -55,6 +55,17 @@
             </intent-filter>
         </service>
 
+        <!-- "Open in another app" from the file viewer: local copies in cache/viewer, read access granted per intent -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.viewer"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/viewer_paths" />
+        </provider>
+
     </application>
 
 </manifest>
