@@ -767,6 +767,48 @@ T["ja"].update({
 })
 
 
+# File viewer (text, images, PDF beside the songs).
+T["zh-rCN"].update({
+    "viewer_open": "打开", "viewer_open_external": "用其他应用打开", "viewer_no_app": "此设备上没有可以打开此文件的应用",
+    "viewer_getting_file": "正在从来源获取文件…", "viewer_progress_of": "%1$s / %2$s", "viewer_failed": "无法打开此文件：%1$s",
+    "viewer_too_large": "此文件太大，无法在此打开（超过 %1$s）", "viewer_text_truncated": "仅显示此文件的前 %1$s。",
+    "viewer_encoding": "字符编码", "viewer_encoding_automatic": "自动", "viewer_encoding_auto": "自动（%1$s）", "viewer_monospace": "等宽字体",
+    "viewer_image_failed": "无法显示此图片", "viewer_image_count": "%1$d / %2$d", "viewer_pdf_page": "第 %1$d 页，共 %2$d 页",
+    "viewer_pdf_protected": "此 PDF 受密码保护，无法在此显示",
+})
+T["zh-rTW"].update({
+    "viewer_open": "開啟", "viewer_open_external": "以其他應用程式開啟", "viewer_no_app": "此裝置上沒有可以開啟此檔案的應用程式",
+    "viewer_getting_file": "正在從來源取得檔案…", "viewer_progress_of": "%1$s / %2$s", "viewer_failed": "無法開啟此檔案：%1$s",
+    "viewer_too_large": "此檔案太大，無法在此開啟（超過 %1$s）", "viewer_text_truncated": "僅顯示此檔案的前 %1$s。",
+    "viewer_encoding": "字元編碼", "viewer_encoding_automatic": "自動", "viewer_encoding_auto": "自動（%1$s）", "viewer_monospace": "等寬字型",
+    "viewer_image_failed": "無法顯示此圖片", "viewer_image_count": "%1$d / %2$d", "viewer_pdf_page": "第 %1$d 頁，共 %2$d 頁",
+    "viewer_pdf_protected": "此 PDF 受密碼保護，無法在此顯示",
+})
+T["fr"].update({
+    "viewer_open": "Ouvrir", "viewer_open_external": "Ouvrir dans une autre application", "viewer_no_app": "Aucune application de cet appareil ne peut ouvrir ce fichier",
+    "viewer_getting_file": "Récupération du fichier depuis la source…", "viewer_progress_of": "%1$s sur %2$s", "viewer_failed": "Impossible d'ouvrir ce fichier : %1$s",
+    "viewer_too_large": "Ce fichier est trop volumineux pour être ouvert ici (plus de %1$s)", "viewer_text_truncated": "Seuls les premiers %1$s de ce fichier sont affichés.",
+    "viewer_encoding": "Encodage des caractères", "viewer_encoding_automatic": "Automatique", "viewer_encoding_auto": "Automatique (%1$s)", "viewer_monospace": "Police à chasse fixe",
+    "viewer_image_failed": "Impossible d'afficher cette image", "viewer_image_count": "%1$d sur %2$d", "viewer_pdf_page": "Page %1$d sur %2$d",
+    "viewer_pdf_protected": "Ce PDF est protégé par un mot de passe et ne peut pas être affiché ici",
+})
+T["it"].update({
+    "viewer_open": "Apri", "viewer_open_external": "Apri in un'altra app", "viewer_no_app": "Nessuna app su questo dispositivo può aprire questo file",
+    "viewer_getting_file": "Recupero del file dalla sorgente…", "viewer_progress_of": "%1$s di %2$s", "viewer_failed": "Impossibile aprire questo file: %1$s",
+    "viewer_too_large": "Questo file è troppo grande per essere aperto qui (oltre %1$s)", "viewer_text_truncated": "Sono mostrati solo i primi %1$s di questo file.",
+    "viewer_encoding": "Codifica dei caratteri", "viewer_encoding_automatic": "Automatica", "viewer_encoding_auto": "Automatica (%1$s)", "viewer_monospace": "Carattere a larghezza fissa",
+    "viewer_image_failed": "Impossibile mostrare questa immagine", "viewer_image_count": "%1$d di %2$d", "viewer_pdf_page": "Pagina %1$d di %2$d",
+    "viewer_pdf_protected": "Questo PDF è protetto da password e non può essere mostrato qui",
+})
+T["ja"].update({
+    "viewer_open": "開く", "viewer_open_external": "ほかのアプリで開く", "viewer_no_app": "このファイルを開けるアプリがこの端末にありません",
+    "viewer_getting_file": "ソースからファイルを取得しています…", "viewer_progress_of": "%2$s 中 %1$s", "viewer_failed": "このファイルを開けません：%1$s",
+    "viewer_too_large": "ファイルが大きすぎるため、ここでは開けません（%1$s 超）", "viewer_text_truncated": "このファイルの先頭 %1$s だけを表示しています。",
+    "viewer_encoding": "文字コード", "viewer_encoding_automatic": "自動", "viewer_encoding_auto": "自動（%1$s）", "viewer_monospace": "等幅フォント",
+    "viewer_image_failed": "この画像は表示できません", "viewer_image_count": "%2$d 枚中 %1$d 枚目", "viewer_pdf_page": "%1$d / %2$d ページ",
+    "viewer_pdf_protected": "この PDF はパスワードで保護されているため、ここでは表示できません",
+})
+
 def main():
     keys = base_keys()
     ok = True

@@ -26,6 +26,10 @@ import com.wing.folderplayer.data.source.SourcePath
 import com.wing.folderplayer.data.source.SourceRef
 import com.wing.folderplayer.data.source.SourceRegistry
 import com.wing.folderplayer.data.source.SourceType
+import com.wing.folderplayer.data.viewer.ViewerCache
+import com.wing.folderplayer.data.viewer.ViewerKind
+import com.wing.folderplayer.data.viewer.ViewerText
+import com.wing.folderplayer.data.viewer.ViewerTypes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -87,6 +91,8 @@ data class BrowserUiState(
     /** The filter of the folder on screen (see [NameFilter]); kept for the way back to the folder, dropped for another one. */
     val filter: String = "",
     val filterOpen: Boolean = false,
+    /** The file open in the viewer (text, image or PDF beside the songs), or null. */
+    val viewer: ViewerRequest? = null,
 ) {
     /** [files] narrowed by [filter]: the list on screen (playing a song of it queues the songs shown). */
     val visibleFiles: List<MusicFile> by lazy(LazyThreadSafetyMode.NONE) { NameFilter.apply(files, filter) }
@@ -116,6 +122,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private val durations = com.wing.folderplayer.data.metadata.DurationRepository.get(application)
     val favoritesRepository: FavoritesRepository
     val bookmarksRepository: BookmarksRepository
+    private val viewerCache = ViewerCache(File(application.cacheDir, "viewer"))
     private val searchRepository = SearchRepository({ ref -> SourceRegistry.fileSystem(ref).list(ref.path) })
     private var loadJob: Job? = null
 
@@ -467,13 +474,13 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             onCuePlay(file.ref)
             return
         }
+        if (ViewerTypes.isViewable(file.name)) {
+            openViewer(file)
+            return
+        }
         if (!MediaTypes.isAudio(file.name)) return
 
-        val list = when {
-            _uiState.value.search.active -> _uiState.value.search.results
-            _uiState.value.showingFavorites -> _uiState.value.files
-            else -> _uiState.value.visibleFiles
-        }
+        val list = listOnScreen()
         val musicFiles = list.filter { !it.isDirectory && MediaTypes.isAudio(it.name) }
         val clickIndex = musicFiles.indexOfFirst { it.sourceId == file.sourceId && it.path == file.path }
         if (clickIndex != -1) {
@@ -482,6 +489,37 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             onFolderPlay(file.ref.parent ?: SourceRef(file.sourceId, SourcePath.ROOT), file.path)
         }
     }
+
+    /** The entries shown: search results, the favourites list or the (filtered) folder. */
+    private fun listOnScreen(): List<MusicFile> = when {
+        _uiState.value.search.active -> _uiState.value.search.results
+        _uiState.value.showingFavorites -> _uiState.value.files
+        else -> _uiState.value.visibleFiles
+    }
+
+    // ---------------- viewer ----------------
+
+    /** Opens [file] in the viewer; an image can be swiped to the other images of the list on screen, in its order. */
+    fun openViewer(file: MusicFile) {
+        val kind = ViewerTypes.kind(file.name) ?: return
+        val same = { f: MusicFile -> f.sourceId == file.sourceId && f.path == file.path }
+        val images = if (kind == ViewerKind.IMAGE) listOnScreen().filter { !it.isDirectory && ViewerTypes.kind(it.name) == ViewerKind.IMAGE } else emptyList()
+        val index = images.indexOfFirst(same)
+        val request = if (index >= 0) ViewerRequest(images, index) else ViewerRequest(listOf(file), 0)
+        _uiState.value = _uiState.value.copy(viewer = request, selectedFileForPlaylist = null)
+    }
+
+    fun closeViewer() {
+        _uiState.value = _uiState.value.copy(viewer = null)
+    }
+
+    /** The beginning of a text file for the viewer ([ViewerText.LIMIT]). */
+    suspend fun viewerText(file: MusicFile): Pair<ByteArray, Boolean> =
+        runInterruptible(Dispatchers.IO) { ViewerText.read(SourceRegistry.fileSystem(file.ref), file.path) }
+
+    /** The local copy of [file] for the viewer or another app (made once, see [ViewerCache]). */
+    suspend fun viewerFile(file: MusicFile, onProgress: (Long) -> Unit): File =
+        runInterruptible(Dispatchers.IO) { viewerCache.fetch(SourceRegistry.fileSystem(file.ref), file, onProgress = onProgress) }
 
     fun playCurrentFolder(onFolderPlay: (SourceRef, String?) -> Unit) {
         _uiState.value.currentFolder?.let { onFolderPlay(it, null) }
