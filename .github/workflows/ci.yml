@@ -1,14 +1,12 @@
 name: CI
 
-# Checks for pushes to main, pull requests and manual runs: debug build, JVM unit tests, lint and the license notices.
-# It needs no secrets, never signs anything and never creates a release (permissions: read-only). Releases are made by
-# release.yml from a tag. The emulator suites and the protocol tests against Docker fixture servers are not run here
+# Checks run by hand ("Run workflow"), once just before a release: debug build, JVM unit tests, lint and the license
+# notices. Pushes and pull requests do not start it (the free Actions minutes ran out at times); changes are checked
+# locally (scripts/wsl-gradle.sh) while they are made. It needs no secrets, never signs anything and never creates a
+# release (permissions: read-only). Releases are made by release.yml from a tag. The emulator suites and the protocol tests against Docker fixture servers are not run here
 # (see docs/fork/VERIFICATION.md); the JVM tests include the string-resource parity test (StringResourcesParityTest)
 # and skip the protocol tests that need the fixture servers.
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:

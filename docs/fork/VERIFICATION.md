@@ -5,7 +5,8 @@ How the fork is built and tested. Commands run from the repository root in WSL U
 
 ## 1. Build, lint, JVM tests
 
-(`.github/workflows/ci.yml` runs the same on every push to main and pull request.)
+(`.github/workflows/ci.yml` runs the same, started by hand once just before a release; pushes and pull requests do not
+start it, so this local run is the check while changes are made.)
 
 ```
 bash scripts/wsl-gradle.sh assembleDebug lintDebug testDebugUnitTest

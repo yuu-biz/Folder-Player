@@ -28,6 +28,9 @@
     <string name="browser_search">搜索</string>
     <string name="browser_search_hint">搜索此文件夹下的文件夹和歌曲</string>
     <string name="browser_search_truncated">已达结果上限</string>
+    <string name="browser_filter">筛选此文件夹</string>
+    <string name="browser_filter_hint">按名称筛选（仅此文件夹）</string>
+    <string name="browser_filter_no_match">此文件夹中没有与“%1$s”匹配的项目</string>
     <string name="browser_toggle_view">网格 / 列表</string>
     <string name="browser_more">更多选项</string>
     <string name="browser_shuffle">随机播放</string>

@@ -28,6 +28,9 @@
     <string name="browser_search">Rechercher</string>
     <string name="browser_search_hint">Rechercher dossiers et morceaux sous ce dossier</string>
     <string name="browser_search_truncated">limite de résultats atteinte</string>
+    <string name="browser_filter">Filtrer ce dossier</string>
+    <string name="browser_filter_hint">Filtrer par nom (ce dossier seulement)</string>
+    <string name="browser_filter_no_match">Rien dans ce dossier ne correspond à « %1$s »</string>
     <string name="browser_toggle_view">Grille / liste</string>
     <string name="browser_more">Plus d\'options</string>
     <string name="browser_shuffle">Lecture aléatoire</string>

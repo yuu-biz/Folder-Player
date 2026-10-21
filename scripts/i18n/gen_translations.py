@@ -611,6 +611,7 @@ T["ja"] = {
 
 # Settings categories, browser row labels (1.0.0 UI polish).
 T["zh-rCN"].update({
+    "browser_filter": "筛选此文件夹", "browser_filter_hint": "按名称筛选（仅此文件夹）", "browser_filter_no_match": "此文件夹中没有与“%1$s”匹配的项目",
     "settings_image_cache": "图片缓存与网络用量", "settings_cache_limit_summary": "上限 %1$s",
     "settings_cache_limit": "容量上限（缩略图与播放器图片合计）", "settings_cache_usage": "已用：%1$s / %2$s",
     "settings_cache_thumbs": "缩略图：%1$s · %2$d 个", "settings_cache_artwork": "播放器图片：%1$s · %2$d 个",
@@ -641,6 +642,7 @@ T["zh-rCN"].update({
     "settings_lyrics_priority": "歌词来源优先级", "settings_thumbs_summary": "已开启 %1$d / %2$d", "settings_not_set": "未设置",
 })
 T["zh-rTW"].update({
+    "browser_filter": "篩選此資料夾", "browser_filter_hint": "依名稱篩選（僅此資料夾）", "browser_filter_no_match": "此資料夾中沒有符合「%1$s」的項目",
     "settings_image_cache": "圖片快取與網路用量", "settings_cache_limit_summary": "上限 %1$s",
     "settings_cache_limit": "容量上限（縮圖與播放器圖片合計）", "settings_cache_usage": "已用：%1$s / %2$s",
     "settings_cache_thumbs": "縮圖：%1$s · %2$d 個", "settings_cache_artwork": "播放器圖片：%1$s · %2$d 個",
@@ -671,6 +673,7 @@ T["zh-rTW"].update({
     "settings_lyrics_priority": "歌詞來源優先順序", "settings_thumbs_summary": "已開啟 %1$d / %2$d", "settings_not_set": "未設定",
 })
 T["fr"].update({
+    "browser_filter": "Filtrer ce dossier", "browser_filter_hint": "Filtrer par nom (ce dossier seulement)", "browser_filter_no_match": "Rien dans ce dossier ne correspond à « %1$s »",
     "settings_image_cache": "Cache d'images et usage réseau", "settings_cache_limit_summary": "Limite : %1$s",
     "settings_cache_limit": "Limite de taille (miniatures et images du lecteur ensemble)", "settings_cache_usage": "Utilisé : %1$s sur %2$s",
     "settings_cache_thumbs": "Miniatures : %1$s · %2$d fichiers", "settings_cache_artwork": "Images du lecteur : %1$s · %2$d fichiers",
@@ -701,6 +704,7 @@ T["fr"].update({
     "settings_lyrics_priority": "Priorité des paroles", "settings_thumbs_summary": "Activées pour %1$d sur %2$d", "settings_not_set": "Non défini",
 })
 T["it"].update({
+    "browser_filter": "Filtra questa cartella", "browser_filter_hint": "Filtra per nome (solo questa cartella)", "browser_filter_no_match": "Nessun elemento di questa cartella corrisponde a “%1$s”",
     "settings_image_cache": "Cache immagini e uso della rete", "settings_cache_limit_summary": "Limite %1$s",
     "settings_cache_limit": "Limite di spazio (miniature e immagini del lettore insieme)", "settings_cache_usage": "In uso: %1$s su %2$s",
     "settings_cache_thumbs": "Miniature: %1$s · %2$d file", "settings_cache_artwork": "Immagini del lettore: %1$s · %2$d file",
@@ -731,6 +735,7 @@ T["it"].update({
     "settings_lyrics_priority": "Priorità dei testi", "settings_thumbs_summary": "Attive per %1$d su %2$d", "settings_not_set": "Non impostato",
 })
 T["ja"].update({
+    "browser_filter": "このフォルダを絞り込む", "browser_filter_hint": "名前で絞り込み（このフォルダのみ）", "browser_filter_no_match": "このフォルダに「%1$s」に一致する項目はありません",
     "settings_image_cache": "画像キャッシュとネットワーク使用量", "settings_cache_limit_summary": "上限 %1$s",
     "settings_cache_limit": "サイズ上限（サムネイルとプレーヤー画像の合計）", "settings_cache_usage": "使用中：%1$s / %2$s",
     "settings_cache_thumbs": "サムネイル：%1$s・%2$d 件", "settings_cache_artwork": "プレーヤー画像：%1$s・%2$d 件",

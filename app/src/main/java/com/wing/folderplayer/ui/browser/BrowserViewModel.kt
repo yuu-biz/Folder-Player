@@ -14,6 +14,7 @@ import com.wing.folderplayer.data.favorites.FavoritesRepository
 import com.wing.folderplayer.data.favorites.SyncAnchor
 import com.wing.folderplayer.data.favorites.SyncResult
 import com.wing.folderplayer.data.prefs.SourcePreferences
+import com.wing.folderplayer.data.search.NameFilter
 import com.wing.folderplayer.data.search.SearchProgress
 import com.wing.folderplayer.data.search.SearchRepository
 import com.wing.folderplayer.data.source.ConnectionTestResult
@@ -40,6 +41,8 @@ data class CacheEntry(
     val timestamp: Long,
     val scrollIndex: Int = 0,
     val scrollOffset: Int = 0,
+    /** The filter the list was narrowed by when [scrollIndex] was saved (the position is of that list). */
+    val scrollFilter: String = "",
     val sortField: String,
     val sortAscending: Boolean
 )
@@ -81,7 +84,13 @@ data class BrowserUiState(
     val loadError: String? = null,
     /** Bumped when folder images must be looked up again (refresh, permission change, cache cleared). */
     val thumbnailRevision: Int = 0,
+    /** The filter of the folder on screen (see [NameFilter]); kept for the way back to the folder, dropped for another one. */
+    val filter: String = "",
+    val filterOpen: Boolean = false,
 ) {
+    /** [files] narrowed by [filter]: the list on screen (playing a song of it queues the songs shown). */
+    val visibleFiles: List<MusicFile> by lazy(LazyThreadSafetyMode.NONE) { NameFilter.apply(files, filter) }
+
     val currentSource: SourceConfig? get() = currentFolder?.let { f -> availableSources.firstOrNull { it.id == f.sourceId } }
     val isRoot: Boolean get() = currentFolder == null && !showingFavorites
 
@@ -114,7 +123,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private sealed interface Place {
         object SourceList : Place
         object Favorites : Place
-        data class Folder(val ref: SourceRef) : Place
+        data class Folder(val ref: SourceRef, val filter: String = "") : Place
     }
 
     /** The places left by navigating, latest last: Back goes to the previous one (see [navigateUp]). */
@@ -228,7 +237,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     private fun currentPlace(): Place = when {
         _uiState.value.showingFavorites -> Place.Favorites
-        else -> _uiState.value.currentFolder?.let { Place.Folder(it) } ?: Place.SourceList
+        else -> _uiState.value.currentFolder?.let { Place.Folder(it, _uiState.value.filter) } ?: Place.SourceList
     }
 
     /** Call before leaving the current place by navigating (a refresh or Back does not). */
@@ -279,18 +288,23 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     /**
      * @param isBackNavigation If true, we will try to restore the scroll position from cache.
+     * @param filter The filter to show the folder with; null: the current one for the same folder (a refresh), none for another.
      */
-    fun loadFolder(folder: SourceRef, isBackNavigation: Boolean = false) {
+    fun loadFolder(folder: SourceRef, isBackNavigation: Boolean = false, filter: String? = null) {
         val now = System.currentTimeMillis()
         directoryCache.entries.removeIf { now - it.value.timestamp > CACHE_EXPIRY_MS }
         loadJob?.cancel()
 
+        val sameFolder = folder == _uiState.value.currentFolder
+        val newFilter = filter ?: if (sameFolder) _uiState.value.filter else ""
         _uiState.value = _uiState.value.copy(
             isLoading = true,
             currentFolder = folder,
             loadError = null,
             showingFavorites = false,
             viewMode = sourcePreferences.getViewMode(folder),
+            filter = newFilter,
+            filterOpen = newFilter.isNotEmpty() || (sameFolder && _uiState.value.filterOpen),
         )
         sourcePreferences.saveLastBrowsedState(folder)
 
@@ -303,13 +317,14 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             val cached = directoryCache[key]
             if (cached != null && (now - cached.timestamp < CACHE_EXPIRY_MS)) {
                 val finalFiles = if (cached.sortField != field || cached.sortAscending != asc) applySort(cached.files, field, asc) else cached.files
+                val restore = isBackNavigation && cached.scrollFilter == newFilter
                 _uiState.value = _uiState.value.copy(
                     files = finalFiles,
                     isLoading = false,
                     sortField = field,
                     sortAscending = asc,
-                    scrollToIndex = if (isBackNavigation) cached.scrollIndex else 0,
-                    scrollToOffset = if (isBackNavigation) cached.scrollOffset else 0,
+                    scrollToIndex = if (restore) cached.scrollIndex else 0,
+                    scrollToOffset = if (restore) cached.scrollOffset else 0,
                     scrollTrigger = _uiState.value.scrollTrigger + 1
                 )
                 return@launch
@@ -350,7 +365,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         if (_uiState.value.showingFavorites) { favoritesScroll = index to offset; return }
         val key = _uiState.value.currentFolder?.toUriString() ?: return
         directoryCache[key]?.let { entry ->
-            directoryCache[key] = entry.copy(scrollIndex = index, scrollOffset = offset)
+            directoryCache[key] = entry.copy(scrollIndex = index, scrollOffset = offset, scrollFilter = _uiState.value.filter)
         }
     }
 
@@ -404,7 +419,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             when (previous) {
                 Place.SourceList -> showSourceList()
                 Place.Favorites -> renderFavorites(restoreScroll = true)
-                is Place.Folder -> loadFolder(previous.ref, isBackNavigation = true)
+                is Place.Folder -> loadFolder(previous.ref, isBackNavigation = true, filter = previous.filter)
             }
             return
         }
@@ -423,7 +438,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         loadFolder(parent, isBackNavigation = true)
     }
 
-    /** "Back to the sources" of the menu: the source list, with no way back from it. */
+    /** The home button of the top bar: the source list, with no way back from it (Back there leaves the app). */
     fun exitSource() {
         backStack.clear()
         showSourceList()
@@ -433,7 +448,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         loadJob?.cancel()
         closeSearch()
         sourcePreferences.saveLastBrowsedState(null)
-        _uiState.value = _uiState.value.copy(currentFolder = null, showingFavorites = false, files = emptyList(), isLoading = false)
+        _uiState.value = _uiState.value.copy(currentFolder = null, showingFavorites = false, files = emptyList(), isLoading = false, filter = "", filterOpen = false)
     }
 
     fun onFileClicked(
@@ -457,7 +472,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         val list = when {
             _uiState.value.search.active -> _uiState.value.search.results
             _uiState.value.showingFavorites -> _uiState.value.files
-            else -> _uiState.value.files
+            else -> _uiState.value.visibleFiles
         }
         val musicFiles = list.filter { !it.isDirectory && MediaTypes.isAudio(it.name) }
         val clickIndex = musicFiles.indexOfFirst { it.sourceId == file.sourceId && it.path == file.path }
@@ -473,7 +488,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun shufflePlay(onFolderPlay: (SourceRef, String?) -> Unit, onCustomPlay: (List<MusicFile>, Int) -> Unit) {
-        val files = _uiState.value.files
+        val files = _uiState.value.visibleFiles
         if (files.isEmpty()) return
 
         val musicFiles = files.filter { !it.isDirectory && MediaTypes.isAudio(it.name) }
@@ -561,6 +576,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         _uiState.value = _uiState.value.copy(
             showingFavorites = true,
             currentFolder = null,
+            filter = "",
+            filterOpen = false,
             files = entries,
             isLoading = false,
             viewMode = sourcePreferences.getDefaultViewMode(),
@@ -600,6 +617,24 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         is SyncResult.RemoteNotWritable -> com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.sync_remote_read_only, r.reason, r.mergedFromRemote)
         is SyncResult.Failed -> com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.sync_failed, r.reason)
         is SyncResult.RemoteHasUnreadableEntries -> com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.sync_remote_unreadable_entries, r.rejected, r.mergedFromRemote)
+    }
+
+    // ---------------- filter ----------------
+
+    fun openFilter() {
+        if (_uiState.value.currentFolder == null) return
+        _uiState.value = _uiState.value.copy(filterOpen = true)
+    }
+
+    /** Narrows the folder on screen as the user types; the list starts again from the top. */
+    fun setFilter(text: String) {
+        if (text == _uiState.value.filter) return
+        _uiState.value = _uiState.value.copy(filter = text, scrollToIndex = 0, scrollToOffset = 0, scrollTrigger = _uiState.value.scrollTrigger + 1)
+    }
+
+    fun closeFilter() {
+        setFilter("")
+        _uiState.value = _uiState.value.copy(filterOpen = false)
     }
 
     // ---------------- search ----------------

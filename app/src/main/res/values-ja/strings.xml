@@ -28,6 +28,9 @@
     <string name="browser_search">検索</string>
     <string name="browser_search_hint">このフォルダ以下のフォルダと曲を検索</string>
     <string name="browser_search_truncated">結果の上限に達しました</string>
+    <string name="browser_filter">このフォルダを絞り込む</string>
+    <string name="browser_filter_hint">名前で絞り込み（このフォルダのみ）</string>
+    <string name="browser_filter_no_match">このフォルダに「%1$s」に一致する項目はありません</string>
     <string name="browser_toggle_view">グリッド / リスト</string>
     <string name="browser_more">その他のオプション</string>
     <string name="browser_shuffle">シャッフル再生</string>

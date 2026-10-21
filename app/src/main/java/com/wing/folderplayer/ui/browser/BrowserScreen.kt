@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -185,6 +186,10 @@ fun BrowserScreen(
                                             Icon(Icons.Default.ArrowUpward, contentDescription = stringResource(R.string.browser_up))
                                         }
                                     }
+                                    // Straight to the source list (the start page), however deep the user went.
+                                    IconButton(onClick = { viewModel.exitSource() }, modifier = Modifier.testTag("btn_browser_home")) {
+                                        Icon(Icons.Default.Home, contentDescription = stringResource(R.string.browser_back_to_sources))
+                                    }
                                 }
                             }
                         },
@@ -210,8 +215,9 @@ fun BrowserScreen(
                                         onClick = { close(); viewModel.syncFavorites() })
                                 }
                             } else {
-                                // Little room (the browser pane beside the player, a very narrow window): view mode and refresh move into the menu.
-                                val compact = com.wing.folderplayer.ui.adaptive.isWideWindow() || LocalConfiguration.current.screenWidthDp < 360
+                                // Little room (the browser pane beside the player, a phone held upright: Back, up and home take the left of
+                                // the bar): view mode and refresh move into the menu, so that the title keeps some room.
+                                val compact = com.wing.folderplayer.ui.adaptive.isWideWindow() || LocalConfiguration.current.screenWidthDp < 480
                                 if (uiState.currentFolder != null) {
                                     IconButton(onClick = { viewModel.openSearch() }, modifier = Modifier.testTag("btn_search")) {
                                         Icon(Icons.Default.Search, contentDescription = stringResource(R.string.browser_search))
@@ -253,12 +259,6 @@ fun BrowserScreen(
                                             modifier = Modifier.testTag("menu_bookmark")
                                         )
                                     }
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.browser_back_to_sources)) },
-                                        leadingIcon = { Icon(Icons.Default.Home, contentDescription = null) },
-                                        onClick = { close(); viewModel.exitSource() },
-                                        modifier = Modifier.testTag("menu_sources")
-                                    )
                                 }
                             }
                         }
@@ -286,7 +286,7 @@ fun BrowserScreen(
                     }
                 }
 
-                Column(modifier = Modifier.fillMaxSize().padding(padding).then(if (uiState.search.active) Modifier.imePadding() else Modifier)) {
+                Column(modifier = Modifier.fillMaxSize().padding(padding).then(if (uiState.search.active || uiState.filterOpen) Modifier.imePadding() else Modifier)) {
                     if (uiState.isLoading || uiState.search.running) {
                         LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     }
@@ -294,11 +294,30 @@ fun BrowserScreen(
                     if (uiState.search.active) {
                         SearchStatus(uiState.search, onCancel = { viewModel.cancelSearch() })
                     } else if (uiState.currentFolder != null) {
-                        SortHeader(
-                            currentField = uiState.sortField,
-                            ascending = uiState.sortAscending,
-                            onSortClick = { viewModel.sortFiles(it) }
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { if (uiState.filterOpen) viewModel.closeFilter() else viewModel.openFilter() },
+                                modifier = Modifier.padding(start = 4.dp).semantics { this.selected = uiState.filterOpen }.testTag("btn_filter")
+                            ) {
+                                Icon(
+                                    Icons.Default.FilterList,
+                                    contentDescription = stringResource(R.string.browser_filter),
+                                    tint = if (uiState.filterOpen) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+                                )
+                            }
+                            SortHeader(
+                                currentField = uiState.sortField,
+                                ascending = uiState.sortAscending,
+                                onSortClick = { viewModel.sortFiles(it) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        if (uiState.filterOpen) {
+                            // Keyed by folder: Back to a folder brings its filter text back with it.
+                            key(uiState.currentFolder) {
+                                FilterField(uiState.filter, onChange = { viewModel.setFilter(it) }, onClose = { viewModel.closeFilter() })
+                            }
+                        }
                     }
 
                     // The grid follows the width of the list area (a pane of the wide layout is narrow in a landscape window).
@@ -306,7 +325,7 @@ fun BrowserScreen(
                     val listDensity = androidx.compose.ui.platform.LocalDensity.current
                     Box(modifier = Modifier.weight(1f).onSizeChanged { listWidth = with(listDensity) { it.width.toDp() } }) {
                       androidx.compose.runtime.CompositionLocalProvider(LocalThumbnailRevision provides uiState.thumbnailRevision) {
-                        val files = if (uiState.search.active) uiState.search.results else uiState.files
+                        val files = if (uiState.search.active) uiState.search.results else uiState.visibleFiles
                         val onClick: (MusicFile) -> Unit = { viewModel.onFileClicked(it, onFolderPlay, onCustomPlay, onCuePlay) }
                         val onLong: (MusicFile) -> Unit = { viewModel.onFileLongClick(it) }
                         when {
@@ -359,7 +378,15 @@ fun BrowserScreen(
                         }
                         // A folder that cannot be read says so (and can be tried again); an empty one says that it is empty.
                         if (!uiState.isRoot && uiState.currentFolder != null && !uiState.isLoading && !uiState.search.active && files.isEmpty()) {
-                            FolderEmptyState(uiState.loadError, onRetry = { viewModel.refresh() }, modifier = Modifier.align(Alignment.Center))
+                            if (uiState.files.isNotEmpty()) {
+                                Text(
+                                    stringResource(R.string.browser_filter_no_match, uiState.filter.trim()),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    textAlign = TextAlign.Center,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 32.dp, vertical = 24.dp).testTag("filter_no_match"),
+                                )
+                            } else FolderEmptyState(uiState.loadError, onRetry = { viewModel.refresh() }, modifier = Modifier.align(Alignment.Center))
                         }
                       }
                     }
@@ -414,6 +441,33 @@ private fun SearchBarRow(query: String, onQuery: (String) -> Unit, onClose: () -
     )
 }
 
+/** The filter of the folder on screen: narrows the list as the user types (it does not look into the folders below). */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+@Composable
+private fun FilterField(filter: String, onChange: (String) -> Unit, onClose: () -> Unit) {
+    var text by remember { mutableStateOf(filter) }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    OutlinedTextField(
+        value = text,
+        onValueChange = { text = it; onChange(it) },
+        placeholder = { Text(stringResource(R.string.browser_filter_hint), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        leadingIcon = { Icon(Icons.Default.FilterList, contentDescription = null) },
+        trailingIcon = {
+            IconButton(onClick = onClose, modifier = Modifier.testTag("filter_close")) {
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.common_close))
+            }
+        },
+        singleLine = true,
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { keyboard?.hide() }),
+        modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 4.dp)
+            .focusRequester(focus).testTag("filter_field"),
+    )
+    // Just opened: ready to type. Brought back with its text (Back to the folder): no keyboard over the list.
+    LaunchedEffect(Unit) { if (filter.isEmpty()) focus.requestFocus() }
+}
+
 @Composable
 private fun SearchStatus(s: SearchUiState, onCancel: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -430,10 +484,10 @@ private fun SearchStatus(s: SearchUiState, onCancel: () -> Unit) {
 }
 
 @Composable
-fun SortHeader(currentField: String, ascending: Boolean, onSortClick: (String) -> Unit) {
+fun SortHeader(currentField: String, ascending: Boolean, onSortClick: (String) -> Unit, modifier: Modifier = Modifier) {
     // Four equal buttons while their names fit; with a large font or a narrow pane a button is as wide as its name and the
     // row scrolls sideways (a name is never broken in the middle of a word).
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    BoxWithConstraints(modifier.fillMaxWidth()) {
     val equalWidth = ((maxWidth - 16.dp - 8.dp * 3) / 4).coerceAtLeast(48.dp)
     Row(
         modifier = Modifier
