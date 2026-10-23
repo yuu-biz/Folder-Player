@@ -5,9 +5,8 @@ import android.media.MediaCodec
 import android.media.MediaDataSource
 import android.media.MediaExtractor
 import android.media.MediaFormat
-import com.wing.folderplayer.data.source.MediaTypes
+import android.util.Log
 import com.wing.folderplayer.data.source.RandomAccessReader
-import com.wing.folderplayer.data.source.SourceFileSystem
 import com.wing.folderplayer.playback.NativeDecoder
 import com.wing.folderplayer.playback.NativeDecoderException
 import com.wing.folderplayer.playback.NativeIo
@@ -33,24 +32,68 @@ internal abstract class PcmReader : Closeable {
     abstract fun seek(ms: Long)
 
     /**
+     * Decoding continues where the format can start at or before [ms] without reading up to it (an MP3 TOC entry, a
+     * FLAC seek point); [landedMs] tells where after the next [read]. By default the same as [seek].
+     */
+    open fun seekNear(ms: Long) = seek(ms)
+
+    /** Where decoding continued after [seekNear], -1 when not known (then take it as the requested time). */
+    open val landedMs: Long get() = -1
+
+    /**
+     * Set when a [seek] had to go back to the start of the file (a container without an index): every later sample
+     * then costs decoding everything before it, so the file is better read once from start to end.
+     */
+    var seekRestarts = false
+        protected set
+
+    /**
      * While sampling only a little is needed after each seek: a decoder that is handed every free input buffer at once
      * decodes far more than that before the next seek throws it away.
      */
     open var sampling = false
+
+    /** Reads from the source so far (each one a round trip on a network source) and the bytes they returned. */
+    abstract val io: CountingReader
+}
+
+/** Counts the reads made through it (each one a request on a network source). */
+internal class CountingReader(private val inner: RandomAccessReader) : RandomAccessReader {
+    var reads = 0L
+        private set
+    var bytes = 0L
+        private set
+    /** Reads are cut to this many bytes (the decoder asks for 64 KB; a window of an MP3 needs a few KB). */
+    var maxRead = Int.MAX_VALUE
+    override val size: Long get() = inner.size
+
+    override fun read(position: Long, buffer: ByteArray, offset: Int, len: Int): Int {
+        reads++
+        return inner.read(position, buffer, offset, minOf(len, maxRead)).also { if (it > 0) bytes += it }
+    }
+
+    override fun close() = inner.close()
 }
 
 /**
- * WMA / APE / DSF / DFF / ALAC through the bundled FFmpeg decoder, Media3's own formats (and AAC in .m4a, which the
- * native decoder declines) through MediaExtractor + MediaCodec.
+ * Every format through the bundled FFmpeg decoder, which reads 64 KB at a time and seeks in microseconds; MediaExtractor
+ * + MediaCodec only when the native library is missing or does not take the file (or [native] is false, for
+ * comparison). MediaCodec costs a round trip through the media service per buffer and a flush per seek (slow on some
+ * phones), and MediaExtractor reads a few KB at a time, each read a request to a NAS.
  */
-internal fun openPcmReader(fs: SourceFileSystem, path: String, ext: String): PcmReader {
-    if ((ext in MediaTypes.EXTRA_AUDIO || ext == "m4a") && NativeDecoder.isAvailable()) {
-        NativePcmReader.open(fs.openRandomAccess(path), ext)?.let { return it }
+internal fun openPcmReader(open: () -> RandomAccessReader, ext: String, native: Boolean = true): PcmReader {
+    if (native && NativeDecoder.isAvailable()) {
+        try {
+            return NativePcmReader.open(CountingReader(open()), ext)
+        } catch (e: NativeDecoderException) {
+            if (e.code == NativeDecoder.ERR_IO) throw e
+            Log.i("Waveform", "native decoder declined .$ext ($e): MediaCodec")
+        }
     }
-    return CodecPcmReader(fs.openRandomAccess(path))
+    return CodecPcmReader(CountingReader(open()))
 }
 
-private class NativePcmReader(private val handle: Long, private val reader: RandomAccessReader) : PcmReader() {
+private class NativePcmReader(private val handle: Long, override val io: CountingReader) : PcmReader() {
     private val info = NativeDecoder.nativeInfo(handle)
     override val sampleRate = info[0].toInt()
     override val channels = info[1].toInt()
@@ -66,25 +109,33 @@ private class NativePcmReader(private val handle: Long, private val reader: Rand
         return pcm16ToFloats(bytes, n, out)
     }
 
-    override fun seek(ms: Long) {
-        val rc = NativeDecoder.nativeSeekFrame(handle, ms * sampleRate / 1000)
+    // Each window needs a few KB after its seek: a smaller read takes less time from a NAS (the round trip is the same).
+    override var sampling = false
+        set(v) { field = v; io.maxRead = if (v) SAMPLING_READ else Int.MAX_VALUE }
+
+    override fun seek(ms: Long) = checkSeek(NativeDecoder.nativeSeekFrame(handle, ms * sampleRate / 1000))
+
+    override fun seekNear(ms: Long) = checkSeek(NativeDecoder.nativeSeekNear(handle, ms * sampleRate / 1000))
+
+    override val landedMs: Long get() = NativeDecoder.nativeLandedUs(handle).let { if (it < 0) -1 else it / 1000 }
+
+    private fun checkSeek(rc: Int) {
         if (rc < 0) throw IOException("native seek failed ($rc)")
+        if (rc == 1) seekRestarts = true
     }
 
     override fun close() {
         NativeDecoder.nativeClose(handle)
-        runCatching { reader.close() }
+        runCatching { io.close() }
     }
 
     companion object {
-        /** Null (reader closed) for a .m4a that is not ALAC: AAC goes through MediaCodec. */
-        fun open(reader: RandomAccessReader, ext: String): NativePcmReader? {
+        const val SAMPLING_READ = 32 * 1024
+
+        /** Throws [NativeDecoderException] (reader closed) for a file this build cannot decode. */
+        fun open(reader: CountingReader, ext: String): NativePcmReader {
             val handle = try {
-                NativeDecoder.nativeOpen(NativeIo(reader), ext, NativePcmDataSource.MAX_OUTPUT_RATE)
-            } catch (e: NativeDecoderException) {
-                runCatching { reader.close() }
-                if (ext == "m4a" && e.unsupported) return null
-                throw e
+                NativeDecoder.nativeOpenForAnalysis(NativeIo(reader), ext, NativePcmDataSource.MAX_OUTPUT_RATE)
             } catch (e: Throwable) {
                 runCatching { reader.close() }
                 throw e
@@ -99,7 +150,8 @@ private class NativePcmReader(private val handle: Long, private val reader: Rand
  * without waiting; it waits briefly only when neither side moved (waiting on each call held decoding to a few times
  * real time).
  */
-private class CodecPcmReader(private val reader: RandomAccessReader) : PcmReader() {
+private class CodecPcmReader(override val io: CountingReader) : PcmReader() {
+    private val reader: RandomAccessReader get() = io
     private val extractor = MediaExtractor()
     private val format: MediaFormat
     private val codec: MediaCodec

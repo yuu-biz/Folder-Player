@@ -1,5 +1,6 @@
 /*
- * libfpnative — FFmpeg-based PCM decoder for WMA / APE / ALAC (in MP4) and DSD (DSF / DFF) for Folder Player Fork.
+ * libfpnative — FFmpeg-based PCM decoder for WMA / APE / ALAC (in MP4) and DSD (DSF / DFF) for Folder Player Fork,
+ * and for the seek-bar waveform of every audio format the app lists (MP3, FLAC, AAC, Vorbis, Opus, WAV as well).
  *
  * Bytes come from Java (NativeIo: positional reads over the source file system) through a custom AVIOContext, so
  * every source type (Local, SAF, WebDAV, SMB, FTP) works the same way. Output is interleaved signed 16-bit PCM,
@@ -50,6 +51,8 @@ typedef struct {
     int pcmLen, pcmPos, pcmCap;
     int64_t seekTargetIn;  /* drop input samples before this (input-rate units), -1 = none */
     int draining, eof, errors;
+    int64_t landedUs;      /* see nativeLandedUs */
+    int awaitLanding;
     char codecName[64];
 } Dec;
 
@@ -113,6 +116,13 @@ static const char *formatFor(const char *hint) {
     if (!strcmp(hint, "ape")) return "ape";
     if (!strcmp(hint, "wma")) return "asf";
     if (!strcmp(hint, "m4a")) return "mov";
+    /* Opened only for the waveform (nativeOpenForAnalysis); Media3 plays these. */
+    if (!strcmp(hint, "mp4") || !strcmp(hint, "m4b")) return "mov";
+    if (!strcmp(hint, "mp3")) return "mp3";
+    if (!strcmp(hint, "flac")) return "flac";
+    if (!strcmp(hint, "ogg") || !strcmp(hint, "opus")) return "ogg";
+    if (!strcmp(hint, "wav")) return "wav";
+    if (!strcmp(hint, "aac")) return "aac";
     return NULL;
 }
 
@@ -137,12 +147,16 @@ Java_com_wing_folderplayer_playback_NativeDecoder_nativeVersion(JNIEnv *env, jcl
     return (*env)->NewStringUTF(env, v);
 }
 
-JNIEXPORT jlong JNICALL
-Java_com_wing_folderplayer_playback_NativeDecoder_nativeOpen(JNIEnv *env, jclass clazz, jobject io, jstring jhint, jint maxRate) {
+/*
+ * analysis = 0: playback (a .m4a is accepted only when it holds ALAC). analysis = 1: the waveform: any codec of this
+ * build, and containers estimate seek positions (an MP3 from its TOC or bit rate) instead of reading up to them.
+ */
+static jlong openDec(JNIEnv *env, jobject io, jstring jhint, jint maxRate, int analysis) {
     Dec *d = calloc(1, sizeof(Dec));
     if (!d) { throwNative(env, ERR_IO, "out of memory"); return 0; }
     d->env = env;
     d->seekTargetIn = -1;
+    d->landedUs = -1;
     d->io = (*env)->NewGlobalRef(env, io);
     jclass ioCls = (*env)->GetObjectClass(env, io);
     d->readMid = (*env)->GetMethodID(env, ioCls, "read", "([BI)I");
@@ -153,7 +167,7 @@ Java_com_wing_folderplayer_playback_NativeDecoder_nativeOpen(JNIEnv *env, jclass
 
     const char *hint = (*env)->GetStringUTFChars(env, jhint, NULL);
     const char *fmtName = formatFor(hint);
-    int isM4a = !strcmp(hint, "m4a");
+    int isM4a = !analysis && !strcmp(hint, "m4a");
     (*env)->ReleaseStringUTFChars(env, jhint, hint);
     char msg[160];
 
@@ -162,6 +176,7 @@ Java_com_wing_folderplayer_playback_NativeDecoder_nativeOpen(JNIEnv *env, jclass
     d->fmt = avformat_alloc_context();
     d->fmt->pb = d->avio;
     d->fmt->flags |= AVFMT_FLAG_CUSTOM_IO;
+    if (analysis) d->fmt->flags |= AVFMT_FLAG_FAST_SEEK;
     const AVInputFormat *ifmt = fmtName ? av_find_input_format(fmtName) : NULL;
     int r = avformat_open_input(&d->fmt, NULL, ifmt, NULL);
     if (r < 0) {
@@ -239,6 +254,16 @@ Java_com_wing_folderplayer_playback_NativeDecoder_nativeOpen(JNIEnv *env, jclass
     return (jlong) (intptr_t) d;
 }
 
+JNIEXPORT jlong JNICALL
+Java_com_wing_folderplayer_playback_NativeDecoder_nativeOpen(JNIEnv *env, jclass clazz, jobject io, jstring jhint, jint maxRate) {
+    return openDec(env, io, jhint, maxRate, 0);
+}
+
+JNIEXPORT jlong JNICALL
+Java_com_wing_folderplayer_playback_NativeDecoder_nativeOpenForAnalysis(JNIEnv *env, jclass clazz, jobject io, jstring jhint, jint maxRate) {
+    return openDec(env, io, jhint, maxRate, 1);
+}
+
 JNIEXPORT jlongArray JNICALL
 Java_com_wing_folderplayer_playback_NativeDecoder_nativeInfo(JNIEnv *env, jclass clazz, jlong h) {
     Dec *d = (Dec *) (intptr_t) h;
@@ -266,6 +291,11 @@ static int ensurePcm(Dec *d, int bytes) {
 /* Converts one decoded frame (after dropping samples before a seek target) into pending PCM. */
 static int convertFrame(Dec *d, AVFrame *f) {
     int offset = 0;
+    if (d->awaitLanding) {
+        int64_t pts = f->best_effort_timestamp;
+        if (pts != AV_NOPTS_VALUE) d->landedUs = av_rescale_q(pts, d->fmt->streams[d->stream]->time_base, AV_TIME_BASE_Q);
+        d->awaitLanding = 0;
+    }
     if (d->seekTargetIn >= 0) {
         int64_t pts = f->best_effort_timestamp;
         if (pts != AV_NOPTS_VALUE) {
@@ -367,27 +397,51 @@ Java_com_wing_folderplayer_playback_NativeDecoder_nativeRead(JNIEnv *env, jclass
     return n;
 }
 
-JNIEXPORT jint JNICALL
-Java_com_wing_folderplayer_playback_NativeDecoder_nativeSeekFrame(JNIEnv *env, jclass clazz, jlong h, jlong outFrame) {
-    Dec *d = (Dec *) (intptr_t) h;
+/*
+ * exact = 1: decoding continues at the target sample (decode-and-discard from where the container could seek to).
+ * exact = 0 (the waveform from a NAS): decoding continues where the container seek landed, at or before the target (an
+ * MP3 TOC entry, a FLAC seek point), which costs no reads beyond it; nativeLandedUs then tells where that is.
+ */
+static jint seekTo(JNIEnv *env, Dec *d, jlong outFrame, int exact) {
     d->env = env;
     AVStream *st = d->fmt->streams[d->stream];
     int64_t targetIn = av_rescale(outFrame, d->inRate, d->outRate);
     int64_t ts = av_rescale_q(targetIn, (AVRational){1, d->inRate}, st->time_base);
     int r = av_seek_frame(d->fmt, d->stream, ts, AVSEEK_FLAG_BACKWARD);
+    int restarted = 0;
     if (r < 0) {
         /* Container cannot seek by time: restart and decode-and-discard up to the target. */
         r = av_seek_frame(d->fmt, d->stream, 0, AVSEEK_FLAG_BACKWARD | AVSEEK_FLAG_BYTE);
         if (r < 0) return d->ioError ? ERR_IO : ERR_UNSUPPORTED;
+        restarted = targetIn > 0;
     }
     avcodec_flush_buffers(d->dec);
     if (setupResampler(d) < 0) return ERR_CORRUPT;
     d->pcmLen = d->pcmPos = 0;
     d->eof = d->draining = 0;
     d->errors = 0;
-    d->seekTargetIn = targetIn;
-    return 0;
+    d->seekTargetIn = exact || restarted ? targetIn : -1;
+    d->landedUs = -1;
+    d->awaitLanding = 1;
+    return restarted; /* 1: everything before the target will be decoded first */
 }
+
+JNIEXPORT jint JNICALL
+Java_com_wing_folderplayer_playback_NativeDecoder_nativeSeekFrame(JNIEnv *env, jclass clazz, jlong h, jlong outFrame) {
+    return seekTo(env, (Dec *) (intptr_t) h, outFrame, 1);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_wing_folderplayer_playback_NativeDecoder_nativeSeekNear(JNIEnv *env, jclass clazz, jlong h, jlong outFrame) {
+    return seekTo(env, (Dec *) (intptr_t) h, outFrame, 0);
+}
+
+/* Time of the first sample decoded after the last seek (once some PCM was read), -1 when not known. */
+JNIEXPORT jlong JNICALL
+Java_com_wing_folderplayer_playback_NativeDecoder_nativeLandedUs(JNIEnv *env, jclass clazz, jlong h) {
+    return ((Dec *) (intptr_t) h)->landedUs;
+}
+
 
 JNIEXPORT void JNICALL
 Java_com_wing_folderplayer_playback_NativeDecoder_nativeClose(JNIEnv *env, jclass clazz, jlong h) {

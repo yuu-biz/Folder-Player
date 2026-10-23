@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.core.content.edit
 import com.wing.folderplayer.data.artwork.ThumbnailRepository
 import com.wing.folderplayer.data.source.MediaTypes
+import com.wing.folderplayer.data.source.RandomAccessReader
 import com.wing.folderplayer.data.source.SourcePath
 import com.wing.folderplayer.data.source.SourceRef
 import com.wing.folderplayer.data.source.SourceRegistry
@@ -25,6 +26,7 @@ import java.io.DataOutputStream
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
+import java.util.TreeMap
 import kotlin.math.sqrt
 
 /** Waveform on the seek bar: on by default, files longer than [maxMinutes] (0 = no limit) are not measured. */
@@ -52,9 +54,9 @@ class WaveformSettings(context: Context) {
 
 /**
  * Measures the loudness envelope of a whole audio file for the seek bar, in the background: a long file by decoding short
- * windows spread over it, a short one from start to end ([PcmReader]: MediaExtractor + MediaCodec, or the bundled FFmpeg
- * decoder for WMA / APE / DSD / ALAC). The result is kept on disk, keyed by the file and its size and modification time. Files on network sources are
- * measured only on Wi-Fi; their reads show in the network account like any other source read.
+ * windows spread over it, a short one from start to end (through the bundled FFmpeg decoder, see [openPcmReader]). The
+ * result is kept on disk, keyed by the file and its size and modification time. Files on network sources are measured
+ * only on Wi-Fi; their reads show in the network account like any other source read.
  */
 class WaveformRepository private constructor(private val context: Context) {
     val settings = WaveformSettings(context)
@@ -67,8 +69,9 @@ class WaveformRepository private constructor(private val context: Context) {
     private class TooLong : Exception()
 
     /**
-     * The waveform of [ref]: null first, then partial results while the file is measured, then the whole one. Stays
-     * null when the setting is off, the file is too long, on mobile data for a network file, or it cannot be decoded.
+     * The waveform of [ref]: null first, then the waveform, once (a slow source may show a coarse one first and the
+     * full one after). Stays null when the setting is off, the file is too long, on mobile data for a network file, or
+     * it cannot be decoded.
      */
     fun waveform(ref: SourceRef): Flow<Waveform?> = flow {
         emit(null)
@@ -80,45 +83,50 @@ class WaveformRepository private constructor(private val context: Context) {
         val file = File(dir, key(ref, entry?.size, entry?.lastModified) + ".wf")
         readCache(file)?.let { emit(it); return@flow }
         if (cfg.isNetwork && !ThumbnailRepository.get(context).isOnWifi()) return@flow
-        val limitMs = settings.limitMs
-        val started = SystemClock.elapsedRealtime()
         val result = try {
-            openPcmReader(fs, ref.path, ext).use { r -> measure(r, limitMs) { emit(it) } }
+            measureFile({ fs.openRandomAccess(ref.path) }, ext, settings.limitMs, network = cfg.isNetwork) { emit(it) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: TooLong) {
-            Log.i(TAG, "${ref.name}: longer than $limitMs ms, not measured")
+            Log.i(TAG, "${ref.name}: longer than ${settings.limitMs} ms, not measured")
             null
         } catch (e: Exception) {
             Log.w(TAG, "${ref.name}: cannot measure: $e")
             null
         } ?: return@flow
-        Log.i(TAG, "${ref.name}: ${result.levels.size} bins of ${result.binMs} ms in ${SystemClock.elapsedRealtime() - started} ms")
         emit(result)
         writeCache(file, result)
     }.flowOn(dispatcher)
 
     /**
-     * A long file whose reader can seek is sampled: one short window per bin, in a coarse-to-fine order, so the shape is
-     * there after a second or two and only a fraction of the file is decoded (and read from a network source). Short
-     * files, files of unknown length and files whose seeking turns out slow are decoded from start to end.
+     * Measures the file [open] reads ([native] false: through MediaCodec, for comparison in tests); a [network] file is
+     * sampled where seeks land (see [sampled]). [coarse] gets a first, coarser waveform when the file is slow to measure.
      */
-    private suspend fun measure(r: PcmReader, limitMs: Long, progress: suspend (Waveform) -> Unit): Waveform {
-        checkLimit(r.durationMs, limitMs)
-        if (r.durationMs > FULL_DECODE_MAX_MS) {
-            sampled(r, progress)?.let { return it }
-            Log.i(TAG, "seeking is slow in this file: decoding it from the start")
-            r.sampling = false
-            r.seek(0)
+    internal suspend fun measureFile(
+        open: () -> RandomAccessReader, ext: String, limitMs: Long, network: Boolean = false, native: Boolean = true,
+        coarse: suspend (Waveform) -> Unit = {},
+    ): Waveform {
+        val started = SystemClock.elapsedRealtime()
+        return openPcmReader(open, ext, native).use { r ->
+            checkLimit(r.durationMs, limitMs)
+            val w = (if (r.durationMs > FULL_DECODE_MAX_MS) sampled(r, network, coarse) else null) ?: run {
+                if (r.seekRestarts) {
+                    Log.i(TAG, "seeking reads this file from the start: decoding it once instead")
+                    r.sampling = false
+                    r.seek(0)
+                }
+                sequential(r, limitMs)
+            }
+            Log.i(TAG, ".$ext ${r.javaClass.simpleName}: ${w.levels.size} bins of ${w.binMs} ms in " +
+                "${SystemClock.elapsedRealtime() - started} ms, ${r.io.reads} reads, ${r.io.bytes / 1024} KB of ${r.io.size / 1024} KB")
+            w
         }
-        return sequential(r, limitMs, progress)
     }
 
-    private suspend fun sequential(r: PcmReader, limitMs: Long, progress: suspend (Waveform) -> Unit): Waveform {
+    private suspend fun sequential(r: PcmReader, limitMs: Long): Waveform {
         val binMs = Waveform.binMsFor(r.durationMs)
         val buffer = FloatArray(16 * 1024)
         var acc: LevelAccumulator? = null
-        var lastProgress = SystemClock.elapsedRealtime()
         while (true) {
             currentCoroutineContext().ensureActive()
             val n = r.read(buffer)
@@ -127,20 +135,25 @@ class WaveformRepository private constructor(private val context: Context) {
             val a = acc ?: LevelAccumulator(r.sampleRate, r.channels, binMs).also { acc = it }
             a.add(buffer, n)
             checkDecodedLimit(a, r.durationMs, limitMs)
-            if (SystemClock.elapsedRealtime() - lastProgress >= PROGRESS_MS) {
-                progress(Waveform(binMs, a.levels(), r.durationMs, complete = false))
-                lastProgress = SystemClock.elapsedRealtime()
-            }
         }
         val levels = acc?.levels(final = true) ?: throw IOException("no audio decoded")
         return Waveform(binMs, levels, r.durationMs, complete = true)
     }
 
     /**
-     * Null when seeking is too slow to sample (a container without an index makes the decoder read from the start for
-     * every window); the caller then decodes the file from the start.
+     * One short window per bin of a long file, in a coarse-to-fine order. When that is slow (a NAS answers each seek
+     * after a round trip), a coarse waveform is shown after [COARSE_AFTER_MS] if the rest would take as long again, and
+     * after [BUDGET_MS] the windows not measured yet are left out. The bins between the measured ones are interpolated,
+     * so no waveform shown has gaps.
+     *
+     * With [near] (a network source) a window is measured where the seek lands, at or before its bin (an MP3 seeks to
+     * one of the 100 points of its table of contents, a FLAC file to its seek points): decoding from there up to the
+     * bin would read seconds of audio per window, as much as the whole file over all windows. A window that lands where
+     * an earlier one did is not read again.
+     *
+     * Null when seeking goes back to the start of the file (no index); the caller then decodes the file once.
      */
-    private suspend fun sampled(r: PcmReader, progress: suspend (Waveform) -> Unit): Waveform? {
+    private suspend fun sampled(r: PcmReader, near: Boolean, coarse: suspend (Waveform) -> Unit): Waveform? {
         val durationMs = r.durationMs
         val windows = Waveform.windowsFor(durationMs)
         val binMs = ((durationMs + windows - 1) / windows).toInt()
@@ -148,17 +161,31 @@ class WaveformRepository private constructor(private val context: Context) {
         r.sampling = true
         val buffer = FloatArray(4096)
         val started = SystemClock.elapsedRealtime()
-        var lastProgress = started
+        // near: where seeks landed -> the latest time requested that landed there (a time between lands there too).
+        val landings = TreeMap<Long, Long>()
         var seekNs = 0L
-        for ((done, i) in Waveform.sampleOrder(windows).withIndex()) {
+        var tried = 0
+        var same = 0
+        var shown = false
+        for (i in Waveform.sampleOrder(windows)) {
             currentCoroutineContext().ensureActive()
-            if (done == SLOW_CHECK_WINDOWS && SystemClock.elapsedRealtime() - started > SLOW_CHECK_WINDOWS * SLOW_WINDOW_MS) return null
+            val elapsed = SystemClock.elapsedRealtime() - started
+            if (tried >= COARSE_WINDOWS && elapsed > BUDGET_MS) break
+            if (!shown && tried >= COARSE_WINDOWS && elapsed > COARSE_AFTER_MS) {
+                // Only worth it when the rest takes a while yet: otherwise the full waveform replaces it at once.
+                if (elapsed * (windows - tried) / tried > COARSE_AFTER_MS) coarse(Waveform(binMs, Waveform.filled(levels), durationMs, complete = true))
+                shown = true
+            }
             // The window sits in the middle of its bin; a little is decoded first and dropped (an MP3 frame needs the
             // frames before it, AAC starts with priming samples).
-            val centre = i.toLong() * binMs + binMs / 2
+            val target = (i.toLong() * binMs + binMs / 2 - WINDOW_MS / 2 - SKIP_MS).coerceAtLeast(0)
+            if (near && landings.floorEntry(target)?.let { it.value >= target } == true) { same++; continue }
+            tried++
             val t0 = System.nanoTime()
-            r.seek((centre - WINDOW_MS / 2 - SKIP_MS).coerceAtLeast(0))
+            if (near) r.seekNear(target) else r.seek(target)
             seekNs += System.nanoTime() - t0
+            if (r.seekRestarts) return null
+            var bin = i
             var skip = -1L
             var need = 0L
             var sum = 0.0
@@ -167,6 +194,12 @@ class WaveformRepository private constructor(private val context: Context) {
                 val n = r.read(buffer)
                 if (n < 0) break
                 if (skip < 0) {
+                    if (near) {
+                        val at = r.landedMs.takeIf { it in 0..target } ?: target
+                        landings[at] = maxOf(landings[at] ?: at, target)
+                        bin = ((at + SKIP_MS + WINDOW_MS / 2) / binMs).toInt().coerceIn(0, windows - 1)
+                        if (!levels[bin].isNaN()) { same++; break }
+                    }
                     val perMs = r.sampleRate.toLong() * r.channels / 1000.0
                     skip = (perMs * SKIP_MS).toLong()
                     need = (perMs * WINDOW_MS).toLong()
@@ -179,17 +212,15 @@ class WaveformRepository private constructor(private val context: Context) {
                 }
                 if (count >= need) break
             }
-            if (count > 0) levels[i] = sqrt(sum / count).toFloat().coerceIn(0f, 1f)
-            if (SystemClock.elapsedRealtime() - lastProgress >= PROGRESS_MS) {
-                progress(Waveform(binMs, levels.copyOf(), durationMs, complete = false))
-                lastProgress = SystemClock.elapsedRealtime()
-            }
+            if (!levels[bin].isNaN()) continue
+            // Nothing decoded: the window is past the real end of the file (its length was an estimate).
+            levels[bin] = if (count > 0) sqrt(sum / count).toFloat().coerceIn(0f, 1f) else 0f
         }
-        Log.i(TAG, "sampled $windows windows in ${SystemClock.elapsedRealtime() - started} ms (seeking ${seekNs / 1_000_000} ms)")
-        // A window past the real end of the file (its length was an estimate) or one the decoder gave nothing for.
-        for (i in levels.indices) if (levels[i].isNaN()) levels[i] = 0f
-        return Waveform(binMs, levels, durationMs, complete = true)
+        Log.i(TAG, "sampled ${levels.count { !it.isNaN() }} of $windows windows${if (near) " (where seeks land; $same landed on one measured already)" else ""} " +
+            "in ${SystemClock.elapsedRealtime() - started} ms (seeking ${seekNs / 1_000_000} ms)")
+        return Waveform(binMs, Waveform.filled(levels), durationMs, complete = true)
     }
+
 
     private fun checkLimit(durationMs: Long, limitMs: Long) {
         if (limitMs > 0 && durationMs > limitMs) throw TooLong()
@@ -231,14 +262,16 @@ class WaveformRepository private constructor(private val context: Context) {
     companion object {
         private const val TAG = "Waveform"
         const val CACHE_DIR = "waveforms"
-        private const val PROGRESS_MS = 300L
         /** Files up to this length are decoded whole (a few seconds at most); longer ones are sampled. */
         private const val FULL_DECODE_MAX_MS = 120_000L
         private const val WINDOW_MS = 250L
         private const val SKIP_MS = 50L
-        /** Sampling is given up when the first windows took longer than this each (seeking reads from the start). */
-        private const val SLOW_CHECK_WINDOWS = 8
-        private const val SLOW_WINDOW_MS = 250L
+        /** Windows measured before anything is shown or the budget can end the sampling. */
+        private const val COARSE_WINDOWS = 64
+        /** A sampling still running after this shows a coarse waveform (only a slow source takes that long). */
+        private const val COARSE_AFTER_MS = 1_500L
+        /** Sampling stops after this; the windows left out are interpolated. */
+        private const val BUDGET_MS = 8_000L
         private const val MAX_CACHED = 500
 
         @android.annotation.SuppressLint("StaticFieldLeak") // application context only

@@ -88,11 +88,26 @@ object NativeDecoder {
     @JvmStatic external fun nativeVersion(): String
     /** Opens and probes; throws [NativeDecoderException] (code ERR_UNSUPPORTED for e.g. DST-compressed DFF). */
     @JvmStatic external fun nativeOpen(io: NativeIo, formatHint: String, maxOutputRate: Int): Long
+    /**
+     * For the waveform: any codec of the build (MP3, AAC, FLAC, Vorbis, Opus, PCM as well), and seeks estimate the
+     * position (an MP3 from its TOC or bit rate) instead of reading up to it.
+     */
+    @JvmStatic external fun nativeOpenForAnalysis(io: NativeIo, formatHint: String, maxOutputRate: Int): Long
     /** [outSampleRate, channels, durationUs, totalFrames(-1 unknown), isAlacOrDecodable(1/0)] */
     @JvmStatic external fun nativeInfo(handle: Long): LongArray
     @JvmStatic external fun nativeCodecName(handle: Long): String
-    /** Seeks to an exact output frame (decode-and-discard after the container seek). */
+    /**
+     * Seeks to an exact output frame (decode-and-discard after the container seek). Returns 0, 1 when the container
+     * could not seek by time and decoding restarts from the start of the file, or a negative error code.
+     */
     @JvmStatic external fun nativeSeekFrame(handle: Long, frame: Long): Int
+    /**
+     * Like [nativeSeekFrame] but decoding continues where the container landed (at or before [frame]: an MP3 TOC entry,
+     * a FLAC seek point), reading nothing up to the target; [nativeLandedUs] tells where once PCM was read.
+     */
+    @JvmStatic external fun nativeSeekNear(handle: Long, frame: Long): Int
+    /** Time of the first sample decoded after the last seek, -1 when not known. */
+    @JvmStatic external fun nativeLandedUs(handle: Long): Long
     /** Interleaved signed 16-bit PCM. Returns bytes written, -1 at end of stream, or a negative error code < -1. */
     @JvmStatic external fun nativeRead(handle: Long, buffer: ByteArray, offset: Int, length: Int): Int
     @JvmStatic external fun nativeClose(handle: Long)
