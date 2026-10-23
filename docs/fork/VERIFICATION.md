@@ -139,6 +139,21 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.27 Waveform on the seek bar (1.3.0, 2026-10-23)
+
+The full player's seek bar shows the loudness of the whole track (design and limits in [KNOWN_ISSUES.md](KNOWN_ISSUES.md),
+"Waveform on the seek bar"). Checked locally (WSL build, emulator `fp_api34` in Docker); targeted tests only, as agreed
+with the owner (no full suite).
+
+| Check | Result |
+|---|---|
+| `WaveformTest` (JVM: quiet → loud step in the bins, out-of-phase stereo, 16-bit PCM, last short bin, bars relative to the loudest, CUE slice, unmeasured part NaN / past the end silent, more bars than bins, silence, kept-file round trip and damaged file, bin length by duration), `StringResourcesParityTest` | 12/12 and 4/4 PASS |
+| `WaveformUiTest` w01–w05 on API 34 (one process per method): WAV 2 s quiet + 2 s loud measured through MediaCodec (RMS 0.035 / 0.57 as expected, bars low / full), second request served from `cache/waveforms`; AAC `.m4a` (native decoder declines, MediaCodec measures), ALAC, WMA, APE, DSF through the native decoder, bins covering the duration; switch off gives no waveform, a short file is under the 30-min limit; 10-min FLAC in the full player: 4000 bins of 150 ms, drawn, a tap on the seek bar still seeks to the middle, switch off brings the plain bar back; a 60 s WAV of quiet / loud / medium / loud peak / quiet scenes drawn with tall bars only in the loud scenes (pixel check of the bar tops, screenshot looked at) | 5/5 PASS |
+| `PlayerSheetUiTest#s06` (seek bar drag and downward fling, lyrics, playlist gestures) and `#s09` (landscape seek uses the current track's length) | 2/2 PASS |
+
+Not run: the other suites; the waveform with a real NAS, on Wi-Fi / mobile data switching, with a CUE disc image, and on the
+owner's phone.
+
 ### 5.26 Image thumbnails, shuffle in the menu, browser only in wide windows (1.3.0-dev3, 2026-10-23)
 
 Image files show their own thumbnail (whole picture, framed, image badge; folders unchanged); grid / list always on the

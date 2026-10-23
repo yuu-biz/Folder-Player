@@ -457,39 +457,45 @@ private fun PortraitPlayerLayout(
                         label = "spinnerRotation"
                     )
                     
+                    val wave by viewModel.waveform.collectAsState()
                     Box(modifier = Modifier.fillMaxWidth()) {
-                        // Background track
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(4.dp)
-                                .align(Alignment.Center)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(Color.White.copy(alpha = 0.2f))
-                        )
-                        
-                        // Buffered track (thicker)
-                        if (bufferedFraction > 0) {
+                        val shownWave = wave?.takeIf { uiState.duration > 0 }
+                        if (shownWave != null) {
+                            WaveformTrack(shownWave, uiState.duration, sliderPosition, bufferedFraction, Modifier.align(Alignment.Center))
+                        } else {
+                            // Background track
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth(bufferedFraction.coerceIn(0f, 1f))
-                                    .height(6.dp)
+                                    .fillMaxWidth()
+                                    .height(4.dp)
+                                    .align(Alignment.Center)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(Color.White.copy(alpha = 0.2f))
+                            )
+
+                            // Buffered track (thicker)
+                            if (bufferedFraction > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(bufferedFraction.coerceIn(0f, 1f))
+                                        .height(6.dp)
+                                        .align(Alignment.CenterStart)
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(Color.White.copy(alpha = 0.35f))
+                                )
+                            }
+
+                            // Played track
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(sliderPosition.coerceIn(0f, 1f))
+                                    .height(4.dp)
                                     .align(Alignment.CenterStart)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(Color.White.copy(alpha = 0.35f))
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(Color.White)
                             )
                         }
-                        
-                        // Played track
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(sliderPosition.coerceIn(0f, 1f))
-                                .height(4.dp)
-                                .align(Alignment.CenterStart)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(Color.White)
-                        )
-                        
+
                         // Thumb with buffering spinner - using BoxWithConstraints
                         BoxWithConstraints(
                             modifier = Modifier

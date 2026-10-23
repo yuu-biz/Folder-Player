@@ -212,6 +212,12 @@
     <string name="settings_dlna">DLNA / UPnP キャスト</string>
     <string name="settings_auto_save">最後まで再生したネットワーク上の曲を保存</string>
     <string name="settings_auto_save_help">ダウンロードが完了し検証できたファイルを Music/%1$s/ に保存します。</string>
+    <string name="settings_waveform">シークバーに波形を表示</string>
+    <string name="settings_waveform_help">曲のどこで音が大きくなるかを波形で表示し、盛り上がる場面をひと目で見つけられるようにします。波形のために各ファイルを一度だけバックグラウンドで読んで測り、結果は保存します。ネットワーク上のファイルは Wi-Fi 接続中だけ測ります。</string>
+    <string name="settings_waveform_max">測るファイルの長さの上限</string>
+    <string name="settings_waveform_no_limit">上限なし</string>
+    <string name="settings_waveform_minutes">%1$d 分</string>
+    <string name="settings_waveform_hours">%1$d 時間</string>
     <string name="settings_native_decoder_ok">追加デコーダー（ALAC/WMA/APE/DSF/DFF）有効 – %1$s</string>
     <string name="settings_native_decoder_missing">この端末では追加デコーダーを使用できません（WMA/APE/DSF/DFF は再生できません）</string>
     <string name="settings_about_version">Folder Player Fork %1$s (%2$d)</string>

@@ -816,6 +816,38 @@ T["fr"].update({"layout_show_player": "Afficher le lecteur", "layout_hide_player
 T["it"].update({"layout_show_player": "Mostra il lettore", "layout_hide_player": "Nascondi il lettore (solo browser)"})
 T["ja"].update({"layout_show_player": "プレーヤーを表示", "layout_hide_player": "プレーヤーを隠す（ファイラーのみ）"})
 
+# Waveform on the seek bar (loudness of the whole track, measured once in the background).
+T["zh-rCN"].update({
+    "settings_waveform": "在进度条上显示波形",
+    "settings_waveform_help": "以波形显示曲目各处的音量，便于一眼找到高潮部分。每个文件会在后台读取一次进行测量，结果会被保存。网络来源的文件仅在 Wi-Fi 下测量。",
+    "settings_waveform_max": "测量的文件最长时长", "settings_waveform_no_limit": "不限",
+    "settings_waveform_minutes": "%1$d 分钟", "settings_waveform_hours": "%1$d 小时",
+})
+T["zh-rTW"].update({
+    "settings_waveform": "在進度列上顯示波形",
+    "settings_waveform_help": "以波形顯示曲目各處的音量，方便一眼找到高潮段落。每個檔案會在背景讀取一次進行測量，結果會被保存。網路來源的檔案僅在 Wi-Fi 下測量。",
+    "settings_waveform_max": "測量的檔案最長時長", "settings_waveform_no_limit": "不限",
+    "settings_waveform_minutes": "%1$d 分鐘", "settings_waveform_hours": "%1$d 小時",
+})
+T["fr"].update({
+    "settings_waveform": "Forme d'onde sur la barre de progression",
+    "settings_waveform_help": "Montre le volume de chaque passage du morceau pour repérer d'un coup d'œil les moments forts. Chaque fichier est lu une fois en arrière-plan pour être mesuré, et le résultat est conservé. Les fichiers des sources réseau ne sont mesurés qu'en Wi-Fi.",
+    "settings_waveform_max": "Durée maximale d'un fichier à mesurer", "settings_waveform_no_limit": "Sans limite",
+    "settings_waveform_minutes": "%1$d min", "settings_waveform_hours": "%1$d h",
+})
+T["it"].update({
+    "settings_waveform": "Forma d'onda sulla barra di avanzamento",
+    "settings_waveform_help": "Mostra il volume di ogni parte del brano per trovare a colpo d'occhio i momenti più intensi. Ogni file viene letto una volta in background per misurarlo e il risultato viene conservato. I file delle sorgenti di rete vengono misurati solo in Wi-Fi.",
+    "settings_waveform_max": "Durata massima di un file da misurare", "settings_waveform_no_limit": "Nessun limite",
+    "settings_waveform_minutes": "%1$d min", "settings_waveform_hours": "%1$d h",
+})
+T["ja"].update({
+    "settings_waveform": "シークバーに波形を表示",
+    "settings_waveform_help": "曲のどこで音が大きくなるかを波形で表示し、盛り上がる場面をひと目で見つけられるようにします。波形のために各ファイルを一度だけバックグラウンドで読んで測り、結果は保存します。ネットワーク上のファイルは Wi-Fi 接続中だけ測ります。",
+    "settings_waveform_max": "測るファイルの長さの上限", "settings_waveform_no_limit": "上限なし",
+    "settings_waveform_minutes": "%1$d 分", "settings_waveform_hours": "%1$d 時間",
+})
+
 def main():
     keys = base_keys()
     ok = True

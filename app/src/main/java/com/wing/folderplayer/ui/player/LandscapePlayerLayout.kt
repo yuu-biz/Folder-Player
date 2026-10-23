@@ -266,15 +266,21 @@ fun LandscapeLeftControlPanel(
                  label = "spinnerRotation"
              )
 
+             val wave by viewModel.waveform.collectAsState()
              Box(modifier = Modifier.fillMaxWidth()) {
-                Box(Modifier.fillMaxWidth().height(4.dp).align(Alignment.Center).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.2f)))
-                
-                if (bufferedFraction > 0) {
-                     Box(Modifier.fillMaxWidth(bufferedFraction.coerceIn(0f, 1f)).height(4.dp).align(Alignment.CenterStart).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.35f)))
+                val shownWave = wave?.takeIf { uiState.duration > 0 }
+                if (shownWave != null) {
+                    WaveformTrack(shownWave, uiState.duration, sliderPosition, bufferedFraction, Modifier.align(Alignment.Center), height = 32.dp)
+                } else {
+                    Box(Modifier.fillMaxWidth().height(4.dp).align(Alignment.Center).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.2f)))
+
+                    if (bufferedFraction > 0) {
+                         Box(Modifier.fillMaxWidth(bufferedFraction.coerceIn(0f, 1f)).height(4.dp).align(Alignment.CenterStart).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.35f)))
+                    }
+
+                    Box(Modifier.fillMaxWidth(sliderPosition.coerceIn(0f, 1f)).height(4.dp).align(Alignment.CenterStart).clip(RoundedCornerShape(2.dp)).background(Color.White))
                 }
-                
-                Box(Modifier.fillMaxWidth(sliderPosition.coerceIn(0f, 1f)).height(4.dp).align(Alignment.CenterStart).clip(RoundedCornerShape(2.dp)).background(Color.White))
-                
+
                  BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()

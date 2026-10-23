@@ -22,6 +22,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -429,5 +435,44 @@ fun Modifier.seekSemantics(positionMs: Long, durationMs: Long, onSeekFraction: (
         stateDescription = state
         progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)
         if (durationMs > 0) setProgress { v -> seek(v.coerceIn(0f, 1f)); true }
+    }
+}
+
+/**
+ * The seek bar's track drawn as the current track's waveform (loudness over time, so loud scenes can be found at a
+ * glance): bars up to the playback position are bright, buffered ones dimmer, the rest faint; the part not measured
+ * yet is a row of dots. [durationMs] is the track's (a CUE track shows its slice of the file).
+ */
+@Composable
+fun WaveformTrack(wave: TrackWaveform, durationMs: Long, played: Float, buffered: Float, modifier: Modifier = Modifier, height: Dp = 36.dp) {
+    val density = LocalDensity.current
+    val barPx = with(density) { 3.dp.toPx() }
+    val gapPx = with(density) { 1.5.dp.toPx() }
+    var widthPx by remember { mutableIntStateOf(0) }
+    val count = if (widthPx > 0) ((widthPx + gapPx) / (barPx + gapPx)).toInt() else 0
+    val bars = remember(wave, durationMs, count) { wave.waveform.bars(wave.startMs, durationMs, count) }
+    Canvas(modifier.fillMaxWidth().height(height).onSizeChanged { widthPx = it.width }.testTag("seek_waveform")) {
+        if (count == 0 || bars.size != count) return@Canvas
+        val step = if (count > 1) (size.width - barPx) / (count - 1) else 0f
+        val minH = 2.dp.toPx()
+        val mid = size.height / 2
+        for (i in 0 until count) {
+            val x = i * step
+            val h = bars[i]
+            val at = (x + barPx / 2) / size.width
+            val alpha = when {
+                h.isNaN() -> 0.15f
+                at <= played -> 1f
+                at <= buffered -> 0.5f
+                else -> 0.3f
+            }
+            val barH = if (h.isNaN()) minH else maxOf(minH, h * size.height)
+            drawRoundRect(
+                Color.White.copy(alpha = alpha),
+                topLeft = Offset(x, mid - barH / 2),
+                size = Size(barPx, barH),
+                cornerRadius = CornerRadius(barPx / 2),
+            )
+        }
     }
 }

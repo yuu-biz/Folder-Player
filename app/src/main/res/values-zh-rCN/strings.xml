@@ -212,6 +212,12 @@
     <string name="settings_dlna">DLNA / UPnP 投放</string>
     <string name="settings_auto_save">保存完整播放的网络歌曲</string>
     <string name="settings_auto_save_help">完整下载并校验后，文件保存到 Music/%1$s/。</string>
+    <string name="settings_waveform">在进度条上显示波形</string>
+    <string name="settings_waveform_help">以波形显示曲目各处的音量，便于一眼找到高潮部分。每个文件会在后台读取一次进行测量，结果会被保存。网络来源的文件仅在 Wi-Fi 下测量。</string>
+    <string name="settings_waveform_max">测量的文件最长时长</string>
+    <string name="settings_waveform_no_limit">不限</string>
+    <string name="settings_waveform_minutes">%1$d 分钟</string>
+    <string name="settings_waveform_hours">%1$d 小时</string>
     <string name="settings_native_decoder_ok">附加解码器（ALAC/WMA/APE/DSF/DFF）已启用 – %1$s</string>
     <string name="settings_native_decoder_missing">此设备上附加解码器不可用（无法播放 WMA/APE/DSF/DFF）</string>
     <string name="settings_about_version">Folder Player Fork %1$s (%2$d)</string>

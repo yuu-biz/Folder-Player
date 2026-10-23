@@ -49,6 +49,23 @@ What a user can run into, in one place. The sections below give the history of e
 - **Not checked**: TalkBack sessions, HyperOS devices, a NAS, a background network retry on a real phone with the
   screen off (a refused foreground start is caught and logged, see below).
 
+## Waveform on the seek bar (1.3.0)
+
+- **What it shows.** The loudness of the whole track, so that loud scenes (a drama CD's climax, a song's chorus) can be
+  seen before they play and reached with one tap. Each bar is the RMS of its part of the track relative to the loudest
+  bar, raised to the power 0.7 (-6 dB is about 60 % of the height, -20 dB about 20 %), so quiet passages stay visible.
+  It is loudness, not a frequency picture and not a live visualizer of what plays at the moment.
+- **Cost.** The waveform needs the whole file decoded once, besides playback: a 1-hour FLAC on a NAS is read again
+  completely (a few hundred MB). The reads count in the network account (Settings → Library & network) like any other
+  read of a source. Network files are measured only on Wi-Fi / Ethernet; on mobile data, and for files longer than the
+  limit in Settings, the plain seek bar is shown. The result is kept (`cache/waveforms`, a few KB per file, 500 files),
+  so a file is read for its waveform once until it changes; Android may clear the cache when storage runs low.
+- **When it is measured.** Only while a seek bar shows it (the full player or the player pane), one file at a time;
+  switching tracks stops the old measurement. Closing the player for more than 5 s stops it too, and it starts again
+  from the beginning when the player opens again (only a complete result is kept).
+- **Limits.** A file whose duration is not known up front stops at the limit. A VBR MP3 whose length the player
+  estimates differently from the decoder can have its bars slightly off in time. Not measured on a real NAS or a phone.
+
 ## Image thumbnails, browser-only wide layout, shuffle in the menu (after 1.3.0)
 
 - **Image files have their own thumbnail.** An image in the list (jpg, png, gif, webp, bmp, heic) is shown by its own
