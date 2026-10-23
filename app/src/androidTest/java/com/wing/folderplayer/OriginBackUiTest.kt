@@ -123,16 +123,17 @@ class OriginBackUiTest : UiTestBase() {
         onUi { browser.loadFolder(SourceRef(local, fx)) }; at(fx, "fixture")
         click("btn_filter")
         compose.onNodeWithTag("filter_field").performTextInput("album-a")
-        until(5_000, "filtered") { exists("item_Album-A") && !exists("item_Album-B") }
+        // shown, not exists: the list keeps the node of an item the filter took away for reuse (not placed, no size).
+        until(5_000, "filtered") { exists("item_Album-A") && !shown("item_Album-B") }
         click("item_Album-A"); at("$fx/Album-A", "Album-A")
         assertEquals("", bs.filter)
         assertFalse(exists("filter_field"))
         pressBack(); at(fx, "back to the filtered folder")
-        until(5_000, "filter back") { bs.filter == "album-a" && exists("filter_field") && exists("item_Album-A") && !exists("item_Album-B") }
+        until(5_000, "filter back") { bs.filter == "album-a" && exists("filter_field") && exists("item_Album-A") && !shown("item_Album-B") }
 
         compose.onNodeWithTag("filter_field").performTextInput("zzz")
         until(5_000, "no match") { exists("filter_no_match") }
         click("filter_close")
-        until(5_000, "unfiltered") { bs.filter == "" && exists("item_Album-B") && !exists("filter_field") }
+        until(5_000, "unfiltered") { bs.filter == "" && shown("item_Album-B") && !exists("filter_field") }
     }
 }

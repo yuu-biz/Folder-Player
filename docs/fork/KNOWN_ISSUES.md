@@ -40,8 +40,8 @@ What a user can run into, in one place. The sections below give the history of e
 - **Credentials**: a WebDAV address typed as `http://user:password@host` is stored as typed (use the user / password
   fields). Passwords entered in the fields are kept in the Android Keystore, per source. API keys of the AI feature
   read from an old (pre-0.6) settings file stay once in `files/migration-backup/` (not backed up).
-- **Filter**: names only (not tags or the folders below); not available in the favourites list or search results. The UI
-  test `OriginBackUiTest#a62` was written with it but not yet run on an emulator.
+- **Filter**: names only (not tags or the folders below); not available in the favourites list or search results. `OriginBackUiTest#a62`
+  passed on an API 34 emulator (VERIFICATION 5.27).
 - **File viewer**: text shows the first 1 MB, images up to 2560 px (enough to zoom, not the full size of a large scan), GIFs
   without animation, PDFs as pages (no text search, no links, no password-protected files); files over 200 MB are not
   opened. Copies of images and PDFs from a source are kept in the app's cache (up to 300 MB, outside the image cache of
@@ -82,9 +82,8 @@ What a user can run into, in one place. The sections below give the history of e
 - **Top bar**: grid / list is always on the bar, shuffle is always in the ⋮ menu (it was on the bar, and grid / list was in
   the menu on narrow screens).
 
-Open points: `BrowserUiTest#a19` (image thumbnails, colours, switch off) and `AdaptiveLayoutTest#a11` (hide / show the
-pane, mini player, recreation, phone UI, notification) were written and compiled in a cloud session without KVM, not run
-on an emulator yet. Not checked on a real foldable.
+`BrowserUiTest#a19` and `AdaptiveLayoutTest#a11` passed on an API 34 emulator before the 1.3.0 tag (VERIFICATION 5.27).
+Not checked on a real foldable.
 
 ## File viewer (after 1.3.0)
 
@@ -113,8 +112,8 @@ another app" hands the file to an app chosen by Android. How it works and why:
 
 Open points:
 
-- Not run on an emulator or a phone yet: `ViewerUiTest` (text, images swiped, Back, the long-press sheet) was written and
-  compiled in a Claude Code cloud session without KVM. PDF has no device test (the fixture has no PDF); the JVM tests
+- `ViewerUiTest` (text, images swiped, Back, the long-press sheet) passed on an API 34 emulator (VERIFICATION 5.27);
+  not run on a phone. PDF has no device test (the fixture has no PDF); the JVM tests
   cover the file kinds, decoding and the copies (`FileViewerTest`).
 - The viewer's copies are not part of Settings → image cache (usage and Clear); Android may clear them when storage
   runs low. Search results list folders, songs and CUE sheets only, not files the viewer opens.
