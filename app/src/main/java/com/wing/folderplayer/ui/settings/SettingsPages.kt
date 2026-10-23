@@ -131,7 +131,7 @@ private fun PlaybackPage() {
             description = stringResource(R.string.settings_waveform_help),
         ) { waveOn = it; waveform.enabled = it }
         if (waveOn) {
-            var maxMinutes by remember { mutableStateOf(waveform.maxMinutes) }
+            var maxMinutes by remember { mutableIntStateOf(waveform.maxMinutes) }
             SettingsChoice(
                 stringResource(R.string.settings_waveform_max),
                 WaveformSettings.MAX_MINUTES.map { it to waveformLimitLabel(it) },

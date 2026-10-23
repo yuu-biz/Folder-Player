@@ -274,6 +274,7 @@ class WaveformRepository private constructor(private val context: Context) {
         private const val MAX_IDLE_POLLS = 300
         private const val MAX_CACHED = 500
 
+        @android.annotation.SuppressLint("StaticFieldLeak") // application context only
         @Volatile private var instance: WaveformRepository? = null
         fun get(context: Context): WaveformRepository =
             instance ?: synchronized(this) { instance ?: WaveformRepository(context.applicationContext).also { instance = it } }
