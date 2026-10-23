@@ -281,11 +281,11 @@ class WaveformUiTest : UiTestBase() {
      * The user's case: a 30-minute MP3 took ~30 s and drew itself in scattered bars that kept changing height. It must
      * be done within seconds and appear whole: at most a coarse picture and the final one, neither with gaps. The file
      * (44.1 kHz stereo VBR MP3, pink noise, loud from minute 12 to 18) is too big for the test assets; it is made by
-     * `instrument.sh <serial> push-long-mp3`.
+     * `instrument.sh <serial> push-long-files`.
      */
     @Test fun w08_aThirtyMinuteMp3AppearsWholeWithinSeconds() {
         val file = File(formatsDir, "long-scenes.mp3")
-        assertTrue("$file missing: run instrument.sh <serial> push-long-mp3", file.length() > 1_000_000)
+        assertTrue("$file missing: run instrument.sh <serial> push-long-files", file.length() > 1_000_000)
         cacheDir.deleteRecursively()
         val start = SystemClock.elapsedRealtime()
         val shown = mutableListOf<Pair<Long, Waveform>>()
@@ -325,16 +325,16 @@ class WaveformUiTest : UiTestBase() {
 
     /**
      * The NAS case ("almost no change" with 1.3.1): with 5 ms per read (one request each, like SMB on Wi-Fi) the
-     * 30-minute MP3 and the 10-minute FLAC appear within seconds and right. The MediaCodec path of 1.3.1 (MediaExtractor
-     * reads a few KB per request) is measured for comparison and only logged.
+     * 30-minute MP3, the 10-minute FLAC and a 15-minute FLAC with a seek table appear within seconds and right. The
+     * MediaCodec path of 1.3.1 (MediaExtractor reads a few KB per request) is measured for comparison and only logged.
      */
     @Test fun w09_aSlowSourceStillGivesTheWaveformWithinSeconds() {
         val mp3 = File(formatsDir, "long-scenes.mp3")
-        assertTrue("$mp3 missing: run instrument.sh <serial> push-long-mp3", mp3.length() > 1_000_000)
-        fun run(file: File, native: Boolean): Pair<Waveform?, Long> {
+        assertTrue("$mp3 missing: run instrument.sh <serial> push-long-files", mp3.length() > 1_000_000)
+        fun run(file: File, native: Boolean, delayMs: Long = 5, network: Boolean = true): Pair<Waveform?, Long> {
             val start = SystemClock.elapsedRealtime()
             val w = runBlocking {
-                withTimeoutOrNull(60_000) { repo.measureFile({ SlowReader(file, 5) }, file.extension, 0, network = true, native = native) }
+                withTimeoutOrNull(60_000) { repo.measureFile({ SlowReader(file, delayMs) }, file.extension, 0, network = network, native = native) }
             }
             return w to SystemClock.elapsedRealtime() - start
         }
@@ -350,11 +350,36 @@ class WaveformUiTest : UiTestBase() {
         assertTrue("quiet start and end ${bars.toList()}", bars.take(4).all { it < 0.3f } && bars.drop(6).all { it < 0.3f })
         assertTrue("measured in $ms ms (limit 4000)", ms < 4_000)
 
+        // A local file too slow to decode whole within 5 s (20 ms per read here) is sampled after a short probe.
+        val (slow, slowMs) = run(mp3, native = true, delayMs = 20, network = false)
+        Fx.log("long-scenes.mp3, local but 20 ms per read: done in $slowMs ms")
+        assertNotNull(slow)
+        val slowBars = slow!!.bars(0, slow.durationMs, 10)
+        assertEquals("sampled (600 windows), not decoded whole", 600, slow.levels.size)
+        assertTrue("loud middle ${slowBars.toList()}", slowBars[4] > 0.9f && slowBars[5] > 0.9f)
+        assertTrue("slow local file measured in $slowMs ms (limit 8000)", slowMs < 8_000)
+
+        // FLAC without a seek table (the fixture: FFmpeg finds each window by bisection) and with one (as `flac` and
+        // rippers write: the windows land on its points, 10 s apart).
         val (flac, flacMs) = run(Fx.localFile("${Fx.FX}/Long/long.flac"), native = true)
         Fx.log("long.flac, native path, 5 ms per read: done in $flacMs ms")
         assertNotNull(flac)
         assertEquals(600_000.0, flac!!.durationMs.toDouble(), 1000.0)
         assertTrue("long.flac is not silent", flac.levels.average() > 0.05)
         assertTrue("long.flac measured in $flacMs ms (limit 4000)", flacMs < 4_000)
+        val table = File(formatsDir, "long-seektable.flac")
+        assertTrue("$table missing: run instrument.sh <serial> push-long-files", table.length() > 1_000_000)
+        val (st, stMs) = run(table, native = true)
+        Fx.log("long-seektable.flac, native path, 5 ms per read: done in $stMs ms")
+        assertNotNull(st)
+        val stBars = st!!.bars(0, st.durationMs, 10)
+        Fx.log("long-seektable.flac over a slow source: bars ${stBars.toList()}")
+        assertEquals(900_000.0, st.durationMs.toDouble(), 1000.0)
+        assertTrue("loud minutes 6-9 ${stBars.toList()}", stBars[4] > 0.9f && stBars[5] > 0.9f)
+        // Points 10 s apart: the bins between the last quiet and the first loud one are interpolated, which lifts the bars
+        // next to the loud part a little.
+        assertTrue("quiet elsewhere ${stBars.toList()}", stBars.take(3).all { it < 0.3f } && stBars.drop(7).all { it < 0.3f })
+        assertTrue("next to the loud part ${stBars.toList()}", stBars[3] < 0.5f && stBars[6] < 0.5f)
+        assertTrue("long-seektable.flac measured in $stMs ms (limit 4000)", stMs < 4_000)
     }
 }

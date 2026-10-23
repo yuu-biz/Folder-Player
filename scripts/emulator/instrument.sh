@@ -4,7 +4,7 @@
 #   instrument.sh <serial> perms <ALL|AUDIO_ONLY|PARTIAL|NONE>
 #   instrument.sh <serial> run <Class[#method]> [tag] [-e key value ...]
 #   instrument.sh <serial> push-fixture
-#   instrument.sh <serial> push-long-mp3          30-min MP3 for WaveformUiTest#w08 (made with ffmpeg on first use)
+#   instrument.sh <serial> push-long-files        long MP3 and FLAC for WaveformUiTest w08 / w09 (made with ffmpeg on first use)
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 ROOT="$(pwd)"
@@ -28,16 +28,24 @@ case "$1" in
     for m in $METHODS; do bash "$0" "$S" run "$CLS#$m" "$@" || RC=1; done
     exit $RC
     ;;
-  push-long-mp3)
-    MP3=build/fixture-extra/long-scenes.mp3
-    if [ ! -s "$MP3" ]; then
-      mkdir -p build/fixture-extra
+  push-long-files)
+    # Too big for the test assets: a 30-min VBR MP3 (pink noise, loud from minute 12 to 18) and a 15-min FLAC with a
+    # seek table (a tone, loud from minute 6 to 9; ffmpeg writes no seek table, flac_seektable.py adds one).
+    X=build/fixture-extra
+    mkdir -p $X
+    if [ ! -s $X/long-scenes.mp3 ]; then
       timeout 600 ffmpeg -hide_banner -loglevel error -y -f lavfi -i "anoisesrc=color=pink:amplitude=0.5:sample_rate=44100:duration=1800" \
-        -af "volume=if(between(t\,720\,1080)\,1\,0.08):eval=frame" -ac 2 -c:a libmp3lame -q:a 2 "$MP3"
+        -af "volume=if(between(t\,720\,1080)\,1\,0.08):eval=frame" -ac 2 -c:a libmp3lame -q:a 2 $X/long-scenes.mp3
+    fi
+    if [ ! -s $X/long-seektable.flac ]; then
+      timeout 600 ffmpeg -hide_banner -loglevel error -y -f lavfi -i "sine=frequency=330:sample_rate=44100:duration=900" \
+        -af "volume=if(between(t\,360\,540)\,0.9\,0.08):eval=frame" -ac 2 -c:a flac $X/long-seektable.flac.tmp.flac
+      timeout 300 python3 -I scripts/fixtures/tools/flac_seektable.py $X/long-seektable.flac.tmp.flac 10
+      mv $X/long-seektable.flac.tmp.flac $X/long-seektable.flac
     fi
     A shell mkdir -p /sdcard/Android/data/$PKG/files/Formats
-    A push "$MP3" /sdcard/Android/data/$PKG/files/Formats/ >/dev/null
-    echo "long-scenes.mp3 pushed"
+    A push $X/long-scenes.mp3 $X/long-seektable.flac /sdcard/Android/data/$PKG/files/Formats/ >/dev/null
+    echo "long-scenes.mp3, long-seektable.flac pushed"
     ;;
   push-fixture)
     A shell rm -rf /sdcard/Music/fixture

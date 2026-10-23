@@ -6,11 +6,12 @@ project. This release follows 1.3.1.
 
 - **Waveform, faster again and drawn at once**: the waveform is now measured with the bundled FFmpeg decoder for every
   format (as Namida does), instead of Android's media codecs, which some phones make slow (a 30-minute MP3 took about
-  30 s on a phone with 1.3.1). It appears once, whole, growing out of the seek bar, instead of filling in with gaps and
-  changing height while it is measured. From a NAS a long file is sampled where each seek lands, so only a little of it
-  is read. On the test emulator a 30-minute MP3 now takes 1.5 s (4.6 s in 1.3.1, drawn 15 times), and also 1.5 s with a
-  simulated NAS that answers each read after 5 ms (1.3.1 read about 11 times per point there, 75 ms a point: over 20 s
-  for the file). The APK grows by about 1 MB (the added decoders).
+  30 s on a phone with 1.3.1). A local file is decoded whole again, so every part of it counts; from a NAS a long file
+  is sampled where each seek lands, so only a little of it is read. The waveform appears once, whole, growing out of
+  the seek bar, instead of filling in with gaps and changing height while it is measured. On the test emulator a
+  30-minute MP3 now takes about 2 s (4.6 s in 1.3.1, drawn 15 times), and 1.5 s with a simulated NAS that answers each
+  read after 5 ms (1.3.1 read about 11 times per point there, 75 ms a point: over 20 s for the file). The APK grows by
+  about 1 MB (the added decoders).
 
 ## New in 1.3.1
 

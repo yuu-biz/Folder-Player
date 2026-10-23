@@ -56,36 +56,38 @@ What a user can run into, in one place. The sections below give the history of e
   bar, raised to the power 0.7 (-6 dB is about 60 % of the height, -20 dB about 20 %), so quiet passages stay visible.
   It is loudness, not a frequency picture and not a live visualizer of what plays at the moment.
 - **How it is measured (1.3.2).** Every format goes through the bundled FFmpeg decoder (MP3, AAC, FLAC, Vorbis, Opus
-  and WAV as well as WMA / APE / DSD / ALAC; MediaCodec only when FFmpeg declines a file), the way Namida does it.
+  and WAV as well as WMA / APE / DSD / ALAC; MediaCodec only when FFmpeg declines a file), as Namida does.
   MediaCodec cost a round trip through the media service per buffer and a flush per seek, which some phones make slow
   (a 30-minute MP3 took about 30 s on the owner's phone with 1.3.1), and MediaExtractor read a few KB per request,
-  each one a round trip to a NAS. A file up to 2 minutes long is decoded from start to end. A longer one is sampled:
-  one 250 ms window (after 50 ms that are decoded and dropped) in each of 100 to 600 bins, one every 3 s of audio,
-  in a coarse-to-fine order. Local files are sampled at the exact times. Files on a network source are sampled where
-  the seek lands, at or before the bin (an MP3 seeks to one of the 100 points of its table of contents, a FLAC file to
-  its seek points): decoding from there up to the bin would read seconds of audio per window, more than the whole
-  file over all windows. Windows that land where an earlier one did are not read again, so a VBR MP3 on a NAS has
-  about 100–150 measured points; the bins between measured points are interpolated. It is a rough trend: a short
-  shout between two windows is missed.
+  each one a round trip to a NAS. A local file is decoded from start to end (one RMS level per bin of all its audio:
+  a 30-minute file has about 3,900 bins). If, after 0.7 s, that would take more than 5 s (a slow phone, a very long
+  file), it is sampled instead, and a file over 2 minutes on a network source always is: one 250 ms window (after
+  50 ms that are decoded and dropped) aimed at each of 100 to 600 bins, one every 3 s of audio, in a coarse-to-fine
+  order, measured where the seek lands, at or before the bin (an MP3 seeks to one of the 100 points of its table of
+  contents, a FLAC file to its seek points, usually 10 s apart). Decoding from there up to the bin would read seconds
+  of audio per window, more than the whole file over all windows. Windows that land where an earlier one did are not
+  read again, so a VBR MP3 on a NAS has about 100–150 measured points and a FLAC file one per seek point; the bins
+  between measured points are interpolated (the bars next to a sudden change are lifted a little). It is a rough
+  trend: a short shout between two points is missed.
 - **How it appears.** Once, whole: no bars fill in one by one and nothing rescales while it is measured (1.3.1 redrew it
   every 0.3 s with gaps). The bars grow out of the plain track in 0.6 s. Only when sampling is slow (more than 1.5 s,
   with as long again to go) is a coarse waveform shown first; the full one then moves the bars to their new heights.
   Sampling stops after 8 s and keeps what it has (interpolated).
 - **Formats that seek slowly.** When a container has no index (some WMA, DFF) FFmpeg can only seek by decoding from the
   start; such a file is decoded once from start to end instead.
-- **Cost.** Short files are read once whole, besides playback; long ones only around the sampled windows (reads of at
-  most 32 KB). The reads count in the network account (Settings → Library & network) like any other read of a source.
-  Network files are measured only on Wi-Fi / Ethernet; on mobile data, and for files longer than the limit in
-  Settings, the plain seek bar is shown. The result is kept (`cache/waveforms`, a few KB per file, 500 files), so a
+- **Cost.** Local files and short network files are read once whole, besides playback; long network files only around
+  the sampled windows (reads of at most 32 KB). The reads count in the network account (Settings → Library & network)
+  like any other read of a source. Network files are measured only on Wi-Fi / Ethernet; on mobile data, and for files
+  longer than the limit in Settings, the plain seek bar is shown. The result is kept (`cache/waveforms`, a few KB per file, 500 files), so a
   file is read for its waveform once until it changes; Android may clear the cache when storage runs low. The FFmpeg
   decoders added for it make the APK about 1 MB larger.
 - **When it is measured.** Only while a seek bar shows it (the full player or the player pane), one file at a time;
   switching tracks stops the old measurement. Closing the player for more than 5 s stops it too, and it starts again
   from the beginning when the player opens again (only a complete result is kept); since 1.3.1 that is a matter of
   seconds.
-- **Limits.** A CUE track is a slice of its disc image's bins: a 5-minute track of a 70-minute image gets about 40 of
-  the 600 windows (fewer from a NAS), so its bars are coarse. A file whose duration is not known up front is
-  decoded whole and stops at the limit. A VBR MP3 whose length the player estimates differently from the decoder can
+- **Limits.** A CUE track is a slice of its disc image's bins: on a NAS a 5-minute track of a 70-minute image gets
+  about 40 of the 600 windows (fewer measured points), so its bars are coarse; a local image is decoded whole. A file
+  whose duration is not known up front is decoded whole and stops at the limit. A VBR MP3 whose length the player estimates differently from the decoder can
   have its bars slightly off in time. Timings were measured on an x86_64 emulator (FFmpeg without assembly there) with
   a NAS simulated by 5 ms per read, not on a real NAS or a phone.
 
