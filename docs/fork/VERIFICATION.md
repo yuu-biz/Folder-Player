@@ -143,25 +143,29 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 
 The owner found 1.3.1 still slow on the phone (a 30-minute MP3 about 30 s locally, hardly better from a NAS) and the
 drawing restless (scattered bars whose height kept changing), and pointed at Namida, which decodes the whole file with
-FFmpeg and shows the waveform once. Now: FFmpeg (decoders and demuxers added for MP3, AAC, FLAC, Vorbis, Opus, PCM)
-measures every format, MediaCodec only as fallback; files over 2 minutes sampled in 100–600 windows; on a network
-source each window is measured where the seek lands and not read again when it lands on a measured one; reads capped at
-32 KB while sampling; the waveform is emitted once (a coarse one first only when sampling still has more than 1.5 s to
-go after 1.5 s), sampling stops after 8 s, gaps are interpolated; the bars grow in 0.6 s. Emulator `fp_api34` (API 34,
-x86_64: FFmpeg built without assembly there), targeted tests. The 30-minute MP3 (44.1 kHz stereo VBR, pink noise, loud
-from minute 12 to 18, 23 MB) is made by `instrument.sh <serial> push-long-mp3`.
+FFmpeg and shows the waveform once. Now: FFmpeg (decoders, demuxers and parsers added for MP3, AAC, FLAC, Vorbis, Opus,
+PCM) measures every format, MediaCodec only as fallback. Local files are decoded whole unless a 0.7 s probe projects
+more than 5 s; then, and for long files on a network source, 100–600 windows are measured where each seek lands
+(`nativeSeekNear`), a window landing on a measured point is not read again, reads are capped at 32 KB, gaps are
+interpolated, sampling stops after 8 s. The waveform is emitted once (a coarse one first only when sampling still has
+more than 1.5 s to go after 1.5 s); the bars grow in 0.6 s. Emulator `fp_api34` (API 34, x86_64: FFmpeg built without
+assembly there), targeted tests. `instrument.sh <serial> push-long-files` makes and pushes the long files: a 30-minute
+MP3 (44.1 kHz stereo VBR with a Xing TOC, pink noise, loud from minute 12 to 18, 23 MB) and a 15-minute FLAC (a tone,
+loud from minute 6 to 9, 29 MB) with a seek table of 90 points added by `scripts/fixtures/tools/flac_seektable.py`
+(ffmpeg writes none).
 
 | Check | Result |
 |---|---|
 | New `WaveformUiTest#w08` (30-min MP3 shown at most twice, without gaps, within 5 s) against the 1.3.1 app | FAIL as expected: shown **15 times** (every 0.3 s from 0.54 s), each with gaps; complete after 4.6 s |
-| `w08` with the fix | PASS: shown once at 1.53–1.55 s, 600 windows, bars quiet 0.17 / loud 1.0; a first build showed a coarse waveform at 1.52 s and the full one 0.25 s later, hence the "only when there is long to go" rule |
-| New `w09`: the same MP3 from a reader that waits 5 ms per read (a NAS) | MediaCodec reader (1.3.1's): 107 windows in the 8 s budget, 11 reads per window. FFmpeg, exact seeks, 64 KB reads: 5.35 s, 800 reads, 51 MB (decoding from the TOC point up to each window); with 16 KB reads 8 s (budget). FFmpeg where seeks land: **1.5 s**, 152 points, 448 windows skipped as landing on a measured one, 275 reads, 8.8 MB; PASS. The 10-min FLAC (no seek table: binary search) 3.2 s, 594 reads |
-| `w06` (10-min FLAC) / `w07` (20-min WAV) | PASS: 0.17 s / 0.35 s (1.3.1: 4.2 s / 2.0 s) |
+| `w08` with the fix (local: decoded whole) | PASS: shown once at 2.1–2.3 s, 3913 bins of 460 ms, 364 reads (the file once), bars quiet 0.17 / loud 1.0 |
+| Dropped on the way | Sampling local files at exact times: 1.5 s on the emulator but 37 MB read for the 23 MB file (each window decoded from the TOC point before it, about 9 s of audio), more decoding than one pass. A coarse waveform shown at 1.52 s and the full one 0.25 s later: hence "only when there is long to go" |
+| New `w09`: readers that wait 5 ms per read (a NAS) | MP3: the MediaCodec reader (1.3.1's) gets 106–109 windows in the 8 s budget, 11 reads per window; FFmpeg where seeks land **1.5 s**, 152 points, 448 windows skipped as landing on a measured one, 275 reads, 8.8 MB (FFmpeg at exact times: 5.35 s and 51 MB with 64 KB reads, 8 s with 16 KB reads). FLAC with a seek table: **1.35 s**, 90 points (one per seek point), 251 reads. The fixture FLAC without one (bisection per window): 3.2 s, 594 reads. A local file with 20 ms per read: the probe projects 9.3 s, sampled instead, 6.9 s. All PASS |
+| `w06` (10-min FLAC) / `w07` (20-min WAV), now decoded whole | PASS: 0.85 s / 0.3–0.4 s, 4000 bins each (1.3.1 sampled them in 4.2 s / 2.0 s) |
 | `w01`–`w05` (AAC in .m4a now through FFmpeg too), `PlayerSheetUiTest#s06` / `#s09`, `NativeDecodeTest`, `NativeIoErrorTest`, `DurationRepositoryTest` | all PASS (9/9 waveform, 2/2, 4/4, 4/4, 6/6) |
 | `WaveformTest` (JVM, 16: also interpolation of bins not measured, window count), all JVM tests, `lintDebug` | 16/16; all: 258 tests, 25 skipped, 0 failures; lint 0 errors, no warning in the changed files |
 
-Not run: a phone (arm64 FFmpeg with NEON, so faster than the emulator), a real NAS, MP3 files with a CBR or without a
-TOC, AAC / Ogg files over 2 minutes.
+Not run: a phone (arm64 FFmpeg with NEON, expected faster than the emulator), a real NAS, CBR MP3 and MP3 without a
+TOC, AAC / Ogg files over 2 minutes, a FLAC from a real ripper.
 
 ### 5.28 Faster waveform (1.3.1, 2026-10-23)
 
