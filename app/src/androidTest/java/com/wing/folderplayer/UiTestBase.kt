@@ -86,8 +86,11 @@ abstract class UiTestBase {
         compose.waitForIdle()
     }
 
-    /** Buttons of the browser's top bar that sit in its ⋮ menu where the bar has little room (a phone held upright). */
-    private val inBrowserMenu = mapOf("btn_view_mode" to "menu_view_mode", "btn_refresh" to "menu_refresh")
+    /**
+     * Browser actions that sit in its ⋮ menu: refresh where the bar has little room (a phone held upright, the pane beside
+     * the player), shuffle always (tests still say "btn_shuffle").
+     */
+    private val inBrowserMenu = mapOf("btn_refresh" to "menu_refresh", "btn_shuffle" to "menu_shuffle")
 
     /** Clicks a node, scrolling it into view first when it sits in a scrollable container (dialogs, settings). */
     protected fun click(tag: String) {

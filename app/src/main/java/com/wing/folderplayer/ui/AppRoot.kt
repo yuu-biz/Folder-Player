@@ -16,6 +16,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import com.wing.folderplayer.ui.adaptive.WindowLayout
 import com.wing.folderplayer.ui.adaptive.isWideWindow
 import com.wing.folderplayer.ui.player.DockedPlayerPane
+import com.wing.folderplayer.ui.player.MiniPlayer
+import com.wing.folderplayer.ui.player.PlayerSheetState
+import com.wing.folderplayer.ui.player.rememberPlayerTransition
+import com.wing.folderplayer.ui.browser.PlayerPaneToggle
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Spacer
@@ -87,6 +91,12 @@ fun AppRoot(
     // The sheet's state is kept while the window is wide (and shown again when it is narrow again), but the full player is
     // only in front of the pages in the narrow layout.
     val fullPlayerShown = !wide && sheet.expanded
+    // Wide only: the user may hide the player pane so that the browser has the whole window (kept across restarts). The
+    // narrow layout ignores it, so folding the device back to the phone UI is unchanged.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var playerPaneHidden by remember { mutableStateOf(WindowLayout.playerPaneHidden(context)) }
+    val setPlayerPaneHidden = remember(context) { { hidden: Boolean -> playerPaneHidden = hidden; WindowLayout.setPlayerPaneHidden(context, hidden) } }
+    val playerPaneShown = wide && !playerPaneHidden
 
     // Narrow views of the player state: the full state changes every second while playing and must not recompose the
     // browser or this shell.
@@ -114,8 +124,8 @@ fun AppRoot(
     LaunchedEffect(openPlayerPending, hasTrack, controllerReady) {
         if (!openPlayerPending) return@LaunchedEffect
         if (hasTrack) {
-            // Wide: the player is on screen anyway.
-            if (!wideState.value) sheet.expand()
+            // Wide: the player pane is brought back if it was hidden.
+            if (!wideState.value) sheet.expand() else setPlayerPaneHidden(false)
             openPlayerPending = false
         } else if (controllerReady) {
             openPlayerPending = false
@@ -136,7 +146,9 @@ fun AppRoot(
     }
     val dismissSession = remember(playerViewModel) { { playerViewModel.dismissSession() } }
 
-    val miniVisible = hasTrack && onBrowser && !wide
+    // The mini player: below the browser of the phone UI, and below a browser that has the whole wide window.
+    val miniVisible = hasTrack && onBrowser && !playerPaneShown
+    val playerPane = if (wide) PlayerPaneToggle(shown = playerPaneShown, onToggle = { setPlayerPaneHidden(playerPaneShown) }) else null
 
     Box(Modifier.fillMaxSize()) {
         Column(
@@ -163,7 +175,7 @@ fun AppRoot(
                         // The browser stays the first child of this Row in both layouts: only its size changes, so a change of
                         // the window (fold, unfold, resize) keeps its list position, folder, search and everything it remembers.
                         Row(Modifier.fillMaxSize()) {
-                            Box(if (wide) Modifier.width(WindowLayout.browserPaneWidth(configuration.screenWidthDp)).fillMaxHeight() else Modifier.weight(1f).fillMaxHeight()) {
+                            Box(if (playerPaneShown) Modifier.width(WindowLayout.browserPaneWidth(configuration.screenWidthDp)).fillMaxHeight() else Modifier.weight(1f).fillMaxHeight()) {
                                 BrowserScreen(
                                     viewModel = browserViewModel,
                                     onFolderPlay = onFolderPlay,
@@ -173,11 +185,12 @@ fun AppRoot(
                                     onAddToPlaylist = onAddToPlaylist,
                                     onOpenSettings = openSettings,
                                     backEnabled = !fullPlayerShown,
+                                    playerPane = playerPane,
                                 )
                             }
-                            if (wide) {
+                            if (playerPaneShown) {
                                 Divider(Modifier.fillMaxHeight().width(1.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                                DockedPlayerPane(playerViewModel, hasTrack, Modifier.weight(1f).fillMaxHeight())
+                                DockedPlayerPane(playerViewModel, hasTrack, Modifier.weight(1f).fillMaxHeight(), onHide = { setPlayerPaneHidden(true) })
                             }
                         }
                     }
@@ -187,7 +200,11 @@ fun AppRoot(
                     }
                 }
             }
-            if (miniVisible) Spacer(Modifier.fillMaxWidth().navigationBarsPadding().height(miniPlayerHeight()))
+            if (miniVisible && wide) {
+                // Browser only: what plays stays in sight; a tap brings the player pane back (no full player over the browser).
+                val barSheet = remember { PlayerSheetState(initiallyExpanded = false) }
+                MiniPlayer(playerViewModel, rememberPlayerTransition(barSheet), onOpen = { setPlayerPaneHidden(false) }, onDismiss = dismissSession, dragToOpen = false)
+            } else if (miniVisible) Spacer(Modifier.fillMaxWidth().navigationBarsPadding().height(miniPlayerHeight()))
         }
 
         if (!wide) PlayerSheetHost(sheet = sheet, viewModel = playerViewModel, miniAllowed = miniVisible, onDismiss = dismissSession)

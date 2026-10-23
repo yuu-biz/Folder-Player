@@ -31,6 +31,8 @@
     <string name="browser_filter">このフォルダを絞り込む</string>
     <string name="browser_filter_hint">名前で絞り込み（このフォルダのみ）</string>
     <string name="browser_filter_no_match">このフォルダに「%1$s」に一致する項目はありません</string>
+    <string name="layout_show_player">プレーヤーを表示</string>
+    <string name="layout_hide_player">プレーヤーを隠す（ファイラーのみ）</string>
     <string name="viewer_open">開く</string>
     <string name="viewer_open_external">ほかのアプリで開く</string>
     <string name="viewer_no_app">このファイルを開けるアプリがこの端末にありません</string>

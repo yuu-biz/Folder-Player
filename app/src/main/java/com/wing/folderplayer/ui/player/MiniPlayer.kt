@@ -78,7 +78,15 @@ fun PlayerUiState.mini() =MiniPlayerState(currentTitle, currentArtist, coverUri,
  * over from its cover (same thumbnail request).
  */
 @Composable
-fun MiniPlayer(viewModel: PlayerViewModel, transition: PlayerTransition, onOpen: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+fun MiniPlayer(
+    viewModel: PlayerViewModel,
+    transition: PlayerTransition,
+    onOpen: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** False below a browser that has the whole wide window: no full player grows from the bar, a tap shows the pane. */
+    dragToOpen: Boolean = true,
+) {
     val barHeight = miniPlayerHeight()
     val state by viewModel.miniState.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -113,7 +121,7 @@ fun MiniPlayer(viewModel: PlayerViewModel, transition: PlayerTransition, onOpen:
             .onGloballyPositioned { transition.miniTop = it.positionInRoot().y }
             // Both gestures sit outside the layer that slides the bar, so the finger is measured on a still frame, and
             // each claims only its own axis: up opens the full player (following the finger), sideways is the swipe.
-            .playerSheetDrag(sheet)
+            .then(if (dragToOpen) Modifier.playerSheetDrag(sheet) else Modifier)
             // Always takes sideways drags (so a swipe is never a tap that opens the player); when the session may not end
             // the bar only gives a little and springs back.
             .horizontalSwipe(

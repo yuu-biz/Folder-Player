@@ -66,6 +66,7 @@ class AdaptiveLayoutTest : UiTestBase() {
     }
 
     @After fun cleanup() {
+        com.wing.folderplayer.ui.adaptive.WindowLayout.setPlayerPaneHidden(Fx.ctx, false)
         Fx.shell("wm size reset")
         runCatching {
             onMain { MusicService.current?.let { it.becomingNoisyReceiver.onReceive(it, Intent(AudioManager.ACTION_AUDIO_BECOMING_NOISY)) } }
@@ -373,6 +374,57 @@ class AdaptiveLayoutTest : UiTestBase() {
         windowDp(780, 600)
         until(5_000, "wide again") { exists("player_docked") }
         assertEquals("$fx/Album-A", path)
+        assertTrue(ps.isPlaying)
+    }
+
+    // Browser only: the player pane can be hidden (the browser takes the window, a mini player shows what plays) and comes
+    // back from the bar, the menu, the mini player or the notification; the choice is kept and the phone UI ignores it.
+    @Test fun a11_playerPaneHiddenAndShownAgain() {
+        toBrowser()
+        windowDp(780, 600)
+        open("$fx/Album-A")
+        until(5_000, "player pane") { widePane() }
+        click("btn_hide_player_pane")
+        until(5_000, "pane hidden") { !widePane() }
+        val list = node("file_list").fetchSemanticsNode().boundsInRoot
+        assertTrue("browser takes the window: $list", list.width > 700 * density)
+        assertTrue("show button on the bar", exists("btn_show_player_pane"))
+        assertTrue("room for refresh on the bar", exists("btn_refresh"))
+
+        // A song played from the browser keeps the browser alone; the mini player shows it.
+        click("item_02 track.mp3")
+        until(15_000, "playing") { playing("02%20track") }
+        until(5_000, "mini") { exists("mini_player") }
+        assertFalse(widePane())
+        assertFalse("no full player over the browser", exists("player_full"))
+
+        // Kept across a recreation of the activity.
+        compose.activityRule.scenario.recreate()
+        until(10_000, "still browser only") { exists("mini_player") && !widePane() }
+        click("mini_player")
+        until(5_000, "pane back from the mini player") { exists("player_docked") }
+        assertFalse(exists("mini_player"))
+        assertTrue(ps.isPlaying)
+
+        click("btn_overflow"); click("menu_player_pane")
+        until(5_000, "hidden from the menu") { !widePane() }
+        click("btn_show_player_pane")
+        until(5_000, "shown from the bar") { widePane() }
+
+        // The phone UI does not change; wide again, the pane stays hidden.
+        click("btn_hide_player_pane")
+        narrowWindow()
+        until(5_000, "phone mini player") { exists("mini_player") }
+        assertFalse(exists("btn_show_player_pane"))
+        windowDp(780, 600)
+        until(5_000, "wide, browser only") { exists("mini_player") && !widePane() }
+
+        // "Show the current track" (notification) brings the pane back.
+        compose.activity.startActivity(
+            Intent(Fx.ctx, MainActivity::class.java).setAction(MainActivity.ACTION_OPEN_PLAYER)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        )
+        until(5_000, "pane back from the notification") { exists("player_docked") }
         assertTrue(ps.isPlaying)
     }
 }

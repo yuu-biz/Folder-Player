@@ -1,6 +1,11 @@
 package com.wing.folderplayer.ui.player
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.KeyboardDoubleArrowRight
+import androidx.compose.material3.IconButton
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,7 +41,7 @@ import com.wing.folderplayer.R
  * wide) only draws the same state differently.
  */
 @Composable
-fun DockedPlayerPane(viewModel: PlayerViewModel, hasTrack: Boolean, modifier: Modifier = Modifier) {
+fun DockedPlayerPane(viewModel: PlayerViewModel, hasTrack: Boolean, modifier: Modifier = Modifier, onHide: (() -> Unit)? = null) {
     val sheet = remember { PlayerSheetState.docked() }
     val transition = rememberPlayerTransition(sheet)
     val backgroundStyle by viewModel.backgroundStyle.collectAsState()
@@ -47,6 +52,16 @@ fun DockedPlayerPane(viewModel: PlayerViewModel, hasTrack: Boolean, modifier: Mo
             MainPlayerScreen(viewModel = viewModel, onCollapse = {}, transition = transition, docked = true)
         } else {
             NoTrackPlaceholder()
+        }
+        // Hides the pane (the browser then has the whole window); in the corner where the phone's player has its fold button.
+        if (onHide != null) {
+            IconButton(
+                onClick = onHide,
+                modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(4.dp)
+                    .background(Color.Black.copy(alpha = 0.25f), CircleShape).testTag("btn_hide_player_pane")
+            ) {
+                Icon(Icons.Default.KeyboardDoubleArrowRight, contentDescription = stringResource(R.string.layout_hide_player), tint = Color.White)
+            }
         }
     }
 }

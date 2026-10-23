@@ -31,6 +31,8 @@
     <string name="browser_filter">Filtrer ce dossier</string>
     <string name="browser_filter_hint">Filtrer par nom (ce dossier seulement)</string>
     <string name="browser_filter_no_match">Rien dans ce dossier ne correspond à « %1$s »</string>
+    <string name="layout_show_player">Afficher le lecteur</string>
+    <string name="layout_hide_player">Masquer le lecteur (navigateur seul)</string>
     <string name="viewer_open">Ouvrir</string>
     <string name="viewer_open_external">Ouvrir dans une autre application</string>
     <string name="viewer_no_app">Aucune application de cet appareil ne peut ouvrir ce fichier</string>

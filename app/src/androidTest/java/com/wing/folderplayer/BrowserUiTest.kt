@@ -43,8 +43,8 @@ class BrowserUiTest : UiTestBase() {
         until(5_000, "$mode view") { exists(if (mode == "GRID") "file_grid" else "file_list") }
     }
 
-    private fun thumbColour(name: String): Triple<Int, Int, Int> {
-        val bmp = node("thumb_$name").captureToImage().asAndroidBitmap()
+    private fun thumbColour(name: String, prefix: String = "thumb_"): Triple<Int, Int, Int> {
+        val bmp = node("$prefix$name").captureToImage().asAndroidBitmap()
         var r = 0L; var g = 0L; var b = 0L; var n = 0
         for (x in bmp.width / 4 until bmp.width * 3 / 4 step 3) for (y in bmp.height / 2 until bmp.height * 7 / 8 step 3) {
             val c = bmp.getPixel(x, y); r += (c shr 16) and 0xff; g += (c shr 8) and 0xff; b += c and 0xff; n++
@@ -242,5 +242,29 @@ class BrowserUiTest : UiTestBase() {
         until(10_000, "cover of the last track") { player.uiState.value.coverUri?.toString()?.contains("Folder%20129/cover.png") == true ||
             player.uiState.value.coverUri?.toString()?.contains("Folder 129/cover.png") == true }
         onUi { player.playPause() }
+    }
+
+    // Image files show the picture itself (whole, framed, with a badge); folders keep their own thumbnail.
+    @Test fun a19_imageFilesShowTheirOwnThumbnail() {
+        open(local, "$fx/Album-A", "GRID")
+        until(15_000, "image thumbnails") { exists("imgthumb_cover.jpg") && exists("imgthumb_folder.png") }
+        assertTrue("cover.jpg is red", close(thumbColour("cover.jpg", "imgthumb_"), Triple(230, 20, 20)))
+        assertTrue("folder.png is blue", close(thumbColour("folder.png", "imgthumb_"), Triple(20, 60, 230)))
+        assertFalse("an image is not drawn as a folder", exists("thumb_cover.jpg"))
+        click("btn_view_mode")
+        until(5_000, "list") { exists("file_list") }
+        until(15_000, "image thumbnail in the list") { exists("imgthumb_cover.jpg") }
+        // The folder above keeps its folder thumbnail.
+        onUi { browser.navigateUp() }
+        until(10_000, "fixture root") { browser.uiState.value.currentFolder?.path == fx }
+        until(15_000, "folder thumbnail") { exists("thumb_Album-A") }
+        assertFalse(exists("imgthumb_Album-A"))
+
+        // Thumbnails off for the source: the image icon, nothing read.
+        settingSwitch("thumbs_LOCAL", false)
+        open(local, "$fx/Album-A", "LIST")
+        Thread.sleep(1_000)
+        assertFalse("no picture with thumbnails off", exists("imgthumb_cover.jpg"))
+        settingSwitch("thumbs_LOCAL", true)
     }
 }

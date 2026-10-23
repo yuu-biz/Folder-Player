@@ -99,6 +99,18 @@ class ThumbnailRepository private constructor(private val context: Context) {
         return resolve(folder, null)
     }
 
+    /**
+     * Grid/list thumbnail of an image file itself: the file is its own picture, so nothing is looked up. The same switches
+     * as for folder images apply; an image above [MAX_IMAGE_BYTES] is not read (None: the list shows the image icon).
+     */
+    fun imageThumbnail(image: MusicFile): ArtworkResult {
+        val cfg = SourceRegistry.get(image.sourceId) ?: return ArtworkResult.Failed(ArtworkResult.Kind.OTHER, "unknown source")
+        if (!settings.thumbnailsEnabled(cfg.type)) return ArtworkResult.Disabled
+        if (cfg.isNetwork && settings.wifiOnly && !isOnWifi()) return ArtworkResult.WifiRequired
+        if (image.size > MAX_IMAGE_BYTES) return ArtworkResult.None
+        return ArtworkResult.Found(image.ref, image)
+    }
+
     /** Player / notification cover: always resolved, regardless of the thumbnail switches. */
     suspend fun playbackCover(folder: SourceRef, known: List<MusicFile>?): ArtworkResult = resolve(folder, known)
 

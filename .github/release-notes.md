@@ -10,8 +10,14 @@ project. This release follows 1.2.0.
   folder you are in by name as you type, without searching the folders below it. Every word you type must appear in
   the name; upper / lower case, full / half width and katakana / hiragana do not matter. Back to the folder brings the
   filter back; another folder starts without it. Playing a song or shuffling uses what the filter shows.
-- On a phone held upright, "Grid / list" and "Refresh" are now in the ⋮ menu, so that the folder name keeps room in
-  the top bar.
+- **Top bar**: "Grid / list" is always on the bar and "Shuffle" is now in the ⋮ menu. On a phone held upright and in the
+  browser pane beside the player, "Refresh" is in the ⋮ menu, so that the folder name keeps room.
+- **File viewer**: text files, images and PDFs beside the songs open with a tap (text with its encoding guessed or chosen,
+  images with swipe and zoom, PDF pages); "Open in another app" hands the file over. Works for every source.
+- **Image thumbnails**: image files in the grid and list show their own picture, whole and framed with an image badge, so
+  they are not mistaken for folders (thumbnails of network sources stay opt-in and Wi-Fi only).
+- **Browser only on large screens**: on an unfolded foldable or a tablet the player pane can be hidden, so that the
+  browser has the whole screen; a mini player shows what plays, and a tap on it brings the player back.
 
 Earlier in 1.x: 1.2.0 kept NAS images in a two-tier cache with one size limit, added a rough account of network use and
 made Back lead to the previous place (with an arrow-up button); 1.1.0 added "Search network" and "Get shares" in the SMB
