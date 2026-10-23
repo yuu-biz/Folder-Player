@@ -20,6 +20,7 @@ import com.wing.folderplayer.data.waveform.WaveformRepository
 import com.wing.folderplayer.playback.NativePcmDataSource
 import com.wing.folderplayer.service.MusicService
 import com.wing.folderplayer.ui.player.PlayerViewModel
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -32,6 +33,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import android.os.SystemClock
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.PI
@@ -215,5 +217,60 @@ class WaveformUiTest : UiTestBase() {
         assertEquals("quiet end", 0, end)
         assertTrue("loud scene reaches the top", loud > 10)
         assertTrue("short loud peak reaches the top", peak > 3)
+    }
+
+    /** Measures [ref] from scratch; logs and returns the result, the time to the first partial waveform and the total time. */
+    private fun timed(ref: SourceRef, what: String): Triple<Waveform, Long, Long> {
+        cacheDir.deleteRecursively()
+        val start = SystemClock.elapsedRealtime()
+        var first = -1L
+        val runs = runBlocking {
+            withTimeout(180_000) { repo.waveform(ref).onEach { if (it != null && first < 0) first = SystemClock.elapsedRealtime() - start }.toList() }
+        }
+        val total = SystemClock.elapsedRealtime() - start
+        val w = runs.last()
+        assertNotNull("$what measured", w)
+        Fx.log("$what: first waveform after $first ms, complete after $total ms, ${w!!.levels.size} bins of ${w.binMs} ms, ${w.levels.count { it.isNaN() }} not measured")
+        return Triple(w, first, total)
+    }
+
+    /** The user waits for the waveform while the track plays: a 10-minute local FLAC must show within seconds. */
+    @Test fun w06_aTenMinuteFileIsMeasuredWithinSeconds() {
+        val (w, _, total) = timed(SourceRef(SourceRegistry.LOCAL_INTERNAL_ID, "${Fx.FX}/Long/long.flac"), "long.flac")
+        assertTrue(w.complete)
+        assertEquals(600_000.0, w.durationMs.toDouble(), 1000.0)
+        assertTrue("every bin measured", w.levels.none { it.isNaN() })
+        assertTrue("measured in $total ms (limit 5000)", total < 5_000)
+    }
+
+    /** 20 minutes: quiet for 8, loud for 4, quiet for 8 (8 kHz mono WAV, written in chunks). */
+    private fun writeLongScenes(file: File) {
+        val rate = 8000
+        val scenes = listOf(480 to 0.08, 240 to 0.8, 480 to 0.08)
+        val frames = scenes.sumOf { it.first } * rate
+        file.outputStream().buffered(1 shl 20).use { out ->
+            out.write(NativePcmDataSource.wavHeader(rate, 1, frames * 2L))
+            val chunk = ByteBuffer.allocate(rate * 2).order(ByteOrder.LITTLE_ENDIAN)
+            var i = 0
+            for ((seconds, amp) in scenes) repeat(seconds) {
+                chunk.clear()
+                repeat(rate) { chunk.putShort((amp * 32767 * sin(2 * PI * 330 * i++ / rate)).toInt().toShort()) }
+                out.write(chunk.array())
+            }
+        }
+    }
+
+    @Test fun w07_aLongFileShowsItsLoudPartQuickly() {
+        val file = File(formatsDir, "long-scenes.wav")
+        if (file.length() != 44L + 1200 * 8000 * 2) writeLongScenes(file)
+        val (w, _, total) = timed(SourceRef(formats, "/Formats/long-scenes.wav"), "long-scenes.wav")
+        assertTrue(w.complete)
+        assertEquals(1_200_000.0, w.durationMs.toDouble(), 1000.0)
+        val bars = w.bars(0, w.durationMs, 10)
+        Fx.log("long-scenes.wav bars ${bars.toList()}")
+        assertTrue("quiet start ${bars.toList()}", bars.take(3).all { it < 0.3f })
+        assertTrue("loud middle ${bars.toList()}", bars[4] > 0.9f && bars[5] > 0.9f)
+        assertTrue("quiet end ${bars.toList()}", bars.drop(7).all { it < 0.3f })
+        assertTrue("measured in $total ms (limit 5000)", total < 5_000)
     }
 }

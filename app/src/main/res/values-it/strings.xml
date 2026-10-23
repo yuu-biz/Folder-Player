@@ -213,7 +213,7 @@
     <string name="settings_auto_save">Salva i brani di rete ascoltati fino alla fine</string>
     <string name="settings_auto_save_help">I file completi vengono salvati in Music/%1$s/ dopo un download completo verificato.</string>
     <string name="settings_waveform">Forma d\'onda sulla barra di avanzamento</string>
-    <string name="settings_waveform_help">Mostra il volume di ogni parte del brano per trovare a colpo d\'occhio i momenti più intensi. Ogni file viene letto una volta in background per misurarlo e il risultato viene conservato. I file delle sorgenti di rete vengono misurati solo in Wi-Fi.</string>
+    <string name="settings_waveform_help">Mostra il volume di ogni parte del brano per trovare a colpo d\'occhio i momenti più intensi. Ogni file viene misurato una volta in background (un file lungo tramite brevi campioni distribuiti su tutta la durata) e il risultato viene conservato. I file delle sorgenti di rete vengono misurati solo in Wi-Fi.</string>
     <string name="settings_waveform_max">Durata massima di un file da misurare</string>
     <string name="settings_waveform_no_limit">Nessun limite</string>
     <string name="settings_waveform_minutes">%1$d min</string>

@@ -1,24 +1,14 @@
 package com.wing.folderplayer.data.waveform
 
 import android.content.Context
-import android.media.AudioFormat
-import android.media.MediaCodec
-import android.media.MediaDataSource
-import android.media.MediaExtractor
-import android.media.MediaFormat
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.edit
 import com.wing.folderplayer.data.artwork.ThumbnailRepository
 import com.wing.folderplayer.data.source.MediaTypes
-import com.wing.folderplayer.data.source.SourceFileSystem
 import com.wing.folderplayer.data.source.SourcePath
 import com.wing.folderplayer.data.source.SourceRef
 import com.wing.folderplayer.data.source.SourceRegistry
-import com.wing.folderplayer.playback.NativeDecoder
-import com.wing.folderplayer.playback.NativeDecoderException
-import com.wing.folderplayer.playback.NativeIo
-import com.wing.folderplayer.playback.NativePcmDataSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -34,8 +24,8 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
 import java.io.IOException
-import java.nio.ByteOrder
 import java.security.MessageDigest
+import kotlin.math.sqrt
 
 /** Waveform on the seek bar: on by default, files longer than [maxMinutes] (0 = no limit) are not measured. */
 class WaveformSettings(context: Context) {
@@ -61,9 +51,9 @@ class WaveformSettings(context: Context) {
 }
 
 /**
- * Measures the loudness envelope of a whole audio file for the seek bar. The file is decoded once in the background
- * (Media3's own formats through MediaExtractor + MediaCodec, WMA / APE / DSD / ALAC through the bundled FFmpeg decoder)
- * and the result is kept on disk, keyed by the file and its size and modification time. Files on network sources are
+ * Measures the loudness envelope of a whole audio file for the seek bar, in the background: a long file by decoding short
+ * windows spread over it, a short one from start to end ([PcmReader]: MediaExtractor + MediaCodec, or the bundled FFmpeg
+ * decoder for WMA / APE / DSD / ALAC). The result is kept on disk, keyed by the file and its size and modification time. Files on network sources are
  * measured only on Wi-Fi; their reads show in the network account like any other source read.
  */
 class WaveformRepository private constructor(private val context: Context) {
@@ -93,8 +83,7 @@ class WaveformRepository private constructor(private val context: Context) {
         val limitMs = settings.limitMs
         val started = SystemClock.elapsedRealtime()
         val result = try {
-            val native = if (ext in MediaTypes.EXTRA_AUDIO || ext == "m4a") analyseNative(ref, fs, ext, limitMs) { emit(it) } else null
-            native ?: analyseMediaCodec(ref, fs, limitMs) { emit(it) }
+            openPcmReader(fs, ref.path, ext).use { r -> measure(r, limitMs) { emit(it) } }
         } catch (e: CancellationException) {
             throw e
         } catch (e: TooLong) {
@@ -109,124 +98,97 @@ class WaveformRepository private constructor(private val context: Context) {
         writeCache(file, result)
     }.flowOn(dispatcher)
 
-    /** WMA / APE / DSF / DFF / ALAC. Null when the native decoder is missing or a .m4a holds AAC (MediaCodec path). */
-    private suspend fun analyseNative(ref: SourceRef, fs: SourceFileSystem, ext: String, limitMs: Long, progress: suspend (Waveform) -> Unit): Waveform? {
-        if (!NativeDecoder.isAvailable()) return null
-        val reader = fs.openRandomAccess(ref.path)
-        var handle = 0L
-        try {
-            handle = try {
-                NativeDecoder.nativeOpen(NativeIo(reader), ext, NativePcmDataSource.MAX_OUTPUT_RATE)
-            } catch (e: NativeDecoderException) {
-                if (ext == "m4a" && e.unsupported) return null
-                throw e
-            }
-            val info = NativeDecoder.nativeInfo(handle)
-            val durationMs = if (info[2] > 0) info[2] / 1000 else -1L
-            checkLimit(durationMs, limitMs)
-            val acc = LevelAccumulator(info[0].toInt(), info[1].toInt(), Waveform.binMsFor(durationMs))
-            val buffer = ByteArray(64 * 1024)
-            var lastProgress = SystemClock.elapsedRealtime()
-            while (true) {
-                currentCoroutineContext().ensureActive()
-                val n = NativeDecoder.nativeRead(handle, buffer, 0, buffer.size)
-                if (n == -1) break
-                if (n < 0) throw IOException("native decode failed ($n)")
-                acc.addPcm16(buffer, 0, n)
-                checkDecodedLimit(acc, durationMs, limitMs)
-                if (SystemClock.elapsedRealtime() - lastProgress >= PROGRESS_MS) {
-                    progress(Waveform(acc.binMs, acc.levels(), durationMs, complete = false))
-                    lastProgress = SystemClock.elapsedRealtime()
-                }
-            }
-            return Waveform(acc.binMs, acc.levels(final = true), durationMs, complete = true)
-        } finally {
-            if (handle != 0L) NativeDecoder.nativeClose(handle)
-            runCatching { reader.close() }
+    /**
+     * A long file whose reader can seek is sampled: one short window per bin, in a coarse-to-fine order, so the shape is
+     * there after a second or two and only a fraction of the file is decoded (and read from a network source). Short
+     * files, files of unknown length and files whose seeking turns out slow are decoded from start to end.
+     */
+    private suspend fun measure(r: PcmReader, limitMs: Long, progress: suspend (Waveform) -> Unit): Waveform {
+        checkLimit(r.durationMs, limitMs)
+        if (r.durationMs > FULL_DECODE_MAX_MS) {
+            sampled(r, progress)?.let { return it }
+            Log.i(TAG, "seeking is slow in this file: decoding it from the start")
+            r.sampling = false
+            r.seek(0)
         }
+        return sequential(r, limitMs, progress)
     }
 
-    private suspend fun analyseMediaCodec(ref: SourceRef, fs: SourceFileSystem, limitMs: Long, progress: suspend (Waveform) -> Unit): Waveform {
-        val reader = fs.openRandomAccess(ref.path)
-        val extractor = MediaExtractor()
-        var codec: MediaCodec? = null
-        try {
-            extractor.setDataSource(object : MediaDataSource() {
-                override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int =
-                    if (size == 0) 0 else reader.read(position, buffer, offset, size)
-                override fun getSize(): Long = reader.size
-                override fun close() {}
-            })
-            val track = (0 until extractor.trackCount).firstOrNull {
-                extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
-            } ?: throw IOException("no audio track")
-            extractor.selectTrack(track)
-            val format = extractor.getTrackFormat(track)
-            val durationMs = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) / 1000 else -1L
-            checkLimit(durationMs, limitMs)
-            val binMs = Waveform.binMsFor(durationMs)
-            var rate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-            var channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-            var isFloat = false
-            var acc: LevelAccumulator? = null
-            val c = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!).also { codec = it }
-            c.configure(format, null, null, 0)
-            c.start()
-            val info = MediaCodec.BufferInfo()
-            var inputDone = false
-            var idle = 0
-            var lastProgress = SystemClock.elapsedRealtime()
-            while (true) {
-                currentCoroutineContext().ensureActive()
-                if (!inputDone) {
-                    val i = c.dequeueInputBuffer(TIMEOUT_US)
-                    if (i >= 0) {
-                        val n = extractor.readSampleData(c.getInputBuffer(i)!!, 0)
-                        if (n < 0) {
-                            c.queueInputBuffer(i, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                            inputDone = true
-                        } else {
-                            c.queueInputBuffer(i, 0, n, extractor.sampleTime, 0)
-                            extractor.advance()
-                        }
-                    }
-                }
-                val o = c.dequeueOutputBuffer(info, TIMEOUT_US)
-                if (o == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                    val f = c.outputFormat
-                    rate = f.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-                    channels = f.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-                    isFloat = f.containsKey(MediaFormat.KEY_PCM_ENCODING) && f.getInteger(MediaFormat.KEY_PCM_ENCODING) == AudioFormat.ENCODING_PCM_FLOAT
-                    if ((acc?.binCount ?: 0) == 0) acc = LevelAccumulator(rate, channels, binMs)
-                } else if (o >= 0) {
-                    idle = 0
-                    val out = c.getOutputBuffer(o)
-                    if (out != null && info.size > 0) {
-                        out.position(info.offset)
-                        out.limit(info.offset + info.size)
-                        out.order(ByteOrder.nativeOrder())
-                        val a = acc ?: LevelAccumulator(rate, channels, binMs).also { acc = it }
-                        if (isFloat) a.addFloat(out.asFloatBuffer()) else a.addPcm16(out.asShortBuffer())
-                        checkDecodedLimit(a, durationMs, limitMs)
-                    }
-                    c.releaseOutputBuffer(o, false)
-                    if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
-                } else if (inputDone && ++idle > MAX_IDLE_POLLS) {
-                    break // the decoder never signalled the end: keep what it gave
-                }
-                val a = acc
-                if (a != null && SystemClock.elapsedRealtime() - lastProgress >= PROGRESS_MS) {
-                    progress(Waveform(a.binMs, a.levels(), durationMs, complete = false))
-                    lastProgress = SystemClock.elapsedRealtime()
-                }
+    private suspend fun sequential(r: PcmReader, limitMs: Long, progress: suspend (Waveform) -> Unit): Waveform {
+        val binMs = Waveform.binMsFor(r.durationMs)
+        val buffer = FloatArray(16 * 1024)
+        var acc: LevelAccumulator? = null
+        var lastProgress = SystemClock.elapsedRealtime()
+        while (true) {
+            currentCoroutineContext().ensureActive()
+            val n = r.read(buffer)
+            if (n < 0) break
+            // Created at the first samples: only then are the decoded rate and channel count known.
+            val a = acc ?: LevelAccumulator(r.sampleRate, r.channels, binMs).also { acc = it }
+            a.add(buffer, n)
+            checkDecodedLimit(a, r.durationMs, limitMs)
+            if (SystemClock.elapsedRealtime() - lastProgress >= PROGRESS_MS) {
+                progress(Waveform(binMs, a.levels(), r.durationMs, complete = false))
+                lastProgress = SystemClock.elapsedRealtime()
             }
-            val levels = acc?.levels(final = true) ?: throw IOException("no audio decoded")
-            return Waveform(binMs, levels, durationMs, complete = true)
-        } finally {
-            codec?.let { runCatching { it.stop() }; runCatching { it.release() } }
-            runCatching { extractor.release() }
-            runCatching { reader.close() }
         }
+        val levels = acc?.levels(final = true) ?: throw IOException("no audio decoded")
+        return Waveform(binMs, levels, r.durationMs, complete = true)
+    }
+
+    /**
+     * Null when seeking is too slow to sample (a container without an index makes the decoder read from the start for
+     * every window); the caller then decodes the file from the start.
+     */
+    private suspend fun sampled(r: PcmReader, progress: suspend (Waveform) -> Unit): Waveform? {
+        val durationMs = r.durationMs
+        val windows = Waveform.windowsFor(durationMs)
+        val binMs = ((durationMs + windows - 1) / windows).toInt()
+        val levels = FloatArray(windows) { Float.NaN }
+        r.sampling = true
+        val buffer = FloatArray(4096)
+        val started = SystemClock.elapsedRealtime()
+        var lastProgress = started
+        var seekNs = 0L
+        for ((done, i) in Waveform.sampleOrder(windows).withIndex()) {
+            currentCoroutineContext().ensureActive()
+            if (done == SLOW_CHECK_WINDOWS && SystemClock.elapsedRealtime() - started > SLOW_CHECK_WINDOWS * SLOW_WINDOW_MS) return null
+            // The window sits in the middle of its bin; a little is decoded first and dropped (an MP3 frame needs the
+            // frames before it, AAC starts with priming samples).
+            val centre = i.toLong() * binMs + binMs / 2
+            val t0 = System.nanoTime()
+            r.seek((centre - WINDOW_MS / 2 - SKIP_MS).coerceAtLeast(0))
+            seekNs += System.nanoTime() - t0
+            var skip = -1L
+            var need = 0L
+            var sum = 0.0
+            var count = 0L
+            while (true) {
+                val n = r.read(buffer)
+                if (n < 0) break
+                if (skip < 0) {
+                    val perMs = r.sampleRate.toLong() * r.channels / 1000.0
+                    skip = (perMs * SKIP_MS).toLong()
+                    need = (perMs * WINDOW_MS).toLong()
+                }
+                for (k in 0 until n) {
+                    if (skip > 0) { skip--; continue }
+                    val v = buffer[k]
+                    sum += v.toDouble() * v
+                    count++
+                }
+                if (count >= need) break
+            }
+            if (count > 0) levels[i] = sqrt(sum / count).toFloat().coerceIn(0f, 1f)
+            if (SystemClock.elapsedRealtime() - lastProgress >= PROGRESS_MS) {
+                progress(Waveform(binMs, levels.copyOf(), durationMs, complete = false))
+                lastProgress = SystemClock.elapsedRealtime()
+            }
+        }
+        Log.i(TAG, "sampled $windows windows in ${SystemClock.elapsedRealtime() - started} ms (seeking ${seekNs / 1_000_000} ms)")
+        // A window past the real end of the file (its length was an estimate) or one the decoder gave nothing for.
+        for (i in levels.indices) if (levels[i].isNaN()) levels[i] = 0f
+        return Waveform(binMs, levels, durationMs, complete = true)
     }
 
     private fun checkLimit(durationMs: Long, limitMs: Long) {
@@ -269,9 +231,14 @@ class WaveformRepository private constructor(private val context: Context) {
     companion object {
         private const val TAG = "Waveform"
         const val CACHE_DIR = "waveforms"
-        private const val PROGRESS_MS = 400L
-        private const val TIMEOUT_US = 10_000L
-        private const val MAX_IDLE_POLLS = 300
+        private const val PROGRESS_MS = 300L
+        /** Files up to this length are decoded whole (a few seconds at most); longer ones are sampled. */
+        private const val FULL_DECODE_MAX_MS = 120_000L
+        private const val WINDOW_MS = 250L
+        private const val SKIP_MS = 50L
+        /** Sampling is given up when the first windows took longer than this each (seeking reads from the start). */
+        private const val SLOW_CHECK_WINDOWS = 8
+        private const val SLOW_WINDOW_MS = 250L
         private const val MAX_CACHED = 500
 
         @android.annotation.SuppressLint("StaticFieldLeak") // application context only
