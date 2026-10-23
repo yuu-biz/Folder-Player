@@ -139,6 +139,23 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.26 Image thumbnails, shuffle in the menu, browser only in wide windows (1.3.0-dev3, 2026-10-23)
+
+Image files show their own thumbnail (whole picture, framed, image badge; folders unchanged); grid / list always on the
+top bar and shuffle in the ⋮ menu; in a wide window the player pane can be hidden so that the browser has the whole
+window, with a mini player that brings it back (design in [KNOWN_ISSUES.md](KNOWN_ISSUES.md), "Image thumbnails,
+browser-only wide layout"). Checked in a Claude Code cloud session (no KVM).
+
+| Check | Result |
+|---|---|
+| `testDebugUnitTest` (no fixture servers), `lintDebug`, `compileDebugAndroidTestKotlin` | JVM 242 tests, 0 failures, 25 skipped (protocol tests without fixtures); lint 0 errors, no warning in the new code (a `UseKtx` hint of the first build was taken) |
+| `release.yml` "Run workflow" on `b580ef3`, `version` = `1.3.0-dev3` ([run 39899172800](https://github.com/yuu-biz/Folder-Player/actions/runs/39899172800)) | success (tests, lint, notices, signed APK); artifact `FolderPlayerFork-1.3.0-dev3` (APK and `SHA256SUMS.txt`), versionCode 1030003, certificate SHA-256 `bd7e9920…6da3c1a` = the release key; installs over 1.3.0-dev2 and 1.2.0 |
+
+Not run: `BrowserUiTest#a19` (image thumbnails in grid and list, their colours, folder thumbnail kept, switch off) and
+`AdaptiveLayoutTest#a11` (hide / show the pane from the pane, bar, menu, mini player and notification; kept across a
+recreation; phone UI unchanged) on an emulator; the suites whose `click("btn_shuffle")` now goes through the ⋮ menu
+(`UiTestBase.click` falls back to `menu_shuffle`); the APK on the owner's phone and on a foldable.
+
 ### 5.25 File viewer (1.3.0-dev2, 2026-10-21)
 
 Text, images and PDF beside the songs open in a viewer of the browser; "Open in another app" through a FileProvider copy
