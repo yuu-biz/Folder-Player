@@ -37,6 +37,8 @@
     <string name="browser_filter">Filter this folder</string>
     <string name="browser_filter_hint">Filter by name (this folder only)</string>
     <string name="browser_filter_no_match">Nothing in this folder matches “%1$s”</string>
+    <string name="layout_show_player">Show player</string>
+    <string name="layout_hide_player">Hide player (browser only)</string>
     <string name="viewer_open">Open</string>
     <string name="viewer_open_external">Open in another app</string>
     <string name="viewer_no_app">No app on this device can open this file</string>

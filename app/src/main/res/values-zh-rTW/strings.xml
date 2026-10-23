@@ -31,6 +31,8 @@
     <string name="browser_filter">篩選此資料夾</string>
     <string name="browser_filter_hint">依名稱篩選（僅此資料夾）</string>
     <string name="browser_filter_no_match">此資料夾中沒有符合「%1$s」的項目</string>
+    <string name="layout_show_player">顯示播放器</string>
+    <string name="layout_hide_player">隱藏播放器（僅瀏覽器）</string>
     <string name="viewer_open">開啟</string>
     <string name="viewer_open_external">以其他應用程式開啟</string>
     <string name="viewer_no_app">此裝置上沒有可以開啟此檔案的應用程式</string>

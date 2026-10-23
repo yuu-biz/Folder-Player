@@ -4,7 +4,8 @@
 
 What a user can run into, in one place. The sections below give the history of each point and what was fixed when.
 
-- **Foldables / hinge**: no fold or hinge information is used; the layout follows the window size. Not checked on a real
+- **Foldables / hinge**: no fold or hinge information is used; the layout follows the window size. In a wide window the
+  player pane can be hidden (browser only, see "Image thumbnails, browser-only wide layout"). Not checked on a real
   foldable or tablet (window resizing on emulators only).
 - **Navigation**: Back is the previous place (the folder, favourites list or source list the user came from, step by step); the
   arrow-up button goes up one folder and Back after it returns to where the user was; the home button goes to the source
@@ -47,6 +48,26 @@ What a user can run into, in one place. The sections below give the history of e
   Settings). Not yet run on an emulator or a phone (see below).
 - **Not checked**: TalkBack sessions, HyperOS devices, a NAS, a background network retry on a real phone with the
   screen off (a refused foreground start is caught and logged, see below).
+
+## Image thumbnails, browser-only wide layout, shuffle in the menu (after 1.3.0)
+
+- **Image files have their own thumbnail.** An image in the list (jpg, png, gif, webp, bmp, heic) is shown by its own
+  picture: the whole picture, not cropped, on a framed tile with an image badge in its corner. A folder's image fills its
+  tile edge to edge as before, so the two are told apart at a glance. The thumbnail goes through the same image cache as
+  folder images (128 / 256 px files, Settings → Library & network) and the same switches (local on, network off by default,
+  Wi-Fi only). The first view of a folder of photos on a NAS reads each photo once (up to 20 MB each; larger ones keep the
+  icon); the 256 px file is kept from then on.
+- **Wide windows: browser only.** The player pane beside the browser can be hidden: the button in its top corner or
+  "Hide player" in the ⋮ menu. The browser then has the whole window; while something plays a mini player sits at the
+  bottom, and a tap on it (or the bar button "Show player", the ⋮ menu, the notification) brings the pane back. Playing a
+  song from the browser does not bring the pane back (the mini player shows it). The choice is kept across restarts
+  (`layout_prefs`); the phone UI is unchanged. The pane appears and disappears without an animation.
+- **Top bar**: grid / list is always on the bar, shuffle is always in the ⋮ menu (it was on the bar, and grid / list was in
+  the menu on narrow screens).
+
+Open points: `BrowserUiTest#a19` (image thumbnails, colours, switch off) and `AdaptiveLayoutTest#a11` (hide / show the
+pane, mini player, recreation, phone UI, notification) were written and compiled in a cloud session without KVM, not run
+on an emulator yet. Not checked on a real foldable.
 
 ## File viewer (after 1.3.0)
 

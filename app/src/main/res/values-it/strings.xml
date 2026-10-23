@@ -31,6 +31,8 @@
     <string name="browser_filter">Filtra questa cartella</string>
     <string name="browser_filter_hint">Filtra per nome (solo questa cartella)</string>
     <string name="browser_filter_no_match">Nessun elemento di questa cartella corrisponde a “%1$s”</string>
+    <string name="layout_show_player">Mostra il lettore</string>
+    <string name="layout_hide_player">Nascondi il lettore (solo browser)</string>
     <string name="viewer_open">Apri</string>
     <string name="viewer_open_external">Apri in un\'altra app</string>
     <string name="viewer_no_app">Nessuna app su questo dispositivo può aprire questo file</string>

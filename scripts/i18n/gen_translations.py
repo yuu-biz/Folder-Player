@@ -809,6 +809,13 @@ T["ja"].update({
     "viewer_pdf_protected": "この PDF はパスワードで保護されているため、ここでは表示できません",
 })
 
+# Wide windows: the player pane beside the browser can be hidden (browser only) and shown again.
+T["zh-rCN"].update({"layout_show_player": "显示播放器", "layout_hide_player": "隐藏播放器（仅浏览器）"})
+T["zh-rTW"].update({"layout_show_player": "顯示播放器", "layout_hide_player": "隱藏播放器（僅瀏覽器）"})
+T["fr"].update({"layout_show_player": "Afficher le lecteur", "layout_hide_player": "Masquer le lecteur (navigateur seul)"})
+T["it"].update({"layout_show_player": "Mostra il lettore", "layout_hide_player": "Nascondi il lettore (solo browser)"})
+T["ja"].update({"layout_show_player": "プレーヤーを表示", "layout_hide_player": "プレーヤーを隠す（ファイラーのみ）"})
+
 def main():
     keys = base_keys()
     ok = True

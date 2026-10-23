@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -72,6 +73,8 @@ fun BrowserScreen(
     onOpenSettings: () -> Unit,
     /** False while something in front of the browser (the full player) owns Back. */
     backEnabled: Boolean = true,
+    /** Wide windows only (null otherwise): whether the player pane is beside the browser, and how to show / hide it. */
+    playerPane: PlayerPaneToggle? = null,
     viewModel: BrowserViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -226,46 +229,46 @@ fun BrowserScreen(
                                         )
                                     }
                                 }
+                                ShowPlayerPaneButton(playerPane)
                                 BrowserOverflow(onOpenSettings) { close ->
                                     DropdownMenuItem(text = { Text(stringResource(R.string.browser_sync_favorites)) },
                                         onClick = { close(); viewModel.syncFavorites() })
+                                    PlayerPaneMenuItem(playerPane, close)
                                 }
                             } else {
                                 // Little room (the browser pane beside the player, a phone held upright: Back, up and home take the left of
-                                // the bar): view mode and refresh move into the menu, so that the title keeps some room.
-                                val compact = com.wing.folderplayer.ui.adaptive.isWideWindow() || LocalConfiguration.current.screenWidthDp < 480
+                                // the bar): refresh moves into the menu, so that the title keeps some room. Grid / list stays on the bar
+                                // (used often), shuffle is always in the menu (used rarely).
+                                val compact = playerPane?.shown == true || LocalConfiguration.current.screenWidthDp < 480
                                 if (uiState.currentFolder != null) {
                                     IconButton(onClick = { viewModel.openSearch() }, modifier = Modifier.testTag("btn_search")) {
                                         Icon(Icons.Default.Search, contentDescription = stringResource(R.string.browser_search))
                                     }
                                 }
-                                if (!compact) IconButton(onClick = { viewModel.setViewMode(if (uiState.viewMode == "GRID") "LIST" else "GRID") }, modifier = Modifier.testTag("btn_view_mode")) {
+                                IconButton(onClick = { viewModel.setViewMode(if (uiState.viewMode == "GRID") "LIST" else "GRID") }, modifier = Modifier.testTag("btn_view_mode")) {
                                     Icon(if (uiState.viewMode == "GRID") Icons.Default.ViewList else Icons.Default.GridView,
                                         contentDescription = stringResource(R.string.browser_toggle_view))
-                                }
-                                IconButton(onClick = { viewModel.shufflePlay(onFolderPlay, onCustomPlay) }, modifier = Modifier.testTag("btn_shuffle")) {
-                                    Icon(Icons.Default.Shuffle, contentDescription = stringResource(R.string.browser_shuffle))
                                 }
                                 if (uiState.currentFolder != null && !compact) {
                                     IconButton(onClick = { viewModel.refresh() }, modifier = Modifier.testTag("btn_refresh")) {
                                         Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.browser_refresh))
                                     }
                                 }
+                                ShowPlayerPaneButton(playerPane)
                                 BrowserOverflow(onOpenSettings) { close ->
-                                    if (compact) {
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.browser_toggle_view)) },
-                                            leadingIcon = { Icon(if (uiState.viewMode == "GRID") Icons.Default.ViewList else Icons.Default.GridView, contentDescription = null) },
-                                            onClick = { close(); viewModel.setViewMode(if (uiState.viewMode == "GRID") "LIST" else "GRID") },
-                                            modifier = Modifier.testTag("menu_view_mode")
-                                        )
-                                        if (uiState.currentFolder != null) DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.browser_refresh)) },
-                                            leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
-                                            onClick = { close(); viewModel.refresh() },
-                                            modifier = Modifier.testTag("menu_refresh")
-                                        )
-                                    }
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.browser_shuffle)) },
+                                        leadingIcon = { Icon(Icons.Default.Shuffle, contentDescription = null) },
+                                        onClick = { close(); viewModel.shufflePlay(onFolderPlay, onCustomPlay) },
+                                        modifier = Modifier.testTag("menu_shuffle")
+                                    )
+                                    if (compact && uiState.currentFolder != null) DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.browser_refresh)) },
+                                        leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                                        onClick = { close(); viewModel.refresh() },
+                                        modifier = Modifier.testTag("menu_refresh")
+                                    )
+                                    PlayerPaneMenuItem(playerPane, close)
                                     uiState.currentFolder?.let { folder ->
                                         val marked = uiState.isBookmarked(folder)
                                         DropdownMenuItem(
@@ -366,6 +369,7 @@ fun BrowserScreen(
                                 columns = gridColumns(uiState.gridDensity, listWidth),
                                 currentlyPlaying = uiState.currentlyPlayingMediaId,
                                 thumbnail = viewModel::folderThumbnail,
+                                imageThumbnail = viewModel::imageThumbnail,
                                 onFileClick = onClick,
                                 onFileLongClick = onLong,
                                 state = gridState,
@@ -374,6 +378,7 @@ fun BrowserScreen(
                                 files = files,
                                 currentlyPlaying = uiState.currentlyPlayingMediaId,
                                 thumbnail = viewModel::folderThumbnail,
+                                imageThumbnail = viewModel::imageThumbnail,
                                 duration = viewModel::trackDuration,
                                 showSourcePath = uiState.search.active || uiState.showingFavorites,
                                 sortField = uiState.sortField,
@@ -415,6 +420,31 @@ fun BrowserScreen(
 /** Columns of the grid: the chosen density for a phone-wide list, more for a list wide as a landscape phone (about 560 dp and more). */
 private fun gridColumns(density: Int, width: androidx.compose.ui.unit.Dp): Int =
     if (width >= 560.dp) (density * 5 + 2) / 3 else density
+
+/** The player pane of a wide window: [shown] beside the browser, or hidden so that the browser has the whole window. */
+@Immutable
+data class PlayerPaneToggle(val shown: Boolean, val onToggle: () -> Unit)
+
+/** Top bar of a browser that has the whole wide window: brings the player pane back. Nothing otherwise. */
+@Composable
+private fun ShowPlayerPaneButton(pane: PlayerPaneToggle?) {
+    if (pane == null || pane.shown) return
+    IconButton(onClick = pane.onToggle, modifier = Modifier.testTag("btn_show_player_pane")) {
+        Icon(Icons.Default.VerticalSplit, contentDescription = stringResource(R.string.layout_show_player))
+    }
+}
+
+/** ⋮ row of a wide window: hides or shows the player pane (the same as the buttons on the bar and on the pane). */
+@Composable
+private fun PlayerPaneMenuItem(pane: PlayerPaneToggle?, close: () -> Unit) {
+    if (pane == null) return
+    DropdownMenuItem(
+        text = { Text(stringResource(if (pane.shown) R.string.layout_hide_player else R.string.layout_show_player)) },
+        leadingIcon = { Icon(if (pane.shown) Icons.Default.Fullscreen else Icons.Default.VerticalSplit, contentDescription = null) },
+        onClick = { close(); pane.onToggle() },
+        modifier = Modifier.testTag("menu_player_pane")
+    )
+}
 
 /** ⋮ of every browser level: the level's own [items] first, Settings last. */
 @Composable
@@ -717,12 +747,67 @@ private fun FolderThumb(file: MusicFile, thumbnail: suspend (SourceRef) -> Artwo
     }
 }
 
+/**
+ * Thumbnail of an image file (not a folder): the whole picture, not cropped, on a framed tile with an image badge in the
+ * corner, so that it is not taken for a folder (whose image fills its tile edge to edge). Loaded only while on screen;
+ * with thumbnails off for the source (or Wi-Fi required), too large or unreadable, the image icon stays.
+ */
+@Composable
+private fun ImageThumb(file: MusicFile, thumbnail: (MusicFile) -> ArtworkResult, modifier: Modifier, iconSize: androidx.compose.ui.unit.Dp, badgeSize: androidx.compose.ui.unit.Dp) {
+    val revision = LocalThumbnailRevision.current
+    val result by produceState<ArtworkResult?>(initialValue = null, file.sourceId, file.path, file.size, file.lastModified, revision) {
+        value = thumbnail(file)
+    }
+    val r = result
+    // null = not loaded yet (or not asked), true = shown, false = the picture could not be read or decoded.
+    var loaded by remember(r) { mutableStateOf<Boolean?>(null) }
+    Box(modifier) {
+        Box(
+            Modifier.fillMaxSize().clip(RoundedCornerShape(2.dp))
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(2.dp))
+                .padding(2.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (loaded != true) {
+                Icon(if (loaded == false) Icons.Default.BrokenImage else Icons.Default.Image, contentDescription = null,
+                    modifier = Modifier.size(iconSize), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+            }
+            if (r is ArtworkResult.Found) {
+                AsyncImage(
+                    model = ImageUris.of(r.image, r.entry),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    onState = { state ->
+                        loaded = when (state) {
+                            is coil.compose.AsyncImagePainter.State.Success -> true
+                            is coil.compose.AsyncImagePainter.State.Error -> false
+                            else -> loaded
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize().testTag("imgthumb_${file.name}")
+                )
+            }
+        }
+        // The badge says "a picture" whatever the picture shows.
+        if (loaded == true) {
+            Icon(
+                Icons.Default.Image, contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(2.dp).size(badgeSize)
+                    .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(4.dp)).padding(2.dp)
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FileList(
     files: List<MusicFile>,
     currentlyPlaying: String?,
     thumbnail: suspend (SourceRef) -> ArtworkResult,
+    imageThumbnail: (MusicFile) -> ArtworkResult,
     duration: suspend (MusicFile) -> Long?,
     showSourcePath: Boolean,
     /** Sort key: size or date is then shown beside the format, so a list sorted by it says why. */
@@ -804,6 +889,8 @@ fun FileList(
                         leadingContent = {
                             if (file.isDirectory && !playing) {
                                 FolderThumb(file, thumbnail, Modifier.size(40.dp), 24.dp)
+                            } else if (ViewerTypes.kind(file.name) == ViewerKind.IMAGE) {
+                                ImageThumb(file, imageThumbnail, Modifier.size(40.dp), 24.dp, 14.dp)
                             } else {
                                 val icon = if (playing) Icons.Default.PlayCircleFilled else fileIcon(file)
                                 val tint = when {
@@ -839,6 +926,7 @@ fun FileGrid(
     columns: Int,
     currentlyPlaying: String?,
     thumbnail: suspend (SourceRef) -> ArtworkResult,
+    imageThumbnail: (MusicFile) -> ArtworkResult,
     onFileClick: (MusicFile) -> Unit,
     onFileLongClick: (MusicFile) -> Unit,
     state: androidx.compose.foundation.lazy.grid.LazyGridState,
@@ -865,6 +953,8 @@ fun FileGrid(
             ) {
                 if (file.isDirectory) {
                     FolderThumb(file, thumbnail, Modifier.fillMaxWidth().aspectRatio(1f), 40.dp)
+                } else if (ViewerTypes.kind(file.name) == ViewerKind.IMAGE) {
+                    ImageThumb(file, imageThumbnail, Modifier.fillMaxWidth().aspectRatio(1f), 36.dp, 20.dp)
                 } else {
                     Box(
                         Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant),

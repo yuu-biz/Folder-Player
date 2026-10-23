@@ -555,6 +555,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     suspend fun folderThumbnail(folder: SourceRef): ArtworkResult = thumbnails.folderThumbnail(folder)
 
+    /** Thumbnail of an image file in the list: the image itself, under the same switches as folder images. */
+    fun imageThumbnail(image: MusicFile): ArtworkResult = thumbnails.imageThumbnail(image)
+
     /** Track length in ms for the list (null: not shown). */
     suspend fun trackDuration(file: MusicFile): Long? = durations.duration(file)
 
