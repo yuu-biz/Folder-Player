@@ -1,14 +1,22 @@
 Folder Player Fork {VERSION} — an unofficial personal fork of
 [Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000. It is not affiliated with the original
-project. This release follows 1.3.0.
+project. This release follows 1.3.1.
 
-## What's new in 1.3.1
+## What's new in 1.3.2
+
+- **Waveform, faster again and drawn at once**: the waveform is now measured with the bundled FFmpeg decoder for every
+  format (as Namida does), instead of Android's media codecs, which some phones make slow (a 30-minute MP3 took about
+  30 s on a phone with 1.3.1). It appears once, whole, growing out of the seek bar, instead of filling in with gaps and
+  changing height while it is measured. From a NAS a long file is sampled where each seek lands, so only a little of it
+  is read. On the test emulator a 30-minute MP3 now takes 1.5 s (4.6 s in 1.3.1, drawn 15 times), and also 1.5 s with a
+  simulated NAS that answers each read after 5 ms (1.3.1 read about 11 times per point there, 75 ms a point: over 20 s
+  for the file). The APK grows by about 1 MB (the added decoders).
+
+## New in 1.3.1
 
 - **Faster waveform**: the waveform on the seek bar now shows within about a second. A track longer than two minutes is
-  measured from short samples spread over it (the rough shape appears at once and then sharpens; only those parts are
-  read, so a long file on a NAS is not read again whole), and decoding no longer waits between buffers. On the test
-  emulator a 10-minute FLAC took 22 s in 1.3.0; its first waveform now shows in under a second and is complete after about 4 s.
-  It is a rough trend, which is what the waveform is for; a CUE track of a long disc image gets fewer points.
+  measured from short samples spread over it (only those parts are read, so a long file on a NAS is not read again
+  whole), and decoding no longer waits between buffers. On the test emulator a 10-minute FLAC took 22 s in 1.3.0.
 
 ## New in 1.3.0
 
@@ -84,9 +92,9 @@ Details: [docs/fork/FEATURES.md]({REPO}/blob/{VERSION_TAG}/docs/fork/FEATURES.md
   then made again). The network account is an estimate, not the bytes on the wire. The cache and the account were tested with
   a Samba server in Docker, not with a real NAS, and the saving on a large real library was not measured.
 - Settings shows no mini player.
-- The waveform reads the whole file once more, besides playback: on a NAS a long file takes a while before its waveform is
-  complete (it fills in from the left). Files longer than the limit in Settings, and network files on mobile data, keep
-  the plain seek bar.
+- The waveform of a long file is a rough trend from samples (from a NAS about one point per 1 % of the file for an MP3),
+  and it was timed on an emulator with a simulated NAS, not on a real NAS. Files longer than the limit in Settings, and
+  network files on mobile data, keep the plain seek bar.
 - The filter matches the names of the folder on screen only (not tags, not the folders below); it is not offered in the
   favourites list or in search results.
 - DLNA casting sends the current track only (nothing advances to the next one) and was tested with a software

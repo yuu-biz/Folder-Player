@@ -85,8 +85,28 @@ class Waveform(val binMs: Int, val levels: FloatArray, val durationMs: Long, val
         /** Height = (rms / loudest)^CURVE: -6 dB is about 60 % of the loudest bar, -20 dB about 20 %. */
         private const val CURVE = 0.7
 
-        /** Windows of a long file measured by sampling: about one per second, 100 to 300 (each costs a seek, a few ms). */
-        fun windowsFor(durationMs: Long): Int = (durationMs / 1000).toInt().coerceIn(100, 300)
+        /**
+         * Windows of a long file measured by sampling: one every 3 s, 100 to 600 (each costs a seek: well under a
+         * millisecond in a local file, a round trip to a NAS).
+         */
+        fun windowsFor(durationMs: Long): Int = (durationMs / 3000).toInt().coerceIn(100, 600)
+
+        /**
+         * [levels] with each NaN (a bin not measured) replaced by a straight line between the measured bins around it
+         * (the nearest one at either end); all zero when none was measured.
+         */
+        fun filled(levels: FloatArray): FloatArray {
+            val out = levels.copyOf()
+            var prev = -1
+            for (i in 0..out.size) {
+                if (i < out.size && out[i].isNaN()) continue
+                val from = if (prev >= 0) out[prev] else if (i < out.size) out[i] else 0f
+                val to = if (i < out.size) out[i] else from
+                for (k in prev + 1 until i) out[k] = from + (to - from) * (k - prev) / (i - prev)
+                prev = i
+            }
+            return out
+        }
 
         /**
          * Bin indices in a coarse-to-fine order (bit reversal): the first few already spread over the whole file, so a

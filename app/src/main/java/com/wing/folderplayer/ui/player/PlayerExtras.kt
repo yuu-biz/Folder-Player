@@ -1,6 +1,9 @@
 package com.wing.folderplayer.ui.player
 
 import android.os.Build
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -440,8 +443,9 @@ fun Modifier.seekSemantics(positionMs: Long, durationMs: Long, onSeekFraction: (
 
 /**
  * The seek bar's track drawn as the current track's waveform (loudness over time, so loud scenes can be found at a
- * glance): bars up to the playback position are bright, buffered ones dimmer, the rest faint; the part not measured
- * yet is a row of dots. [durationMs] is the track's (a CUE track shows its slice of the file).
+ * glance): bars up to the playback position are bright, buffered ones dimmer, the rest faint. The bars grow out of the
+ * plain track when the waveform arrives and move to their new heights when a coarse waveform is replaced by the full
+ * one. [durationMs] is the track's (a CUE track shows its slice of the file).
  */
 @Composable
 fun WaveformTrack(wave: TrackWaveform, durationMs: Long, played: Float, buffered: Float, modifier: Modifier = Modifier, height: Dp = 36.dp) {
@@ -451,22 +455,33 @@ fun WaveformTrack(wave: TrackWaveform, durationMs: Long, played: Float, buffered
     var widthPx by remember { mutableIntStateOf(0) }
     val count = if (widthPx > 0) ((widthPx + gapPx) / (barPx + gapPx)).toInt() else 0
     val bars = remember(wave, durationMs, count) { wave.waveform.bars(wave.startMs, durationMs, count) }
+    // Heights move from [from] to [to] while [move] goes from 0 to 1.
+    val move = remember { Animatable(1f) }
+    var from by remember { mutableStateOf(FloatArray(0)) }
+    var to by remember { mutableStateOf(FloatArray(0)) }
+    LaunchedEffect(bars) {
+        val p = move.value
+        from = if (to.size == bars.size) FloatArray(bars.size) { lerpBar(from.getOrElse(it) { 0f }, to[it], p) } else FloatArray(bars.size)
+        to = bars
+        move.snapTo(0f)
+        move.animateTo(1f, tween(BAR_MOVE_MS, easing = FastOutSlowInEasing))
+    }
     Canvas(modifier.fillMaxWidth().height(height).onSizeChanged { widthPx = it.width }.testTag("seek_waveform")) {
-        if (count == 0 || bars.size != count) return@Canvas
+        if (count == 0) return@Canvas
+        val p = move.value
         val step = if (count > 1) (size.width - barPx) / (count - 1) else 0f
         val minH = 2.dp.toPx()
         val mid = size.height / 2
         for (i in 0 until count) {
             val x = i * step
-            val h = bars[i]
+            val h = if (to.size == count) lerpBar(from.getOrElse(i) { 0f }, to[i], p) else 0f
             val at = (x + barPx / 2) / size.width
             val alpha = when {
-                h.isNaN() -> 0.15f
                 at <= played -> 1f
                 at <= buffered -> 0.5f
                 else -> 0.3f
             }
-            val barH = if (h.isNaN()) minH else maxOf(minH, h * size.height)
+            val barH = maxOf(minH, h * size.height)
             drawRoundRect(
                 Color.White.copy(alpha = alpha),
                 topLeft = Offset(x, mid - barH / 2),
@@ -476,3 +491,13 @@ fun WaveformTrack(wave: TrackWaveform, durationMs: Long, played: Float, buffered
         }
     }
 }
+
+private const val BAR_MOVE_MS = 600
+
+/** A bar not measured (NaN) is drawn flat. */
+private fun lerpBar(a: Float, b: Float, t: Float): Float {
+    val x = if (a.isNaN()) 0f else a
+    val y = if (b.isNaN()) 0f else b
+    return x + (y - x) * t
+}
+

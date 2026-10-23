@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.wing.folderplayer.data.source.RandomAccessReader
 import com.wing.folderplayer.data.source.SourceConfig
 import com.wing.folderplayer.data.source.SourceRef
 import com.wing.folderplayer.data.source.SourceRegistry
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -33,6 +35,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.io.RandomAccessFile
 import android.os.SystemClock
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -40,9 +43,9 @@ import kotlin.math.PI
 import kotlin.math.sin
 
 /**
- * Waveform on the seek bar: a file is measured through MediaCodec (WAV, AAC in .m4a, FLAC) or the native decoder
- * (WMA), loud and quiet parts come out as such, the result is kept, the switch turns it off, and the full player draws
- * it while the seek bar still seeks.
+ * Waveform on the seek bar: a file is measured through the native decoder (MediaCodec when it declines one), loud and
+ * quiet parts come out as such, a long file appears whole within seconds (also from a NAS-like source), the result is
+ * kept, the switch turns it off, and the full player draws it while the seek bar still seeks.
  */
 @RunWith(AndroidJUnit4::class)
 class WaveformUiTest : UiTestBase() {
@@ -129,7 +132,7 @@ class WaveformUiTest : UiTestBase() {
     }
 
     @Test fun w02_otherFormats() {
-        // AAC in .m4a: the native decoder declines it, MediaCodec measures it. The others: native decoder (FLAC: w04).
+        // All through the native decoder (AAC in .m4a too, which playback leaves to Media3). FLAC: w04.
         for (name in listOf("sample-aac.m4a", "sample-alac.m4a", "sample.wma", "sample.ape", "sample.dsf")) {
             val w = measure(name).last()
             assertNotNull("$name measured", w)
@@ -272,5 +275,86 @@ class WaveformUiTest : UiTestBase() {
         assertTrue("loud middle ${bars.toList()}", bars[4] > 0.9f && bars[5] > 0.9f)
         assertTrue("quiet end ${bars.toList()}", bars.drop(7).all { it < 0.3f })
         assertTrue("measured in $total ms (limit 5000)", total < 5_000)
+    }
+
+    /**
+     * The user's case: a 30-minute MP3 took ~30 s and drew itself in scattered bars that kept changing height. It must
+     * be done within seconds and appear whole: at most a coarse picture and the final one, neither with gaps. The file
+     * (44.1 kHz stereo VBR MP3, pink noise, loud from minute 12 to 18) is too big for the test assets; it is made by
+     * `instrument.sh <serial> push-long-mp3`.
+     */
+    @Test fun w08_aThirtyMinuteMp3AppearsWholeWithinSeconds() {
+        val file = File(formatsDir, "long-scenes.mp3")
+        assertTrue("$file missing: run instrument.sh <serial> push-long-mp3", file.length() > 1_000_000)
+        cacheDir.deleteRecursively()
+        val start = SystemClock.elapsedRealtime()
+        val shown = mutableListOf<Pair<Long, Waveform>>()
+        runBlocking {
+            withTimeout(180_000) {
+                repo.waveform(SourceRef(formats, "/Formats/long-scenes.mp3")).collect { w ->
+                    if (w != null) shown += (SystemClock.elapsedRealtime() - start) to w
+                }
+            }
+        }
+        val total = SystemClock.elapsedRealtime() - start
+        Fx.log("long-scenes.mp3: shown at ${shown.map { it.first }} ms, complete after $total ms, ${shown.lastOrNull()?.second?.levels?.size} bins")
+        val w = shown.last().second
+        assertTrue(w.complete)
+        assertEquals(1_800_000.0, w.durationMs.toDouble(), 2000.0)
+        for ((at, s) in shown) assertTrue("no gaps in the waveform shown at $at ms", s.bars(0, s.durationMs, 200).none { it.isNaN() })
+        assertTrue("shown ${shown.size} times (a coarse picture and the final one at most)", shown.size <= 2)
+        val bars = w.bars(0, w.durationMs, 10)
+        Fx.log("long-scenes.mp3 bars ${bars.toList()}")
+        assertTrue("quiet start ${bars.toList()}", bars.take(4).all { it < 0.3f })
+        assertTrue("loud middle ${bars.toList()}", bars[4] > 0.9f && bars[5] > 0.9f)
+        assertTrue("quiet end ${bars.toList()}", bars.drop(6).all { it < 0.3f })
+        assertTrue("measured in $total ms (limit 5000)", total < 5_000)
+    }
+
+    /** A local file that answers each read after [delayMs], like a NAS on Wi-Fi (one request per read). */
+    private class SlowReader(file: File, private val delayMs: Long) : RandomAccessReader {
+        private val raf = RandomAccessFile(file, "r")
+        override val size: Long = raf.length()
+        override fun read(position: Long, buffer: ByteArray, offset: Int, len: Int): Int {
+            Thread.sleep(delayMs)
+            raf.seek(position)
+            return raf.read(buffer, offset, len)
+        }
+        override fun close() = raf.close()
+    }
+
+    /**
+     * The NAS case ("almost no change" with 1.3.1): with 5 ms per read (one request each, like SMB on Wi-Fi) the
+     * 30-minute MP3 and the 10-minute FLAC appear within seconds and right. The MediaCodec path of 1.3.1 (MediaExtractor
+     * reads a few KB per request) is measured for comparison and only logged.
+     */
+    @Test fun w09_aSlowSourceStillGivesTheWaveformWithinSeconds() {
+        val mp3 = File(formatsDir, "long-scenes.mp3")
+        assertTrue("$mp3 missing: run instrument.sh <serial> push-long-mp3", mp3.length() > 1_000_000)
+        fun run(file: File, native: Boolean): Pair<Waveform?, Long> {
+            val start = SystemClock.elapsedRealtime()
+            val w = runBlocking {
+                withTimeoutOrNull(60_000) { repo.measureFile({ SlowReader(file, 5) }, file.extension, 0, network = true, native = native) }
+            }
+            return w to SystemClock.elapsedRealtime() - start
+        }
+        val (codec, codecMs) = run(mp3, native = false)
+        Fx.log("long-scenes.mp3, MediaCodec path, 5 ms per read: ${if (codec == null) "not done after" else "done in"} $codecMs ms")
+        val (w, ms) = run(mp3, native = true)
+        Fx.log("long-scenes.mp3, native path, 5 ms per read: done in $ms ms")
+        assertNotNull(w)
+        val bars = w!!.bars(0, w.durationMs, 10)
+        Fx.log("long-scenes.mp3 over a slow source: bars ${bars.toList()}")
+        assertTrue("no gaps", w.bars(0, w.durationMs, 200).none { it.isNaN() })
+        assertTrue("loud middle ${bars.toList()}", bars[4] > 0.9f && bars[5] > 0.9f)
+        assertTrue("quiet start and end ${bars.toList()}", bars.take(4).all { it < 0.3f } && bars.drop(6).all { it < 0.3f })
+        assertTrue("measured in $ms ms (limit 4000)", ms < 4_000)
+
+        val (flac, flacMs) = run(Fx.localFile("${Fx.FX}/Long/long.flac"), native = true)
+        Fx.log("long.flac, native path, 5 ms per read: done in $flacMs ms")
+        assertNotNull(flac)
+        assertEquals(600_000.0, flac!!.durationMs.toDouble(), 1000.0)
+        assertTrue("long.flac is not silent", flac.levels.average() > 0.05)
+        assertTrue("long.flac measured in $flacMs ms (limit 4000)", flacMs < 4_000)
     }
 }

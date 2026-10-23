@@ -6,8 +6,8 @@
 # Inputs (pinned): FFmpeg 7.1.5 "Péter" (https://ffmpeg.org/releases/ffmpeg-7.1.5.tar.xz,
 # sha256 de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f), Android NDK 28.2.13676358 (r28c),
 # API level 26. Output: native/out/<abi>/{include,lib}. LGPL-2.1+ build: no --enable-gpl / --enable-nonfree.
-# Only the decoders/demuxers the app needs are enabled; the DST decoder is intentionally NOT built (DST-compressed
-# DSDIFF must be reported as unsupported). Linker flag max-page-size=16384 keeps 16 KB page compatibility.
+# Only the decoders/demuxers the app needs are enabled (playback of WMA/APE/DSD/ALAC; the waveform of every listed
+# audio format); the DST decoder is intentionally NOT built (DST-compressed DSDIFF must be reported as unsupported). Linker flag max-page-size=16384 keeps 16 KB page compatibility.
 set -euo pipefail
 cd "$(dirname "$0")"
 HERE="$(pwd)"
@@ -39,6 +39,10 @@ COMMON=(
   --enable-avformat --enable-avcodec --enable-swresample
   --enable-decoder=alac,wmav1,wmav2,wmapro,wmalossless,ape,dsd_lsbf,dsd_msbf,dsd_lsbf_planar,dsd_msbf_planar
   --enable-demuxer=mov,asf,ape,dsf,iff
+  # The waveform decodes the formats Media3 plays as well (it reads them much faster than MediaCodec can).
+  --enable-decoder=mp1float,mp2float,mp3float,aac,flac,vorbis,opus,pcm_u8,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s32le,pcm_f32le,pcm_f64le,pcm_alaw,pcm_mulaw
+  --enable-demuxer=mp3,flac,ogg,wav,aac
+  --enable-parser=mpegaudio,flac,aac,vorbis,opus
   --ar="$TC/bin/llvm-ar" --nm="$TC/bin/llvm-nm" --ranlib="$TC/bin/llvm-ranlib" --strip="$TC/bin/llvm-strip"
   --sysroot="$TC/sysroot"
 )

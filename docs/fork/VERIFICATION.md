@@ -139,6 +139,30 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.29 Waveform through FFmpeg, drawn at once (1.3.2-dev1, 2026-10-24)
+
+The owner found 1.3.1 still slow on the phone (a 30-minute MP3 about 30 s locally, hardly better from a NAS) and the
+drawing restless (scattered bars whose height kept changing), and pointed at Namida, which decodes the whole file with
+FFmpeg and shows the waveform once. Now: FFmpeg (decoders and demuxers added for MP3, AAC, FLAC, Vorbis, Opus, PCM)
+measures every format, MediaCodec only as fallback; files over 2 minutes sampled in 100–600 windows; on a network
+source each window is measured where the seek lands and not read again when it lands on a measured one; reads capped at
+32 KB while sampling; the waveform is emitted once (a coarse one first only when sampling still has more than 1.5 s to
+go after 1.5 s), sampling stops after 8 s, gaps are interpolated; the bars grow in 0.6 s. Emulator `fp_api34` (API 34,
+x86_64: FFmpeg built without assembly there), targeted tests. The 30-minute MP3 (44.1 kHz stereo VBR, pink noise, loud
+from minute 12 to 18, 23 MB) is made by `instrument.sh <serial> push-long-mp3`.
+
+| Check | Result |
+|---|---|
+| New `WaveformUiTest#w08` (30-min MP3 shown at most twice, without gaps, within 5 s) against the 1.3.1 app | FAIL as expected: shown **15 times** (every 0.3 s from 0.54 s), each with gaps; complete after 4.6 s |
+| `w08` with the fix | PASS: shown once at 1.53–1.55 s, 600 windows, bars quiet 0.17 / loud 1.0; a first build showed a coarse waveform at 1.52 s and the full one 0.25 s later, hence the "only when there is long to go" rule |
+| New `w09`: the same MP3 from a reader that waits 5 ms per read (a NAS) | MediaCodec reader (1.3.1's): 107 windows in the 8 s budget, 11 reads per window. FFmpeg, exact seeks, 64 KB reads: 5.35 s, 800 reads, 51 MB (decoding from the TOC point up to each window); with 16 KB reads 8 s (budget). FFmpeg where seeks land: **1.5 s**, 152 points, 448 windows skipped as landing on a measured one, 275 reads, 8.8 MB; PASS. The 10-min FLAC (no seek table: binary search) 3.2 s, 594 reads |
+| `w06` (10-min FLAC) / `w07` (20-min WAV) | PASS: 0.17 s / 0.35 s (1.3.1: 4.2 s / 2.0 s) |
+| `w01`–`w05` (AAC in .m4a now through FFmpeg too), `PlayerSheetUiTest#s06` / `#s09`, `NativeDecodeTest`, `NativeIoErrorTest`, `DurationRepositoryTest` | all PASS (9/9 waveform, 2/2, 4/4, 4/4, 6/6) |
+| `WaveformTest` (JVM, 16: also interpolation of bins not measured, window count), all JVM tests, `lintDebug` | 16/16; all: 258 tests, 25 skipped, 0 failures; lint 0 errors, no warning in the changed files |
+
+Not run: a phone (arm64 FFmpeg with NEON, so faster than the emulator), a real NAS, MP3 files with a CBR or without a
+TOC, AAC / Ogg files over 2 minutes.
+
 ### 5.28 Faster waveform (1.3.1, 2026-10-23)
 
 The owner found the waveform too slow even for local files (another player shows one about 5 s after playback starts;

@@ -105,8 +105,20 @@ class WaveformTest {
 
     @Test fun `windows of a sampled file`() {
         assertEquals(100, Waveform.windowsFor(30_000))
-        assertEquals(200, Waveform.windowsFor(200_000))
-        assertEquals(300, Waveform.windowsFor(3_600_000))
+        assertEquals(200, Waveform.windowsFor(600_000))
+        assertEquals(600, Waveform.windowsFor(1_800_000))
+        assertEquals(600, Waveform.windowsFor(3 * 3_600_000))
+    }
+
+    @Test fun `bins not measured are filled in between their neighbours, so the waveform has no gaps`() {
+        val n = Float.NaN
+        assertArrayEquals(floatArrayOf(0.2f, 0.2f, 0.4f, 0.6f, 0.8f, 0.8f), Waveform.filled(floatArrayOf(n, 0.2f, n, n, 0.8f, n)), 1e-6f)
+        assertArrayEquals(floatArrayOf(0f, 0f), Waveform.filled(floatArrayOf(n, n)), 0f)
+        assertArrayEquals(floatArrayOf(0.5f), Waveform.filled(floatArrayOf(0.5f)), 0f)
+        assertEquals(0, Waveform.filled(FloatArray(0)).size)
+        val partial = floatArrayOf(0.1f, n, n, 0.4f)
+        Waveform.filled(partial)
+        assertTrue("the input is left as it was", partial[1].isNaN())
     }
 
     @Test fun `more bars than bins repeat the bins`() {

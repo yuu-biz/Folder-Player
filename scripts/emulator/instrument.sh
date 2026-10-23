@@ -4,6 +4,7 @@
 #   instrument.sh <serial> perms <ALL|AUDIO_ONLY|PARTIAL|NONE>
 #   instrument.sh <serial> run <Class[#method]> [tag] [-e key value ...]
 #   instrument.sh <serial> push-fixture
+#   instrument.sh <serial> push-long-mp3          30-min MP3 for WaveformUiTest#w08 (made with ffmpeg on first use)
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 ROOT="$(pwd)"
@@ -26,6 +27,17 @@ case "$1" in
     RC=0
     for m in $METHODS; do bash "$0" "$S" run "$CLS#$m" "$@" || RC=1; done
     exit $RC
+    ;;
+  push-long-mp3)
+    MP3=build/fixture-extra/long-scenes.mp3
+    if [ ! -s "$MP3" ]; then
+      mkdir -p build/fixture-extra
+      timeout 600 ffmpeg -hide_banner -loglevel error -y -f lavfi -i "anoisesrc=color=pink:amplitude=0.5:sample_rate=44100:duration=1800" \
+        -af "volume=if(between(t\,720\,1080)\,1\,0.08):eval=frame" -ac 2 -c:a libmp3lame -q:a 2 "$MP3"
+    fi
+    A shell mkdir -p /sdcard/Android/data/$PKG/files/Formats
+    A push "$MP3" /sdcard/Android/data/$PKG/files/Formats/ >/dev/null
+    echo "long-scenes.mp3 pushed"
     ;;
   push-fixture)
     A shell rm -rf /sdcard/Music/fixture
@@ -63,7 +75,7 @@ case "$1" in
     NAME="$(echo "$CLS" | sed 's/.*\.//; s/#/_/')${TAG:+-$TAG}"
     set +e
     A shell am instrument -w -r "$@" -e class "com.wing.folderplayer.$CLS" $PKG.test/androidx.test.runner.AndroidJUnitRunner > "$OUT/$NAME.txt" 2>&1
-    A logcat -d -s FpTest:I > "$OUT/$NAME.fptest.txt" 2>&1
+    A logcat -d -s FpTest:I Waveform:I > "$OUT/$NAME.fptest.txt" 2>&1
     A logcat -c
     set -e
     if grep -q "AssumptionViolatedException" "$OUT/$NAME.txt"; then

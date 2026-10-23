@@ -106,3 +106,6 @@ which installs over 1.1.x and over every dev build.
 with the release key, so they install over 1.2.0); the final `v1.3.0` is versionName `1.3.0`, versionCode `1030099`.
 
 1.3.1 (faster waveform): `v1.3.1` is versionName `1.3.1`, versionCode `1030199`, which installs over 1.3.0.
+
+1.3.2 (waveform through FFmpeg): `v1.3.2` is versionName `1.3.2`, versionCode `1030299`; the dev build `1.3.2-dev1` is
+1030201. Both install over 1.3.1.

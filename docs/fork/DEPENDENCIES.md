@@ -41,7 +41,7 @@ source (same scheme/host/port only) instead of the baseline's global `WebDavAuth
 
 | Component | Version / source | Build | License |
 |---|---|---|---|
-| FFmpeg | 7.1.5 "Péter", `https://ffmpeg.org/releases/ffmpeg-7.1.5.tar.xz`, sha256 `de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f` | `native/build-ffmpeg.sh` (NDK r28c, API 26, static, `--disable-everything` + decoders alac, wmav1, wmav2, wmapro, wmalossless, ape, dsd_lsbf/msbf(_planar); demuxers mov, asf, ape, dsf, iff; **no DST decoder**; no `--enable-gpl/--enable-nonfree`; `-Wl,-z,max-page-size=16384`) | LGPL-2.1-or-later |
+| FFmpeg | 7.1.5 "Péter", `https://ffmpeg.org/releases/ffmpeg-7.1.5.tar.xz`, sha256 `de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f` | `native/build-ffmpeg.sh` (NDK r28c, API 26, static, `--disable-everything` + decoders alac, wmav1, wmav2, wmapro, wmalossless, ape, dsd_lsbf/msbf(_planar), and for the waveform since 1.3.2 mp1float, mp2float, mp3float, aac, flac, vorbis, opus, pcm_*; demuxers mov, asf, ape, dsf, iff, mp3, flac, ogg, wav, aac; parsers mpegaudio, flac, aac, vorbis, opus; **no DST decoder**; no `--enable-gpl/--enable-nonfree`; `-Wl,-z,max-page-size=16384`) | LGPL-2.1-or-later |
 | `libfpnative.so` | `app/src/main/cpp/fpnative.c` + `CMakeLists.txt` (this repo) | Gradle `externalNativeBuild` (CMake 3.22.1), ABIs arm64-v8a, x86_64, 16 KB page aligned | same as the app |
 
 DSD→PCM uses FFmpeg's DSD decoders (no third-party dsd2pcm code).
