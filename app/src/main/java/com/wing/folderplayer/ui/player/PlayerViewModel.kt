@@ -26,6 +26,9 @@ import com.wing.folderplayer.data.source.readText
 import com.wing.folderplayer.data.lyrics.LyricsRepository
 import com.wing.folderplayer.data.lyrics.LyricsResult
 import com.wing.folderplayer.data.ai.AlbumInfoRepository
+import com.wing.folderplayer.data.waveform.Waveform
+import com.wing.folderplayer.data.waveform.WaveformRepository
+import com.wing.folderplayer.data.waveform.WaveformSettings
 import com.wing.folderplayer.utils.LyricLine
 import com.wing.folderplayer.utils.CueParser
 import com.google.common.util.concurrent.ListenableFuture
@@ -35,6 +38,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -124,6 +130,9 @@ data class PlayerUiState(
     val hasTrack: Boolean get() = currentMediaId != null || playRequested
 }
 
+/** A file's waveform and where the playing track starts in that file (a CUE track is a slice of it). */
+data class TrackWaveform(val waveform: Waveform, val startMs: Long)
+
 class PlayerViewModel : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -143,6 +152,23 @@ class PlayerViewModel : ViewModel() {
     /** Position of the current track in the queue (-1: none); tells next from previous for the track-change motion. */
     val queuePosition: StateFlow<Int> = part { s -> s.playlist.indexOfFirst { it.mediaId == s.currentMediaId } }
     val progressFraction: StateFlow<Float> = part { if (it.duration > 1) (it.currentPosition.toFloat() / it.duration).coerceIn(0f, 1f) else 0f }
+
+    /**
+     * Waveform of the current track for the seek bar (measured in the background, see [WaveformRepository]); null while
+     * there is none. Measured only while a seek bar shows it; a setting change measures (or hides) it again.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val waveform: StateFlow<TrackWaveform?> = combine(currentMediaId, WaveformSettings.changes) { id, _ -> id }
+        .flatMapLatest { id ->
+            val ctx = appContext
+            val ref = SourceUris.parse(id)
+            if (ctx == null || id == null || ref == null) flowOf(null)
+            else {
+                val startMs = SourceUris.cueStartMs(id) ?: 0L
+                WaveformRepository.get(ctx).waveform(ref).map { w -> w?.let { TrackWaveform(it, startMs) } }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val exceptionHandler = kotlinx.coroutines.CoroutineExceptionHandler { _, throwable ->
         android.util.Log.e("PlayerViewModel", "Coroutine failure", throwable)

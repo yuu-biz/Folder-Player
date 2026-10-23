@@ -212,6 +212,12 @@
     <string name="settings_dlna">Diffusion DLNA / UPnP</string>
     <string name="settings_auto_save">Enregistrer les morceaux réseau écoutés jusqu\'au bout</string>
     <string name="settings_auto_save_help">Les fichiers complets sont enregistrés dans Music/%1$s/ après un téléchargement intégral vérifié.</string>
+    <string name="settings_waveform">Forme d\'onde sur la barre de progression</string>
+    <string name="settings_waveform_help">Montre le volume de chaque passage du morceau pour repérer d\'un coup d\'œil les moments forts. Chaque fichier est lu une fois en arrière-plan pour être mesuré, et le résultat est conservé. Les fichiers des sources réseau ne sont mesurés qu\'en Wi-Fi.</string>
+    <string name="settings_waveform_max">Durée maximale d\'un fichier à mesurer</string>
+    <string name="settings_waveform_no_limit">Sans limite</string>
+    <string name="settings_waveform_minutes">%1$d min</string>
+    <string name="settings_waveform_hours">%1$d h</string>
     <string name="settings_native_decoder_ok">Décodeurs supplémentaires (ALAC/WMA/APE/DSF/DFF) actifs – %1$s</string>
     <string name="settings_native_decoder_missing">Décodeurs supplémentaires indisponibles sur cet appareil (WMA/APE/DSF/DFF illisibles)</string>
     <string name="settings_about_version">Folder Player Fork %1$s (%2$d)</string>

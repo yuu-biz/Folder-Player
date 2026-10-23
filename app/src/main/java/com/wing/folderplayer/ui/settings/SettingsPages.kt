@@ -49,6 +49,7 @@ import com.wing.folderplayer.data.source.SourceRegistry
 import com.wing.folderplayer.data.source.SourceType
 import com.wing.folderplayer.playback.ExportSettings
 import com.wing.folderplayer.playback.NativeDecoder
+import com.wing.folderplayer.data.waveform.WaveformSettings
 import com.wing.folderplayer.ui.browser.BrowserViewModel
 import com.wing.folderplayer.ui.player.PlayerViewModel
 import com.wing.folderplayer.ui.theme.AppFont
@@ -123,6 +124,20 @@ private fun PlaybackPage() {
             stringResource(R.string.settings_auto_save), exportOn, "auto_save",
             description = stringResource(R.string.settings_auto_save_help, exportSettings.folderName),
         ) { exportOn = it; exportSettings.enabled = it }
+        val waveform = remember { WaveformSettings(context) }
+        var waveOn by remember { mutableStateOf(waveform.enabled) }
+        SettingsSwitch(
+            stringResource(R.string.settings_waveform), waveOn, "waveform_enabled",
+            description = stringResource(R.string.settings_waveform_help),
+        ) { waveOn = it; waveform.enabled = it }
+        if (waveOn) {
+            var maxMinutes by remember { mutableStateOf(waveform.maxMinutes) }
+            SettingsChoice(
+                stringResource(R.string.settings_waveform_max),
+                WaveformSettings.MAX_MINUTES.map { it to waveformLimitLabel(it) },
+                maxMinutes, "waveform_max",
+            ) { maxMinutes = it; waveform.maxMinutes = it }
+        }
         SettingsGroupTitle(stringResource(R.string.settings_decoders))
         SettingsInfo(
             if (NativeDecoder.isAvailable()) stringResource(R.string.settings_native_decoder_ok, NativeDecoder.version())
@@ -130,6 +145,13 @@ private fun PlaybackPage() {
             modifier = Modifier.testTag("native_decoder_status"),
         )
     }
+}
+
+@Composable
+private fun waveformLimitLabel(minutes: Int): String = when {
+    minutes == 0 -> stringResource(R.string.settings_waveform_no_limit)
+    minutes % 60 == 0 -> stringResource(R.string.settings_waveform_hours, minutes / 60)
+    else -> stringResource(R.string.settings_waveform_minutes, minutes)
 }
 
 // ---------------------------------------------------------------- Display

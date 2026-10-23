@@ -4,6 +4,11 @@ project. This release follows 1.2.0.
 
 ## What's new in 1.3.0
 
+- **Waveform on the seek bar**: the seek bar of the full player shows how loud each part of the track is, so loud
+  scenes (in a drama CD, for example) can be found at a glance and reached with one tap. Each file is measured once in
+  the background (the part measured so far fills in from the left) and the result is kept; a CUE track shows its own
+  part of the disc image. Settings → Playback turns it off and sets the longest file to measure (2 hours by default);
+  files on network sources are measured only on Wi-Fi.
 - **Home button**: next to the back arrow and the arrow-up button, one tap goes from any folder straight back to the source
   list (it replaces "Back to sources" in the ⋮ menu).
 - **Filter for the folder on screen**: the filter button left of the sort buttons narrows the folders and songs of the
@@ -52,6 +57,7 @@ editor, favourites shared through one `fav.json` on a NAS, and bookmarks for fol
 - **DLNA casting** to renderers on your network (off by default).
 - **Formats**: ALAC, WMA, APE, DSF and DFF through FFmpeg 7.1.5, in addition to what Android plays (DST-compressed DSD
   is not supported).
+- **Waveform on the seek bar**: loudness over the whole track, measured once in the background and kept.
 - **More**: sleep timer, next-folder playback, optional saving of network tracks played to the end, retries of short
   network outages, custom fonts.
 - **Languages**: English, 日本語, 简体中文, 繁體中文, Français, Italiano. On Android 13+ the language can also be
@@ -70,6 +76,9 @@ Details: [docs/fork/FEATURES.md]({REPO}/blob/{VERSION_TAG}/docs/fork/FEATURES.md
   then made again). The network account is an estimate, not the bytes on the wire. The cache and the account were tested with
   a Samba server in Docker, not with a real NAS, and the saving on a large real library was not measured.
 - Settings shows no mini player.
+- The waveform reads the whole file once more, besides playback: on a NAS a long file takes a while before its waveform is
+  complete (it fills in from the left). Files longer than the limit in Settings, and network files on mobile data, keep
+  the plain seek bar.
 - The filter matches the names of the folder on screen only (not tags, not the folders below); it is not offered in the
   favourites list or in search results.
 - DLNA casting sends the current track only (nothing advances to the next one) and was tested with a software
