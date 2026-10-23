@@ -139,6 +139,26 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.28 Faster waveform (1.3.1, 2026-10-23)
+
+The owner found the waveform too slow even for local files (another player shows one about 5 s after playback starts;
+a rough trend is enough). Cause: the MediaCodec loop waited up to 10 ms for an input and again for an output buffer on
+every round, holding decoding to a few times real time. Now: no waiting while either side moves; files over 2 minutes
+are sampled (a 250 ms window per bin, 100–300 bins, coarse-to-fine order, at most 2 input buffers ahead of the decoder
+while sampling); slow-seeking files fall back to the full pass. Emulator `fp_api34` (API 34), targeted tests.
+
+| Check | Result |
+|---|---|
+| New `WaveformUiTest#w06` (10-min FLAC measured within 5 s) against the 1.3.0 app | FAIL as expected: first waveform 1.5 s, complete **22.2 s** (4000 bins of 150 ms) |
+| `w07` (20-min WAV, loud minutes 8–12) against the 1.3.0 app | PASS in 3.4 s (the raw decoder hands out large buffers) |
+| `w06` / `w07` with the fix, run twice each (cold after install, then warm) | PASS: FLAC first waveform 0.92 / 0.70 s, complete **4.2 / 4.4 s** (300 windows, 0.9–1.1 s of it seeking); WAV first 0.46 / 0.36 s, complete 2.4 / 2.0 s; WAV bars quiet 0.20, loud minutes 1.0 |
+| Sampling with 600 windows and no input cap (first try) | FLAC 5.4 s, WAV 3.7 s; then 300 windows without the cap right after boot 7.4 / 6.5 s (cold device): the cap on input in flight was what helped |
+| `WaveformUiTest` w01–w05, `PlayerSheetUiTest#s06` / `#s09` (600-window build; files up to 2 min take the full pass, which the later changes do not touch) | 7/7 PASS; w04 / w05 again on the 300-window build: PASS |
+| `WaveformTest` (JVM, 15: also NaN bins of a sampled file, the coarse-to-fine order, window count, 16-bit PCM conversion), `StringResourcesParityTest`, `lintDebug` | 15/15, 4/4 PASS; lint 0 errors |
+
+Not run: an MP3 or AAC file longer than 2 minutes (the fixture has none; the sampled path was run on FLAC and WAV), the
+native formats on the sampled path (fixture files are 20 s), a NAS, a phone.
+
 ### 5.27 Waveform on the seek bar (1.3.0, 2026-10-23)
 
 The full player's seek bar shows the loudness of the whole track (design and limits in [KNOWN_ISSUES.md](KNOWN_ISSUES.md),

@@ -1,12 +1,20 @@
 Folder Player Fork {VERSION} — an unofficial personal fork of
 [Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000. It is not affiliated with the original
-project. This release follows 1.2.0.
+project. This release follows 1.3.0.
 
-## What's new in 1.3.0
+## What's new in 1.3.1
+
+- **Faster waveform**: the waveform on the seek bar now shows within about a second. A track longer than two minutes is
+  measured from short samples spread over it (the rough shape appears at once and then sharpens; only those parts are
+  read, so a long file on a NAS is not read again whole), and decoding no longer waits between buffers. On the test
+  emulator a 10-minute FLAC took 22 s in 1.3.0; its first waveform now shows in under a second and is complete after about 4 s.
+  It is a rough trend, which is what the waveform is for; a CUE track of a long disc image gets fewer points.
+
+## New in 1.3.0
 
 - **Waveform on the seek bar**: the seek bar of the full player shows how loud each part of the track is, so loud
   scenes (in a drama CD, for example) can be found at a glance and reached with one tap. Each file is measured once in
-  the background (the part measured so far fills in from the left) and the result is kept; a CUE track shows its own
+  the background and the result is kept; a CUE track shows its own
   part of the disc image. Settings → Playback turns it off and sets the longest file to measure (2 hours by default);
   files on network sources are measured only on Wi-Fi.
 - **Home button**: next to the back arrow and the arrow-up button, one tap goes from any folder straight back to the source

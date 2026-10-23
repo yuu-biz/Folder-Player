@@ -104,3 +104,5 @@ which installs over 1.1.x and over every dev build.
 
 1.3.0 the same way: dev builds `1.3.0-dev1`, … use 1030001, … (built by "Run workflow" with the `version` input, signed
 with the release key, so they install over 1.2.0); the final `v1.3.0` is versionName `1.3.0`, versionCode `1030099`.
+
+1.3.1 (faster waveform): `v1.3.1` is versionName `1.3.1`, versionCode `1030199`, which installs over 1.3.0.

@@ -13,14 +13,16 @@ import kotlin.math.sqrt
 
 /**
  * Loudness envelope of a whole audio file: one RMS level (0..1 of full scale) per [binMs] of audio, from the start of
- * the file. While the file is still being measured [complete] is false and [levels] covers only its beginning.
+ * the file. While the file is still being measured [complete] is false and [levels] covers only its beginning (read from
+ * start to end) or holds NaN for the bins not measured yet (a long file sampled in a coarse-to-fine order).
  */
 class Waveform(val binMs: Int, val levels: FloatArray, val durationMs: Long, val complete: Boolean) {
 
     /**
      * Bar heights (0..1) for [count] equal slices of the time range [startMs, startMs + lengthMs) (a CUE track is a
      * slice of its file). Each bar is the RMS of the bins it covers, relative to the loudest bar, compressed so that
-     * quiet passages stay visible and loud scenes stand out. NaN where the file has not been measured yet.
+     * quiet passages stay visible and loud scenes stand out. A bin that is NaN has not been measured yet (a long file is
+     * measured in a coarse-to-fine order); a bar with no measured bin is NaN while measuring and silent once complete.
      */
     fun bars(startMs: Long, lengthMs: Long, count: Int): FloatArray {
         val out = FloatArray(max(count, 0))
@@ -36,9 +38,18 @@ class Waveform(val binMs: Int, val levels: FloatArray, val durationMs: Long, val
                 continue
             }
             var power = 0.0
-            val end = min(i1, levels.size)
-            for (i in i0 until end) power += levels[i].toDouble() * levels[i]
-            val rms = sqrt(power / (end - i0)).toFloat()
+            var measured = 0
+            for (i in i0 until min(i1, levels.size)) {
+                val v = levels[i]
+                if (v.isNaN()) continue
+                power += v.toDouble() * v
+                measured++
+            }
+            if (measured == 0) {
+                out[b] = if (complete) 0f else Float.NaN
+                continue
+            }
+            val rms = sqrt(power / measured).toFloat()
             out[b] = rms
             if (rms > loudest) loudest = rms
         }
@@ -74,6 +85,26 @@ class Waveform(val binMs: Int, val levels: FloatArray, val durationMs: Long, val
         /** Height = (rms / loudest)^CURVE: -6 dB is about 60 % of the loudest bar, -20 dB about 20 %. */
         private const val CURVE = 0.7
 
+        /** Windows of a long file measured by sampling: about one per second, 100 to 300 (each costs a seek, a few ms). */
+        fun windowsFor(durationMs: Long): Int = (durationMs / 1000).toInt().coerceIn(100, 300)
+
+        /**
+         * Bin indices in a coarse-to-fine order (bit reversal): the first few already spread over the whole file, so a
+         * rough shape shows long before every bin is measured.
+         */
+        fun sampleOrder(n: Int): IntArray {
+            if (n <= 1) return IntArray(max(n, 0))
+            var bits = 0
+            while ((1 shl bits) < n) bits++
+            val out = IntArray(n)
+            var k = 0
+            for (i in 0 until (1 shl bits)) {
+                val r = Integer.reverse(i) ushr (32 - bits)
+                if (r < n) out[k++] = r
+            }
+            return out
+        }
+
         fun binMsFor(durationMs: Long): Int {
             if (durationMs <= 0) return DEFAULT_BIN_MS
             val raw = ceil(durationMs.toDouble() / MAX_BINS).toInt()
@@ -106,23 +137,9 @@ class LevelAccumulator(sampleRate: Int, channels: Int, val binMs: Int) {
     private var levels = FloatArray(256)
     private var size = 0
 
-    /** Interleaved signed 16-bit little-endian PCM. */
-    fun addPcm16(buffer: ByteArray, offset: Int, length: Int) {
-        var i = offset
-        val end = offset + length - 1
-        while (i < end) {
-            val s = ((buffer[i].toInt() and 0xff) or (buffer[i + 1].toInt() shl 8)).toShort()
-            add(s / 32768f)
-            i += 2
-        }
-    }
-
-    fun addPcm16(samples: java.nio.ShortBuffer) {
-        while (samples.hasRemaining()) add(samples.get() / 32768f)
-    }
-
-    fun addFloat(samples: java.nio.FloatBuffer) {
-        while (samples.hasRemaining()) add(samples.get())
+    /** The first [count] samples of [samples]. */
+    fun add(samples: FloatArray, count: Int) {
+        for (i in 0 until count) add(samples[i])
     }
 
     fun add(sample: Float) {
@@ -144,4 +161,13 @@ class LevelAccumulator(sampleRate: Int, channels: Int, val binMs: Int) {
     }
 
     val binCount: Int get() = size
+}
+
+/** Interleaved signed 16-bit little-endian PCM ([length] bytes) as samples in -1..1; returns the number of samples. */
+fun pcm16ToFloats(bytes: ByteArray, length: Int, out: FloatArray): Int {
+    val n = min(length / 2, out.size)
+    for (i in 0 until n) {
+        out[i] = ((bytes[2 * i].toInt() and 0xff) or (bytes[2 * i + 1].toInt() shl 8)).toShort() / 32768f
+    }
+    return n
 }

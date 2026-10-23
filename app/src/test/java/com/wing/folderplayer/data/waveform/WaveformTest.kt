@@ -35,11 +35,14 @@ class WaveformTest {
     }
 
     @Test fun `16-bit little-endian PCM is read as signed samples`() {
-        val pcm = ByteBuffer.allocate(200).order(ByteOrder.LITTLE_ENDIAN)
-        repeat(100) { pcm.putShort(if (it % 2 == 0) (-16384).toShort() else 16384.toShort()) }
-        val acc = LevelAccumulator(sampleRate = 1000, channels = 1, binMs = 100)
-        acc.addPcm16(pcm.array(), 0, 200)
-        assertEquals(0.5f, acc.levels(final = true).single(), 1e-4f)
+        val pcm = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+        pcm.putShort((-16384).toShort()).putShort(16384.toShort()).putShort(Short.MIN_VALUE).putShort(Short.MAX_VALUE)
+        val out = FloatArray(4)
+        assertEquals(4, pcm16ToFloats(pcm.array(), 8, out))
+        assertArrayEquals(floatArrayOf(-0.5f, 0.5f, -1f, 32767f / 32768f), out, 1e-6f)
+        // An odd trailing byte and a short output buffer are not overrun.
+        assertEquals(2, pcm16ToFloats(pcm.array(), 5, FloatArray(4)))
+        assertEquals(1, pcm16ToFloats(pcm.array(), 8, FloatArray(1)))
     }
 
     @Test fun `a short last bin is kept only at the end and only when it is a quarter full`() {
@@ -75,6 +78,35 @@ class WaveformTest {
         // The player may report a longer duration than the decoder found (VBR estimate): the rest is drawn flat.
         val done = Waveform(100, FloatArray(10) { 0.5f }, 1000, complete = true).bars(0, 2000, 4)
         assertEquals(0f, done[3], 0f)
+    }
+
+    @Test fun `sampled bins not measured yet are skipped, a bar with none is NaN until complete`() {
+        val levels = FloatArray(8) { Float.NaN }
+        levels[0] = 0.8f; levels[5] = 0.2f
+        val partial = Waveform(100, levels, 800, complete = false).bars(0, 800, 4)
+        assertEquals(1f, partial[0], 1e-4f)
+        assertTrue(partial[1].isNaN())
+        assertTrue(partial[2] > 0f && partial[2] < 1f)
+        assertTrue(partial[3].isNaN())
+        val done = Waveform(100, levels, 800, complete = true).bars(0, 800, 4)
+        assertEquals(0f, done[1], 0f)
+    }
+
+    @Test fun `sampling order spreads early and visits every bin once`() {
+        val order = Waveform.sampleOrder(600)
+        assertEquals((0 until 600).toList(), order.sorted())
+        assertEquals(listOf(0, 512, 256, 128), order.take(4).toList()) // 768 is past the end and skipped
+        // The first eighth already has a bin in every eighth of the file.
+        val firstEighth = order.take(75).map { it * 8 / 600 }.toSet()
+        assertEquals((0 until 8).toSet(), firstEighth)
+        assertEquals(listOf(0), Waveform.sampleOrder(1).toList())
+        assertEquals(emptyList<Int>(), Waveform.sampleOrder(0).toList())
+    }
+
+    @Test fun `windows of a sampled file`() {
+        assertEquals(100, Waveform.windowsFor(30_000))
+        assertEquals(200, Waveform.windowsFor(200_000))
+        assertEquals(300, Waveform.windowsFor(3_600_000))
     }
 
     @Test fun `more bars than bins repeat the bins`() {

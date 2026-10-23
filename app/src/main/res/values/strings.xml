@@ -223,7 +223,7 @@
     <string name="settings_auto_save">Save network songs played to the end</string>
     <string name="settings_auto_save_help">Complete files are saved to Music/%1$s/ after a full verified download.</string>
     <string name="settings_waveform">Waveform on the seek bar</string>
-    <string name="settings_waveform_help">Shows how loud each part of the track is, so loud scenes can be found at a glance. Each file is read once in the background to measure it, and the result is kept. Files on network sources are measured only on Wi-Fi.</string>
+    <string name="settings_waveform_help">Shows how loud each part of the track is, so loud scenes can be found at a glance. Each file is measured once in the background (a long file from short samples spread over it), and the result is kept. Files on network sources are measured only on Wi-Fi.</string>
     <string name="settings_waveform_max">Longest file to measure</string>
     <string name="settings_waveform_no_limit">No limit</string>
     <string name="settings_waveform_minutes">%1$d min</string>

@@ -213,7 +213,7 @@
     <string name="settings_auto_save">Enregistrer les morceaux réseau écoutés jusqu\'au bout</string>
     <string name="settings_auto_save_help">Les fichiers complets sont enregistrés dans Music/%1$s/ après un téléchargement intégral vérifié.</string>
     <string name="settings_waveform">Forme d\'onde sur la barre de progression</string>
-    <string name="settings_waveform_help">Montre le volume de chaque passage du morceau pour repérer d\'un coup d\'œil les moments forts. Chaque fichier est lu une fois en arrière-plan pour être mesuré, et le résultat est conservé. Les fichiers des sources réseau ne sont mesurés qu\'en Wi-Fi.</string>
+    <string name="settings_waveform_help">Montre le volume de chaque passage du morceau pour repérer d\'un coup d\'œil les moments forts. Chaque fichier est mesuré une fois en arrière-plan (un long fichier par de courts extraits répartis sur toute sa durée), et le résultat est conservé. Les fichiers des sources réseau ne sont mesurés qu\'en Wi-Fi.</string>
     <string name="settings_waveform_max">Durée maximale d\'un fichier à mesurer</string>
     <string name="settings_waveform_no_limit">Sans limite</string>
     <string name="settings_waveform_minutes">%1$d min</string>
