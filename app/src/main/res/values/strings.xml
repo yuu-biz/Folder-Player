@@ -18,6 +18,7 @@
     <string name="common_back">Back</string>
 
     <!-- sort -->
+    <string name="sort_added">Added</string>
     <string name="sort_name">Name</string>
     <string name="sort_date">Modified</string>
     <string name="sort_created">Created</string>

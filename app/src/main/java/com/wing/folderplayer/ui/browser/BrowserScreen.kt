@@ -353,6 +353,13 @@ fun BrowserScreen(
 
                     if (uiState.search.active) {
                         SearchStatus(uiState.search, onCancel = { viewModel.cancelSearch() })
+                    } else if (uiState.showingFavorites) {
+                        SortHeader(
+                            currentField = uiState.sortField,
+                            ascending = uiState.sortAscending,
+                            onSortClick = { viewModel.sortFiles(it) },
+                            fields = FavoritesSortFields,
+                        )
                     } else if (uiState.currentFolder != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(
@@ -573,19 +580,29 @@ private fun SearchStatus(s: SearchUiState, onCancel: () -> Unit) {
     }
 }
 
+private val FolderSortFields = listOf("NAME" to R.string.sort_name, "DATE" to R.string.sort_date, "CREATED" to R.string.sort_created, "SIZE" to R.string.sort_size)
+private val FavoritesSortFields = listOf(com.wing.folderplayer.data.favorites.FavoritesSort.ADDED to R.string.sort_added) + FolderSortFields
+
+/** [fields]: the sort fields offered, with their labels (the favourites list adds "Added" in front). */
 @Composable
-fun SortHeader(currentField: String, ascending: Boolean, onSortClick: (String) -> Unit, modifier: Modifier = Modifier) {
-    // Four equal buttons while their names fit; with a large font or a narrow pane a button is as wide as its name and the
+fun SortHeader(
+    currentField: String,
+    ascending: Boolean,
+    onSortClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    fields: List<Pair<String, Int>> = FolderSortFields,
+) {
+    // Equal buttons while their names fit; with a large font or a narrow pane a button is as wide as its name and the
     // row scrolls sideways (a name is never broken in the middle of a word).
     BoxWithConstraints(modifier.fillMaxWidth()) {
-    val equalWidth = ((maxWidth - 16.dp - 8.dp * 3) / 4).coerceAtLeast(48.dp)
+    val equalWidth = ((maxWidth - 16.dp - 8.dp * (fields.size - 1)) / fields.size).coerceAtLeast(48.dp)
     Row(
         modifier = Modifier
             .horizontalScroll(rememberScrollState())
             .padding(horizontal = 8.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        listOf("NAME" to R.string.sort_name, "DATE" to R.string.sort_date, "CREATED" to R.string.sort_created, "SIZE" to R.string.sort_size).forEach { (field, label) ->
+        fields.forEach { (field, label) ->
             val isSelected = currentField == field
             val direction = stringResource(if (ascending) R.string.settings_ascending else R.string.settings_descending)
             Surface(

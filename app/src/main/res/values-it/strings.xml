@@ -14,6 +14,7 @@
     <string name="common_replace">Sostituisci</string>
     <string name="common_retry">Riprova</string>
     <string name="common_back">Indietro</string>
+    <string name="sort_added">Aggiunta</string>
     <string name="sort_name">Nome</string>
     <string name="sort_date">Modificato</string>
     <string name="sort_created">Creato</string>

@@ -41,7 +41,7 @@ class FavoritesTest {
         val json = java.io.File(tmp.root, "fav/fav.json").readText()
         val data = FavoritesCodec.decode(json)
         assertEquals(1, data.version)
-        assertEquals(listOf("id", "type", "sourceId", "path", "name", "size", "timestamp", "transferStatus").sorted(),
+        assertEquals(listOf("id", "type", "sourceId", "path", "name", "size", "timestamp", "transferStatus", "modified", "created").sorted(),
             com.google.gson.JsonParser.parseString(json).asJsonObject["items"].asJsonArray[0].asJsonObject.keySet().sorted())
         assertFalse(json.contains("password", ignoreCase = true))
     }

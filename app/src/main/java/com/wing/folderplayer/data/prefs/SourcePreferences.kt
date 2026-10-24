@@ -71,6 +71,14 @@ class SourcePreferences(context: Context) {
         prefs.edit { putString("sort_field_$key", field); putBoolean("sort_asc_$key", ascending) }
     }
 
+    /** The order of the favourites list: when added (oldest first) until the user picks another. */
+    fun getFavoritesSort(): SortOption =
+        SortOption(prefs.getString("favorites_sort_field", null) ?: "ADDED", prefs.getBoolean("favorites_sort_asc", true))
+
+    fun saveFavoritesSort(field: String, ascending: Boolean) {
+        prefs.edit { putString("favorites_sort_field", field); putBoolean("favorites_sort_asc", ascending) }
+    }
+
     data class SortOption(val field: String, val ascending: Boolean)
 
     /**

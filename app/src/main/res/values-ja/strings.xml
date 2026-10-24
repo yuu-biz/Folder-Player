@@ -14,6 +14,7 @@
     <string name="common_replace">置き換える</string>
     <string name="common_retry">再試行</string>
     <string name="common_back">戻る</string>
+    <string name="sort_added">追加順</string>
     <string name="sort_name">名前</string>
     <string name="sort_date">更新日</string>
     <string name="sort_created">作成日</string>
