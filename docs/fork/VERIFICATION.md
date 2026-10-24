@@ -140,6 +140,21 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.33 Song / folder favourites, folder link and fine seek, sort by length, visualiser (after 1.6.0, 2026-10-25)
+
+App code as of `bfd0c6c` plus the test fixes of the commit that adds this section. API 34 emulator (`fp_api34`), fixture servers up.
+
+| Check | Result |
+|---|---|
+| `assembleDebug assembleDebugAndroidTest lintDebug testDebugUnitTest` | exit 0; lint 0 errors, 61 warnings (as before; the 4 new ones of the first run, 3 unused strings and a plural candidate, were removed); JVM tests 311, 0 failures, 28 skipped (fixture-server tests without their properties). New: `FineSeekTest` 3, `AudioTapTest` 5 (ring and clock, re-anchoring after a jump, 192 kHz kept at 48 kHz, spectrum of a sine), `SortOrderTest` / `FavoritesSortTest` by length |
+| All instrumentation suites, default `run-suites.sh` order (142 test processes) | 140 passed, 2 failed: `SourceUiTest#b` (the restored source rows below the second favourites entry were not composed: the test now scrolls to them) and `VisualizerUiTest#v01` (it played the song the previous test left as "last played", whose lyrics the app restores from its cache: the test now picks the other song without lyrics). Both passed after the fix, `v01` twice right after `FavoritesSortUiTest#s02` (the order that failed), `SourceUiTest` a then b |
+| An earlier full run (stopped) | 11 failures, all on screens with a song without lyrics: the visualiser's frame loop kept Compose from ever being idle. Its loop now uses `withInfiniteAnimationFrameNanos` (held by the test's infinite-animation policy like the other endless animations); the failed methods (`NavigationUiTest#n05`, `n10`, `PlayerSheetUiTest#s01`, `s10`, `s13`, …) passed afterwards |
+| New UI tests | `OriginBackUiTest#a63` (folder name → the track's folder, track in view, Back), `PlayerSheetUiTest#s13` (long press: 15 s back for half a bar on a 10-minute track, not to the touch point; held and let go: no seek), `FavoritesSortUiTest#s02` (heart adds the song with size and times, removes it, the songs list follows), `LengthSortUiTest` 2 (both directions, folders first by name; scan of the fixture tree with progress, result and close, nothing left to read after it), `VisualizerUiTest` 2 (samples from the service's sink with sound, a pause holds the picture, the tap stops when the player folds; a song with lyrics shows them), `DurationRepositoryTest` +2 (moved file found by name, size and time without reading; a scan reads once, a second reads nothing, the entry of a file that is gone is dropped, the result is on disk at the end) |
+| Seen on screen | the visualiser over a 1 kHz fixture tone: one band and a sine, the heart top right, "Get AI lyrics" below |
+| WSL memory | the emulator container grew to 16.8 GB after the suites; a build then failed with "Cannot allocate memory". Restarting only the emulator (`emu.sh stop` / start) brought the VM back to about 5.7 GB used |
+
+Not checked: a real phone or NAS (scan speed over SMB), API 26 / 33 / 36, TalkBack on the new controls, the visualiser's CPU cost on a phone.
+
 ### 5.32 Sorting of the favourites list (1.6.0, 2026-10-24)
 
 Branch `feature/favorites-sort`. The favourites list gets the sort buttons of a folder plus "Added"; `fav.json` entries

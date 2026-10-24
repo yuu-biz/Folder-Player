@@ -168,7 +168,7 @@ class SourceUiTest : UiTestBase() {
         toBrowser()
         for (line in expected) {
             val name = line.substringAfter('\t')
-            until(5_000, "row $name") { exists("source_$name") }
+            until(5_000, "row $name") { reveal("source_$name"); exists("source_$name") }
         }
         for (src in SourceRegistry.savedSources()) {
             val r = SourceRegistry.create(src).use { it.testConnection() }
