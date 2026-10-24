@@ -379,4 +379,6 @@
     <string name="playback_log_clear">Clear</string>
     <string name="playback_log_cleared">Playback log cleared</string>
     <string name="bookmark_drag">Drag to reorder</string>
+    <string name="player_open_folder">Show the folder</string>
+    <string name="player_seek_fine">Fine seek</string>
 </resources>

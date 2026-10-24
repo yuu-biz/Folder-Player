@@ -88,7 +88,8 @@ class AiNfoUiTest : UiTestBase() {
 
     private fun openInfo() {
         until(10_000, "folder name") { ps.currentFolderName.isNotEmpty() && textExists(ps.currentFolderName) }
-        clickText(ps.currentFolderName)
+        // A tap on the folder name opens the folder in the browser; the album information is its long press.
+        longClick("player_folder_name")
         until(20_000, "album info loaded") { !ps.isFetchingAlbumInfo && exists("album_info_text") }
     }
 

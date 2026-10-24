@@ -297,10 +297,11 @@ private fun PortraitPlayerLayout(
                                 style = if (lyricsExpanded) MaterialTheme.typography.bodySmall else MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.clickable { 
-                                    showAlbumInfo = true
-                                    viewModel.fetchAlbumInfo()
-                                }
+                                // Tap: the folder in the browser. Long press: what is known about the album (NFO / AI).
+                                modifier = Modifier.folderNameGestures(
+                                    onOpenFolder = { viewModel.showCurrentFolder() },
+                                    onAlbumInfo = { showAlbumInfo = true; viewModel.fetchAlbumInfo() },
+                                )
                             )
                             
                             if (uiState.audioInfo.isNotEmpty() && !lyricsExpanded) {
@@ -438,11 +439,13 @@ private fun PortraitPlayerLayout(
                         .padding(horizontal = 24.dp)
                 ) {
                     var sliderPosition by remember { mutableStateOf(0f) }
+                    var scrub by remember { mutableStateOf<ScrubMode?>(null) }
                     val actualPosition = if (uiState.duration > 0) uiState.currentPosition.toFloat() / uiState.duration else 0f
                     val bufferedFraction = if (uiState.duration > 0) uiState.bufferedPosition.toFloat() / uiState.duration else 0f
                     
+                    // Not while a finger moves the thumb: it shows where the finger is.
                     LaunchedEffect(uiState.currentPosition) {
-                        sliderPosition = actualPosition
+                        if (scrub == null) sliderPosition = actualPosition
                     }
                     
                     // Buffering spinner rotation
@@ -507,11 +510,14 @@ private fun PortraitPlayerLayout(
                                     viewModel.seekTo((f * uiState.duration).toLong())
                                 }
                                 .seekGestures(
+                                    durationMs = uiState.duration,
+                                    position = { sliderPosition },
                                     onPreview = { sliderPosition = it },
                                     onSeek = {
                                         sliderPosition = it
                                         viewModel.seekTo((it * uiState.duration).toLong())
                                     },
+                                    onScrub = { scrub = it },
                                 )
                         ) {
                             val thumbSize = if (uiState.isBuffering) 24.dp else 12.dp
@@ -565,11 +571,7 @@ private fun PortraitPlayerLayout(
                             .padding(horizontal = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = formatTime(uiState.currentPosition),
-                            color = Color.White.copy(alpha = 0.75f),
-                            style = MaterialTheme.typography.labelMedium
-                        )
+                        ScrubTime(scrub, sliderPosition, uiState.currentPosition, uiState.duration, MaterialTheme.typography.labelMedium)
                         Text(
                             text = formatTime(uiState.duration),
                             color = Color.White.copy(alpha = 0.75f),

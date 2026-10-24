@@ -373,4 +373,6 @@
     <string name="playback_log_clear">Effacer</string>
     <string name="playback_log_cleared">Journal de lecture effacé</string>
     <string name="bookmark_drag">Faire glisser pour réorganiser</string>
+    <string name="player_open_folder">Afficher le dossier</string>
+    <string name="player_seek_fine">Réglage fin</string>
 </resources>

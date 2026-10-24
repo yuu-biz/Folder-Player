@@ -359,4 +359,6 @@
     <string name="playback_log_clear">消去</string>
     <string name="playback_log_cleared">再生ログを消去しました</string>
     <string name="bookmark_drag">ドラッグで並べ替え</string>
+    <string name="player_open_folder">フォルダを表示</string>
+    <string name="player_seek_fine">微調整</string>
 </resources>

@@ -359,4 +359,6 @@
     <string name="playback_log_clear">清除</string>
     <string name="playback_log_cleared">已清除播放日志</string>
     <string name="bookmark_drag">拖动以排序</string>
+    <string name="player_open_folder">显示文件夹</string>
+    <string name="player_seek_fine">微调</string>
 </resources>

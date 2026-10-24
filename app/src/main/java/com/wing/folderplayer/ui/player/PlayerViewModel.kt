@@ -899,6 +899,22 @@ class PlayerViewModel : ViewModel() {
         return PlaybackErrorText.describe(e)
     }
 
+    /** The folder of the current track and the file to show in it (the CUE sheet for a CUE track), for the browser. */
+    data class FolderRequest(val folder: SourceRef, val file: SourceRef?)
+
+    private val _openFolderRequests = kotlinx.coroutines.flow.MutableSharedFlow<FolderRequest>(extraBufferCapacity = 1)
+    /** The folder name of the player was tapped: the browser shows that folder (collected by the app shell). */
+    val openFolderRequests: kotlinx.coroutines.flow.SharedFlow<FolderRequest> = _openFolderRequests
+
+    /** Asks the browser for the folder of the current track; false when there is none (nothing playing). */
+    fun showCurrentFolder(): Boolean {
+        val item = player?.currentMediaItem ?: return false
+        val folder = currentTrackFolder() ?: return false
+        val cuePath = item.mediaMetadata.extras?.getString(PlayerRepository.EXTRA_CUE_PATH)
+        val file = if (cuePath != null) SourceRef(folder.sourceId, cuePath) else SourceUris.parse(item.mediaId)
+        return _openFolderRequests.tryEmit(FolderRequest(folder, file))
+    }
+
     /** Folder of the current track (album info / NFO lookups). */
     fun currentTrackFolder(): SourceRef? {
         val item = player?.currentMediaItem ?: return null
