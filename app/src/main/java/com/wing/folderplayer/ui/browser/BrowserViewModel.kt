@@ -11,6 +11,7 @@ import com.wing.folderplayer.data.favorites.Bookmark
 import com.wing.folderplayer.data.favorites.BookmarksRepository
 import com.wing.folderplayer.data.favorites.FavoriteItem
 import com.wing.folderplayer.data.favorites.FavoritesRepository
+import com.wing.folderplayer.data.favorites.FavoritesSort
 import com.wing.folderplayer.data.favorites.SyncAnchor
 import com.wing.folderplayer.data.favorites.SyncResult
 import com.wing.folderplayer.data.prefs.SourcePreferences
@@ -395,6 +396,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun sortFiles(by: String) {
+        if (_uiState.value.showingFavorites) {
+            val s = _uiState.value
+            sourcePreferences.saveFavoritesSort(by, if (s.sortField == by) !s.sortAscending else true)
+            renderFavorites(restoreScroll = false)
+            return
+        }
         viewModelScope.launch(exceptionHandler) {
             val state = _uiState.value
             val folder = state.currentFolder ?: return@launch
@@ -709,21 +716,51 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         renderFavorites(restoreScroll = false)
     }
 
+    /** Entries whose file times were asked for in this run of the app (an entry that cannot be read is not asked again). */
+    private val favoriteTimesAsked = HashSet<Triple<String, String, String>>()
+    private var favoriteTimesJob: Job? = null
+
+    /** Reads the size and times of favourites added before 1.6.0 (fav.json did not keep them), for sorting by date. */
+    private fun fillFavoriteTimes(shown: List<FavoriteItem>) {
+        if (favoriteTimesJob?.isActive == true) return
+        val missing = shown.filter { it.modified == 0L && favoriteTimesAsked.add(it.key) }
+        if (missing.isEmpty()) return
+        favoriteTimesJob = viewModelScope.launch(Dispatchers.IO) {
+            val found = HashMap<Triple<String, String, String>, MusicFile>()
+            for ((sourceId, items) in missing.groupBy { it.sourceId }) {
+                val fs = runCatching { SourceRegistry.fileSystem(sourceId) }.getOrNull() ?: continue
+                for (f in items) {
+                    try {
+                        fs.stat(f.path)?.let { found[f.key] = it }
+                    } catch (e: SourceException.NotFound) {
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // An unreachable source (a NAS that is off) would cost a timeout per entry: skip the rest of it.
+                        break
+                    }
+                }
+            }
+            favoritesRepository.updateMetadata(found)
+        }
+    }
+
     private fun renderFavorites(restoreScroll: Boolean) {
         closeSearch()
         loadJob?.cancel()
         val sources = SourceRegistry.sources.value.map { it.id }.toSet()
-        val entries = favoritesRepository.items.value.mapNotNull { f ->
-            val ref = f.ref ?: return@mapNotNull null
-            MusicFile(f.name.ifEmpty { ref.name }, ref.path, f.type == FavoriteItem.TYPE_FOLDER, f.size, f.timestamp, ref.sourceId)
-                .takeIf { ref.sourceId in sources }
-        }
+        val sort = sourcePreferences.getFavoritesSort()
+        val shown = favoritesRepository.items.value.filter { it.ref != null && it.sourceId in sources }
+        val entries = FavoritesSort.sort(shown, sort.field, sort.ascending).map(FavoritesSort::asFile)
+        if (FavoritesSort.needsFileTimes(sort.field)) fillFavoriteTimes(shown)
         _uiState.value = _uiState.value.copy(
             showingFavorites = true,
             currentFolder = null,
             filter = "",
             filterOpen = false,
             files = entries,
+            sortField = sort.field,
+            sortAscending = sort.ascending,
             isLoading = false,
             viewMode = sourcePreferences.getDefaultViewMode(),
             // Back from a favourite: the list is as it was left (kept by [saveScrollPosition]).

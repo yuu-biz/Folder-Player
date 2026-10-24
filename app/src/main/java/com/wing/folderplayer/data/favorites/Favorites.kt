@@ -18,7 +18,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import java.util.UUID
 
-/** fav.json entry (id/type/sourceId/path/name/size/timestamp/transferStatus). No credentials are stored. */
+/**
+ * fav.json entry (id/type/sourceId/path/name/size/timestamp/transferStatus, and since 1.6.0 modified/created). No
+ * credentials are stored. [timestamp] is when it was added to the favourites; [modified] and [created] are the file's own
+ * times (0 = not known: entries written before 1.6.0 or by an older app, filled in when the list is sorted by them).
+ */
 data class FavoriteItem(
     val id: String = UUID.randomUUID().toString(),
     val type: String = TYPE_SONG,
@@ -28,6 +32,8 @@ data class FavoriteItem(
     val size: Long = 0,
     val timestamp: Long = 0,
     val transferStatus: String = "NONE",
+    val modified: Long = 0,
+    val created: Long = 0,
 ) {
     val ref: SourceRef? get() = if (sourceId.isNotEmpty() && path.startsWith("/")) SourceRef(sourceId, path) else null
     val key: Triple<String, String, String> get() = Triple(sourceId, path, type)
@@ -196,6 +202,8 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
                 name = entry.name,
                 size = entry.size,
                 timestamp = clock(),
+                modified = entry.lastModified,
+                created = entry.createdAt,
             )
             store(_items.value + item)
         }
@@ -211,6 +219,18 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
     fun toggle(entry: MusicFile) {
         synchronized(localLock) {
             if (isFavorite(entry.ref, entry.isDirectory)) remove(entry.ref, entry.isDirectory) else add(entry)
+        }
+    }
+
+    /** Size and times read from the sources for the entries in [found] (by [FavoriteItem.key]); stored once. */
+    fun updateMetadata(found: Map<Triple<String, String, String>, MusicFile>) {
+        if (found.isEmpty()) return
+        synchronized(localLock) {
+            val updated = _items.value.map { f ->
+                val m = found[f.key] ?: return@map f
+                f.copy(size = if (m.isDirectory) f.size else m.size, modified = m.lastModified, created = m.createdAt)
+            }
+            if (updated != _items.value) store(updated)
         }
     }
 
@@ -331,5 +351,43 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
         } catch (e: Exception) {
             SyncResult.Failed(e.message ?: e.javaClass.simpleName)
         }
+    }
+}
+
+/**
+ * The order of the favourites list: [ADDED] (when each entry was added, the order of the file) or one of the browser's
+ * fields (`NAME`, `DATE`, `CREATED`, `SIZE`, see [com.wing.folderplayer.data.source.sortMusicFiles]) on the files' own
+ * name, times and size, folders first as in a folder.
+ */
+object FavoritesSort {
+    const val ADDED = "ADDED"
+
+    /** The fields whose values the entries written before 1.6.0 lack (read from the sources when the list is sorted by them). */
+    fun needsFileTimes(field: String): Boolean = field == "DATE" || field == "CREATED"
+
+    fun sort(items: List<FavoriteItem>, field: String, ascending: Boolean): List<FavoriteItem> {
+        if (field == ADDED) {
+            // Equal times (a sync that added several at once) keep the order of the file.
+            val byAdded = items.withIndex().sortedWith(compareBy({ it.value.timestamp }, { it.index })).map { it.value }
+            return if (ascending) byAdded else byAdded.reversed()
+        }
+        val files = items.associateBy { asFile(it) }
+        val (folders, songs) = files.keys.partition { it.isDirectory }
+        return (com.wing.folderplayer.data.source.sortMusicFiles(folders, field, ascending) +
+            com.wing.folderplayer.data.source.sortMusicFiles(songs, field, ascending)).map { files.getValue(it) }
+    }
+
+    /** The entry as the browser lists it (its file's name, size and times). */
+    fun asFile(f: FavoriteItem): MusicFile {
+        val ref = f.ref
+        return MusicFile(
+            name = f.name.ifEmpty { ref?.name ?: SourcePath.name(f.path) },
+            path = ref?.path ?: f.path,
+            isDirectory = f.type == FavoriteItem.TYPE_FOLDER,
+            size = f.size,
+            lastModified = f.modified,
+            sourceId = f.sourceId,
+            createdAt = f.created,
+        )
     }
 }
