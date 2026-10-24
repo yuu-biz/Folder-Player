@@ -51,6 +51,9 @@ What a user can run into, in one place. The sections below give the history of e
   (nearly all of them): add the folder as a SAF folder to change files there. Playlists, favourites and
   the queue keep the old path of a renamed or moved file (see "Rename, move and delete of files" below).
 - **Waveform**: since 1.5.0 a measurement that has started finishes and is kept even when the player is closed. Not timed on a phone or a real NAS (see "Waveform on the seek bar").
+- **Visualiser** (in place of missing lyrics): during a DLNA cast the music plays elsewhere and the picture stays a flat line; it follows the playback speed's media time, drawn against the wall clock between the sink's position reports (at most a quarter of a second). Not timed on a phone (CPU of the FFT at the frame rate).
+- **Song lengths**: folders are not sorted by the total length of their songs (only songs are). A scan reads every song it does not know yet, which over SMB / FTP / WebDAV can take long for a large library (one file at a time, by design); a file that cannot be read now is tried again by the next scan. Lengths are kept for up to 30 000 files.
+- **Favourites**: since 1.7.0 the source list shows favourite songs and favourite folders as two lists; `fav.json` is unchanged, so an older app on another device still syncs it (and shows one list).
 - **Playback that stops by itself**: reported once, cause not known yet. Since 1.5.0 Settings → Playback → Playback log
   records what started, paused or stopped playback and why; share it right after a stop (see "Playback that stops by itself").
 - **Not checked**: TalkBack sessions, HyperOS devices, a background network retry on a real phone with the screen off (a

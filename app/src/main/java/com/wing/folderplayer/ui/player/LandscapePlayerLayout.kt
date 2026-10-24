@@ -127,6 +127,7 @@ fun LandscapePlayerLayout(
                     LandscapeLyricsPanel(
                         uiState = uiState,
                         viewModel = viewModel,
+                        visible = remember(transition) { derivedStateOf { transition.sheet.fraction > 0f } }.value,
                     )
                 }
             }
@@ -368,6 +369,8 @@ fun LandscapeLeftControlPanel(
 fun LandscapeLyricsPanel(
     uiState: PlayerUiState,
     viewModel: PlayerViewModel,
+    /** The panel is on screen (the visualiser in place of missing lyrics runs only then). */
+    visible: Boolean = true,
 ) {
     Column(Modifier.fillMaxSize()) {
     Box(Modifier.weight(1f)) {
@@ -440,9 +443,8 @@ fun LandscapeLyricsPanel(
             }
         }
     } else {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_no_lyrics), color = Color.White.copy(alpha = 0.6f))
-        }
+        // No lyrics: the music itself, drawn as it is heard.
+        AudioVisualizer(visible, uiState.isPlaying, MaterialTheme.colorScheme.primary, Modifier.fillMaxSize())
     }
     }
     LyricsFooter(uiState) { regen -> viewModel.requestAiLyrics(regen) }
