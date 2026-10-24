@@ -1,8 +1,14 @@
 Folder Player Fork {VERSION} — an unofficial personal fork of
 [Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000. It is not affiliated with the original
-project. This release follows 1.4.0.
+project. This release follows 1.5.0.
 
-## What's new in 1.5.0
+## What's new in 1.6.0
+
+- **Sort the favourites**: the favourites list now has sort buttons like a folder: Added (when you added each one, as
+  before), Name, Modified, Created and Size; tap again to reverse. The choice is kept. For favourites added with an
+  earlier version the app reads the file dates once from their source the first time you sort by date.
+
+## New in 1.5.0
 
 - **Playback log**: Settings → Playback → Playback log records what started, paused or stopped playback and why: the
   reason Android gave (another app took the audio, headphones or Bluetooth disconnected, the end of the queue…), which app

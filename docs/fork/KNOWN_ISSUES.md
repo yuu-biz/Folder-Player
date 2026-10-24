@@ -1,6 +1,6 @@
 # Known issues
 
-## Limitations (current: 1.5.0)
+## Limitations (current: 1.6.0)
 
 What a user can run into, in one place. The sections below give the history of each point and what was fixed when.
 
@@ -288,6 +288,22 @@ is not known until a log of one is read.
   Its long-press menu renames it (the name is only what the list shows; the folder is not touched) and moves it up or
   down one place. Bookmarks of a removed source are hidden and skipped when moving: a bookmark moves past the next one
   that is shown. Since 1.5.0 the handle at the end of a row drags it to another place.
+
+## Order of the favourites list (1.6.0)
+
+- The favourites list has the sort buttons of a folder plus "Added" in front: Added (when each entry was added; the
+  default, oldest first, the order of earlier versions), Name, Modified, Created and Size. A second tap on the selected
+  button reverses it. The choice is kept for the favourites list (folders keep their own).
+- Added keeps folders and songs together in the order they were added; the other buttons put folders first, as in a
+  folder.
+- Modified and Created are the files' own times, kept in `fav.json` since 1.6.0 (`modified`, `created`; the format
+  version stays 1, older versions ignore the two fields). Entries added before 1.6.0 lack them: when the list is sorted by
+  Modified or Created, the app reads them from the sources once (in the background; the list re-sorts when they arrive)
+  and stores them. A source that cannot be reached (a NAS that is off) is skipped after its first failure and asked again
+  on the next start of the app; its entries sort as the oldest until then. Size comes from when the entry was added.
+- A device that syncs `fav.json` with a version before 1.6.0 writes the entries back without the two times; they are read
+  again from the sources when needed.
+- Checked with JVM tests and on an API 34 emulator (VERIFICATION.md 5.32), with local files only.
 
 ## Favourites shared between devices (1.1.0)
 

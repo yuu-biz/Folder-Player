@@ -115,3 +115,5 @@ which installs over 1.3.2.
 
 1.5.0 (playback log, retries with the screen off, bookmarks by drag, waveform kept when the player closes): `v1.5.0` is
 versionName `1.5.0`, versionCode `1050099`, which installs over 1.4.0.
+
+1.6.0 (sorting of the favourites list): `v1.6.0` is versionName `1.6.0`, versionCode `1060099`, which installs over 1.5.0.

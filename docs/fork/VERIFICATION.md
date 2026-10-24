@@ -140,6 +140,21 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.32 Sorting of the favourites list (1.6.0, 2026-10-24)
+
+Branch `feature/favorites-sort`. The favourites list gets the sort buttons of a folder plus "Added"; `fav.json` entries
+keep the files' own times (`modified`, `created`), read once from the sources for older entries. Limits:
+[KNOWN_ISSUES.md](KNOWN_ISSUES.md) "Order of the favourites list". Emulator `fp_api34` (API 34), targeted tests.
+
+| Check | Result |
+|---|---|
+| JVM: new `FavoritesSortTest` (4: added order with ties in file order, folders first for the other fields, the list shows the files' times, `add` keeps them and `updateMetadata` fills old entries and stores them), `FavoritesTest` (the file-format test now expects `modified` and `created`: it failed first, as it should), `FavoritesCrossDeviceTest`, `FavoritesSyncConcurrencyTest`, `StringResourcesParityTest` | all PASS (4/4, 12/12, 9/9, 7/7, 4/4) |
+| New `FavoritesSortUiTest`: three favourites added without file times, then Added, Name, Modified (times read from the local source), Added reversed, choice kept | PASS. First run FAIL: the test set the files' times with the shell's `touch`, which did not change them; it now uses the fixture's own times |
+| `LibraryUiTest` a20, b20 (favourites added from the UI, played, kept after a restart, removed) | 2/2 PASS |
+| All JVM tests and `lintDebug` at the end | 301 tests, 28 skipped (protocol tests without the fixture properties), 0 failures; lint 0 errors, no new warning in the changed files |
+
+Not run: a NAS source (the times are read through `stat`, as for every source), a phone.
+
 ### 5.31 Playback log, retry locks, bookmarks by drag, waveform kept when the player closes (1.5.0, 2026-10-24)
 
 Branch `feature/playback-log`. What changed and its limits: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) "Playback that stops by
