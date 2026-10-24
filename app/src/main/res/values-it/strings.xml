@@ -336,6 +336,16 @@
         <item quantity="many">%d elementi</item>
         <item quantity="other">%d elementi</item>
     </plurals>
+    <plurals name="browser_favorite_songs_count">
+        <item quantity="one">%d brano</item>
+        <item quantity="many">%d brani</item>
+        <item quantity="other">%d brani</item>
+    </plurals>
+    <plurals name="browser_favorite_folders_count">
+        <item quantity="one">%d cartella</item>
+        <item quantity="many">%d cartelle</item>
+        <item quantity="other">%d cartelle</item>
+    </plurals>
     <plurals name="source_test_ok">
         <item quantity="one">Connesso – la radice contiene %d elemento</item>
         <item quantity="many">Connesso – la radice contiene %d elementi</item>
@@ -375,4 +385,6 @@
     <string name="bookmark_drag">Trascina per riordinare</string>
     <string name="player_open_folder">Mostra la cartella</string>
     <string name="player_seek_fine">Regolazione fine</string>
+    <string name="browser_favorite_songs">Brani preferiti</string>
+    <string name="browser_favorite_folders">Cartelle preferite</string>
 </resources>

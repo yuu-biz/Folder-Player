@@ -222,6 +222,7 @@ class PlayerViewModel : ViewModel() {
         // A MediaController bound through a destroyed Activity crashes on release ("Service not registered") and leaks it.
         val context = callerContext.applicationContext
         appContext = context
+        favorites.value = com.wing.folderplayer.data.favorites.FavoritesRepository.get(context)
         SourceRegistry.init(context.applicationContext)
         if (playbackPreferences == null) {
             playbackPreferences = PlaybackPreferences(context)
@@ -908,11 +909,37 @@ class PlayerViewModel : ViewModel() {
 
     /** Asks the browser for the folder of the current track; false when there is none (nothing playing). */
     fun showCurrentFolder(): Boolean {
-        val item = player?.currentMediaItem ?: return false
         val folder = currentTrackFolder() ?: return false
+        return _openFolderRequests.tryEmit(FolderRequest(folder, currentTrackFile()))
+    }
+
+    /** The file of the current track as the browser lists it: the song, or the CUE sheet of a CUE track. */
+    private fun currentTrackFile(): SourceRef? {
+        val item = player?.currentMediaItem ?: return null
+        val ref = SourceUris.parse(item.mediaId) ?: return null
         val cuePath = item.mediaMetadata.extras?.getString(PlayerRepository.EXTRA_CUE_PATH)
-        val file = if (cuePath != null) SourceRef(folder.sourceId, cuePath) else SourceUris.parse(item.mediaId)
-        return _openFolderRequests.tryEmit(FolderRequest(folder, file))
+        return if (cuePath != null) SourceRef(ref.sourceId, cuePath) else ref
+    }
+
+    private val favorites = MutableStateFlow<com.wing.folderplayer.data.favorites.FavoritesRepository?>(null)
+
+    /** The current track (its CUE sheet for a CUE track) is a favourite song: the heart of the full player. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val currentIsFavorite: StateFlow<Boolean> = combine(currentMediaId, favorites.flatMapLatest { it?.items ?: flowOf(emptyList()) }) { _, items ->
+        val file = currentTrackFile()
+        file != null && items.any { it.type == com.wing.folderplayer.data.favorites.FavoriteItem.TYPE_SONG && it.sourceId == file.sourceId && it.path == file.path }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /** Adds the current track to the favourite songs, or takes it out (its size and times are read for sorting). */
+    fun toggleCurrentFavorite() {
+        val repo = favorites.value ?: return
+        val file = currentTrackFile() ?: return
+        viewModelScope.launch(exceptionHandler) {
+            val entry = runCatching { runInterruptible(Dispatchers.IO) { SourceRegistry.fileSystem(file).stat(file.path) } }.getOrNull()
+                ?.copy(sourceId = file.sourceId, path = file.path, isDirectory = false)
+                ?: MusicFile(file.name, file.path, false, 0, 0, file.sourceId)
+            repo.toggle(entry)
+        }
     }
 
     /** Folder of the current track (album info / NFO lookups). */

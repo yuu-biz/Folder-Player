@@ -109,9 +109,14 @@ class LibraryUiTest : UiTestBase() {
         val playlistsBefore = player.uiState.value.allPlaylists.map { it.id to it.items.size }
 
         onUi { browser.exitSource() }
-        until(5_000, "source list") { exists("entry_favorites") }
-        click("entry_favorites")
-        until(5_000, "favourites list") { exists("item_Album-B") && exists("item_02 track.mp3") }
+        until(5_000, "source list") { exists("entry_favorite_songs") }
+        // Two lists: the folder only in the folders, the song only in the songs.
+        click("entry_favorite_folders")
+        until(5_000, "favourite folders") { exists("item_Album-B") && !exists("item_02 track.mp3") }
+        pressBack()
+        until(5_000, "source list again") { exists("entry_favorite_songs") }
+        click("entry_favorite_songs")
+        until(5_000, "favourite songs") { exists("item_02 track.mp3") && !exists("item_Album-B") }
         click("item_02 track.mp3")
         until(15_000, "favourite track plays") { player.uiState.value.isPlaying && player.uiState.value.currentMediaId?.endsWith("Album-A/02%20track.mp3") == true }
         onUi { player.playPause() }
@@ -125,11 +130,15 @@ class LibraryUiTest : UiTestBase() {
         until(5_000, "favourites loaded") { browser.uiState.value.favorites.isNotEmpty() }
         assertEquals(expected.toSet(), browser.uiState.value.favorites.map { "${it.sourceId}|${it.path}|${it.type}" }.toSet())
         toBrowser()
-        click("entry_favorites")
-        until(5_000, "favourites list") { exists("item_Album-B") }
+        onUi { browser.exitSource() }
+        click("entry_favorite_folders")
+        until(5_000, "favourite folders") { exists("item_Album-B") }
         longClick("item_Album-B")
         click("action_favorite")
         until(5_000, "removed") { browser.uiState.value.favorites.size == expected.size - 1 }
+        pressBack()
+        click("entry_favorite_songs")
+        until(5_000, "favourite songs") { exists("item_02 track.mp3") }
         click("item_02 track.mp3")
         until(15_000, "still playable") { player.uiState.value.isPlaying }
         onUi { player.playPause() }

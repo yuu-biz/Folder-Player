@@ -171,7 +171,7 @@ private fun PortraitPlayerLayout(
                 // Down: fold into the mini player (follows the finger). Up: playlist, as before.
                 .playerSheetDrag(transition.sheet) { showPlaylist = true }
         ) {
-            Box(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(4.dp).fullPlayerContent(transition)) { CastAction(viewModel) }
+            Row(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(4.dp).fullPlayerContent(transition)) { FavoriteAction(viewModel); CastAction(viewModel) }
             Column(
                 modifier = Modifier
                     .fillMaxSize()

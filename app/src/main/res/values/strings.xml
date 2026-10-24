@@ -345,6 +345,14 @@
         <item quantity="one">%d item</item>
         <item quantity="other">%d items</item>
     </plurals>
+    <plurals name="browser_favorite_songs_count">
+        <item quantity="one">%d song</item>
+        <item quantity="other">%d songs</item>
+    </plurals>
+    <plurals name="browser_favorite_folders_count">
+        <item quantity="one">%d folder</item>
+        <item quantity="other">%d folders</item>
+    </plurals>
     <plurals name="source_test_ok">
         <item quantity="one">Connected – root lists %d entry</item>
         <item quantity="other">Connected – root lists %d entries</item>
@@ -381,4 +389,6 @@
     <string name="bookmark_drag">Drag to reorder</string>
     <string name="player_open_folder">Show the folder</string>
     <string name="player_seek_fine">Fine seek</string>
+    <string name="browser_favorite_songs">Favorite songs</string>
+    <string name="browser_favorite_folders">Favorite folders</string>
 </resources>

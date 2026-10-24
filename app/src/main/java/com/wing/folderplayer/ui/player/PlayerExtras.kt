@@ -15,6 +15,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.CastConnected
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -448,6 +450,24 @@ fun AlbumInfoDialog(uiState: PlayerUiState, viewModel: PlayerViewModel, onDismis
         textContentColor = Color.White,
         titleContentColor = Color.White
     )
+}
+
+/** Heart of the full player: the current track in or out of the favourite songs. */
+@Composable
+fun FavoriteAction(viewModel: PlayerViewModel) {
+    val favorite by viewModel.currentIsFavorite.collectAsState()
+    val hasTrack by viewModel.hasTrack.collectAsState()
+    if (!hasTrack) return
+    IconButton(
+        onClick = { viewModel.toggleCurrentFavorite() },
+        modifier = Modifier.testTag("btn_favorite_song"),
+    ) {
+        Icon(
+            if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+            contentDescription = stringResource(if (favorite) R.string.browser_remove_favorite else R.string.browser_add_favorite),
+            tint = if (favorite) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f),
+        )
+    }
 }
 
 /** Cast icon (only when DLNA is enabled in Settings) with renderer picker and session controls. */

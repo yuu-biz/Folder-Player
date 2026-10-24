@@ -57,6 +57,7 @@ import com.wing.folderplayer.R
 import com.wing.folderplayer.data.artwork.ArtworkResult
 import com.wing.folderplayer.data.artwork.ImageUris
 import com.wing.folderplayer.data.favorites.Bookmark
+import com.wing.folderplayer.data.favorites.FavoritesKind
 import com.wing.folderplayer.data.source.MediaTypes
 import com.wing.folderplayer.data.source.MusicFile
 import com.wing.folderplayer.data.source.SourceConfig
@@ -220,7 +221,8 @@ fun BrowserScreen(
                         title = {
                             Text(
                                 when {
-                                    uiState.showingFavorites -> stringResource(R.string.browser_favorites)
+                                    uiState.favoritesKind == FavoritesKind.SONGS -> stringResource(R.string.browser_favorite_songs)
+                                    uiState.favoritesKind == FavoritesKind.FOLDERS -> stringResource(R.string.browser_favorite_folders)
                                     uiState.currentFolder == null -> stringResource(R.string.browser_sources_title)
                                     else -> {
                                         val folder = uiState.currentFolder!!
@@ -398,14 +400,15 @@ fun BrowserScreen(
                         when {
                             uiState.isRoot -> SourceList(
                                 sources = uiState.availableSources,
-                                favoritesCount = uiState.favorites.size,
+                                favoriteSongs = uiState.favorites.count { it.type == FavoritesKind.SONGS.type && uiState.availableSources.any { s -> s.id == it.sourceId } },
+                                favoriteFolders = uiState.favorites.count { it.type == FavoritesKind.FOLDERS.type && uiState.availableSources.any { s -> s.id == it.sourceId } },
                                 bookmarks = uiState.bookmarks.filter { b -> uiState.availableSources.any { it.id == b.sourceId } },
                                 onBookmarkClick = { viewModel.openBookmark(it) },
                                 onBookmarkRemove = { viewModel.removeBookmark(it) },
                                 onBookmarkRename = { b, name -> viewModel.renameBookmark(b, name) },
                                 onBookmarkMove = { b, delta -> viewModel.moveBookmark(b, delta) },
                                 onBookmarkReorder = { viewModel.reorderBookmarks(it) },
-                                onFavoritesClick = { viewModel.showFavorites() },
+                                onFavoritesClick = { viewModel.showFavorites(it) },
                                 onSourceClick = { viewModel.selectSource(it) },
                                 onEditSource = { sourceToEdit = it },
                                 onDeleteSource = { viewModel.removeSource(it.id) },
@@ -644,8 +647,9 @@ private fun sourceIcon(t: SourceType) = when (t) {
 @Composable
 fun SourceList(
     sources: List<SourceConfig>,
-    favoritesCount: Int,
-    onFavoritesClick: () -> Unit,
+    favoriteSongs: Int,
+    favoriteFolders: Int,
+    onFavoritesClick: (FavoritesKind) -> Unit,
     bookmarks: List<Bookmark>,
     onBookmarkClick: (Bookmark) -> Unit,
     onBookmarkRemove: (Bookmark) -> Unit,
@@ -755,12 +759,20 @@ fun SourceList(
     }
 
     LazyColumn(state = listState, modifier = Modifier.testTag("source_list")) {
+        // Songs and folders are two lists (one fav.json): a song list to play from, a folder list to go to.
         item {
             ListItem(
-                headlineContent = { Text(stringResource(R.string.browser_favorites)) },
-                supportingContent = { Text(pluralStringResource(R.plurals.browser_favorites_count, favoritesCount, favoritesCount)) },
+                headlineContent = { Text(stringResource(R.string.browser_favorite_songs)) },
+                supportingContent = { Text(pluralStringResource(R.plurals.browser_favorite_songs_count, favoriteSongs, favoriteSongs)) },
                 leadingContent = { Icon(Icons.Default.Favorite, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                modifier = Modifier.clickable { onFavoritesClick() }.testTag("entry_favorites")
+                modifier = Modifier.clickable { onFavoritesClick(FavoritesKind.SONGS) }.testTag("entry_favorite_songs")
+            )
+            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.browser_favorite_folders)) },
+                supportingContent = { Text(pluralStringResource(R.plurals.browser_favorite_folders_count, favoriteFolders, favoriteFolders)) },
+                leadingContent = { Icon(Icons.Default.FolderSpecial, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                modifier = Modifier.clickable { onFavoritesClick(FavoritesKind.FOLDERS) }.testTag("entry_favorite_folders")
             )
             Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
         }

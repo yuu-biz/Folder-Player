@@ -44,6 +44,15 @@ data class FavoriteItem(
     }
 }
 
+/** The two favourites lists of the source list: songs (and CUE sheets) and folders, from the same `fav.json`. */
+enum class FavoritesKind(val type: String) {
+    SONGS(FavoriteItem.TYPE_SONG), FOLDERS(FavoriteItem.TYPE_FOLDER);
+
+    companion object {
+        fun of(item: FavoriteItem): FavoritesKind = if (item.type == FavoriteItem.TYPE_FOLDER) FOLDERS else SONGS
+    }
+}
+
 data class FavoritesData(val version: Int = FavoritesCodec.VERSION, val items: List<FavoriteItem> = emptyList())
 
 class FavoritesFormatException(msg: String) : Exception(msg)
@@ -156,6 +165,15 @@ sealed class SyncResult {
  * and is held across the network I/O, which add / remove never wait for.
  */
 class FavoritesRepository(private val file: File, private val clock: () -> Long = System::currentTimeMillis) {
+    companion object {
+        @Volatile private var instance: FavoritesRepository? = null
+
+        /** The app's favourites (`files/favorites/fav.json`): one list, shared by the browser and the player. */
+        fun get(context: android.content.Context): FavoritesRepository = instance ?: synchronized(this) {
+            instance ?: FavoritesRepository(File(context.applicationContext.filesDir, "favorites/fav.json")).also { instance = it }
+        }
+    }
+
     private val localLock = Any()
     private val syncLock = Any()
 

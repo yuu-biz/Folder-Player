@@ -167,7 +167,7 @@ fun LandscapePlayerLayout(
             if (showAlbumInfo) {
                 AlbumInfoDialog(uiState, viewModel) { showAlbumInfo = false }
             }
-            Box(Modifier.align(Alignment.TopEnd).padding(4.dp).fullPlayerContent(transition)) { CastAction(viewModel) }
+            Row(Modifier.align(Alignment.TopEnd).padding(4.dp).fullPlayerContent(transition)) { FavoriteAction(viewModel); CastAction(viewModel) }
             if (!docked) CollapsePlayerButton(
                 onCollapse,
                 Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Left)).padding(4.dp)

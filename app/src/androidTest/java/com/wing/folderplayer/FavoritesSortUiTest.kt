@@ -2,7 +2,9 @@ package com.wing.folderplayer
 
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.wing.folderplayer.data.favorites.FavoriteItem
 import com.wing.folderplayer.data.source.MusicFile
+import com.wing.folderplayer.data.source.SourceRef
 import com.wing.folderplayer.data.source.SourceRegistry
 import com.wing.folderplayer.ui.browser.BrowserViewModel
 import org.junit.Assert.assertEquals
@@ -19,6 +21,7 @@ class FavoritesSortUiTest : UiTestBase() {
     private val local = SourceRegistry.LOCAL_INTERNAL_ID
     private val browser: BrowserViewModel get() = onUi { ViewModelProvider(compose.activity)[BrowserViewModel::class.java] }
     private val bs get() = browser.uiState.value
+    private val player: com.wing.folderplayer.ui.player.PlayerViewModel get() = onUi { ViewModelProvider(compose.activity)[com.wing.folderplayer.ui.player.PlayerViewModel::class.java] }
     private fun <T> onUi(block: () -> T): T { var r: Any? = null; compose.runOnUiThread { r = block() }; @Suppress("UNCHECKED_CAST") return r as T }
     private fun names() = bs.files.map { it.name }
 
@@ -32,7 +35,7 @@ class FavoritesSortUiTest : UiTestBase() {
             for (s in songs) browser.favoritesRepository.add(MusicFile(s.substringAfterLast('/'), "${Fx.FX}/$s", false, 0, 0, local))
         }
         toBrowser()
-        onUi { browser.showFavorites() }
+        onUi { browser.showFavorites(com.wing.folderplayer.data.favorites.FavoritesKind.SONGS) }
         until(10_000, "favourites with the sort buttons") { bs.showingFavorites && exists("sortbtn_ADDED") && bs.files.size == 3 }
         if (bs.sortField != "ADDED" || !bs.sortAscending) {
             click("sortbtn_ADDED")
@@ -52,7 +55,35 @@ class FavoritesSortUiTest : UiTestBase() {
         click("sortbtn_ADDED")
         click("sortbtn_ADDED")
         until(5_000, "newest added first") { names() == listOf("track-with-embedded-art.mp3", "track.flac", "long.flac") }
-        val prefs = com.wing.folderplayer.data.prefs.SourcePreferences(Fx.ctx).getFavoritesSort()
+        val prefs = com.wing.folderplayer.data.prefs.SourcePreferences(Fx.ctx).getFavoritesSort(com.wing.folderplayer.data.favorites.FavoritesKind.SONGS)
         assertEquals("kept", "ADDED" to false, prefs.field to prefs.ascending)
+    }
+
+    /** The heart of the full player puts the track in the favourite songs (with its size and times) and takes it out. */
+    @Test fun s02_heartOfThePlayerAddsAndRemovesTheSong() {
+        val track = SourceRef(local, "${Fx.FX}/Album-B/track.flac")
+        onUi { browser.favoritesRepository.items.value.forEach { browser.favoritesRepository.remove(it.ref!!, it.type == "FOLDER") } }
+        toBrowser()
+        onUi { player.playCustomList(listOf(MusicFile("track.flac", track.path, false, 0, 0, local)), 0) }
+        until(15_000, "playing") { player.uiState.value.currentMediaId?.contains("Album-B") == true }
+        toPlayer()
+        until(5_000, "heart") { exists("btn_favorite_song") && !player.currentIsFavorite.value }
+        click("btn_favorite_song")
+        until(5_000, "a favourite song") { player.currentIsFavorite.value }
+        val item = browser.favoritesRepository.items.value.single()
+        assertEquals(FavoriteItem.TYPE_SONG, item.type)
+        assertEquals(track.path, item.path)
+        assertTrue("size and time read", item.size > 0 && item.modified > 0)
+
+        click("btn_collapse_player")
+        onUi { browser.exitSource() }
+        click("entry_favorite_songs")
+        until(5_000, "in the songs list") { exists("item_track.flac") }
+        onUi { player.pauseLocal() }
+        toPlayer()
+        click("btn_favorite_song")
+        until(5_000, "taken out") { !player.currentIsFavorite.value && browser.favoritesRepository.items.value.isEmpty() }
+        click("btn_collapse_player")
+        until(5_000, "the songs list follows") { !exists("item_track.flac") }
     }
 }
