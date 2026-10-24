@@ -126,18 +126,41 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 
 ### 5.3 Still to check on devices
 
-- The release APK on a real phone: install, and later an update over it signed with the same key. Builds handed
-  out before the release key existed (0.5.0-fork.1 debug-signed, versionCode 501; 0.5.1 test-key-signed, 50199)
+- Done: the owner installs each release and the dev builds over it on a phone (updates in place since 0.6.0; last
+  1.3.2-dev1 → 1.3.2, 2026-10-24). Builds handed out before the release key existed (0.5.0-fork.1 debug-signed, versionCode 501; 0.5.1 test-key-signed, 50199)
   cannot be updated in place: uninstall them once.
-- Casting on a real network: discovery of a real renderer (emulators sit behind NAT) and switching / stopping while
+- Casting on a real network (low priority, owner's decision 2026-10-24): discovery of a real renderer (emulators sit behind NAT) and switching / stopping while
   a renderer is slow; the ordering is covered by `CastSessionOrderTest` with a fake renderer only.
 - Japanese UI on a real phone with Japanese system language (emulators only so far), and how the longer Japanese
   labels fit on small screens.
 - The full suites on API 26 / 33 / 36, the 16 KB-page image and ARM translation on `bf18888` (only API 34 ran all
   suites; API 26 ran `JapaneseUiTest` and `CastCleanupTest`).
-- Real HyperOS hardware (debugging there waived for now), a NAS (postponed), SD cards.
+- Real HyperOS hardware (debugging there waived for now), SD cards. A real NAS (Synology, QNAP, Windows) and SMB search on a
+  real LAN: low priority (owner's decision 2026-10-24); the owner uses a NAS with the app and reports problems.
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
+
+### 5.30 Rename, move and delete of files; bookmark order and names (1.4.0, 2026-10-24)
+
+Branch `feature/file-ops-bookmarks`. The long-press sheet of a file and the viewer's ⋮ menu rename, move (to a folder of
+the same source picked in a dialog) and delete a file (`FileOperations`, `FileOpDialogs`); SAF got a rename / move
+(`renameDocument` / `moveDocument`); bookmarks can be renamed and moved up / down. What it does and its limits:
+[KNOWN_ISSUES.md](KNOWN_ISSUES.md) "Rename, move and delete of files" and "Bookmarks". The fixture servers now create
+`/rw/sub` (a writable folder to move into). Emulator `fp_api34` (API 34), targeted tests only.
+
+| Check | Result |
+|---|---|
+| JVM: new `FileOperationsTest` (12: names, rename, case-only rename, taken name in any case refused, move, delete, a source that refuses, folders left alone), `BookmarksTest` (9, two new: rename, move past hidden bookmarks), `StringResourcesParityTest`, `FavoritesTest` | all PASS (12/12, 9/9, 4/4, 12/12) |
+| Protocol servers in Docker: new `fileOperations` in `SmbProtocolTest` (Samba), `FtpProtocolTest`, `WebDavProtocolTest` (rename, taken name refused, move into `/rw/sub`, delete), with all other protocol tests | 26/26 PASS, none skipped |
+| `SafTest#e_renameMoveDeleteThroughSaf` (after `a_`, the folder picked through DocumentsUI): rename, taken name refused, move into a new subfolder, the rename over an existing file that the favourites sync uses, delete | PASS (the code before this change returned false for every SAF rename) |
+| `ViewerUiTest` a80–a82 (the viewer's ⋮ menu now exists for every kind of file) | 3/3 PASS |
+| First run of the new `FileOpsUiTest` / `BookmarksUiTest#c40` | FAIL, and they found a crash: the name dialog asked for the focus before its field was placed in the dialog's window (`FocusRequester is not initialized`); the request now runs inside the dialog's content. Two test faults fixed as well: a row removed from a lazy list stays in the test tree (checked as "displayed" now), and the folder listed by the app at start while `@Before` rebuilt it (read again now) |
+| `FileOpsUiTest` f01–f06 after the fix: rename from the sheet, move through the folder dialog, delete from the viewer (next image, then closed), a taken name refused (both files intact), rename in the viewer, a file in shared storage pushed by adb refused with the SAF hint | 6/6 PASS |
+| `BookmarksUiTest#c40` after the fix: rename, move up / down, kept in the file, the renamed bookmark opens its folder | PASS |
+| All JVM tests and `lintDebug` at the end | 275 tests, 28 skipped (the protocol tests without the fixture properties), 0 failures; lint 0 errors, no new warning in the changed files |
+
+Also changed: while the viewer is open, messages and errors of the browser are shown as a toast (the viewer's window hid
+the snackbar). Not run: the full suites, other API levels, a phone, a real NAS (low priority).
 
 ### 5.29 Waveform through FFmpeg, drawn at once (1.3.2-dev1, 2026-10-24)
 

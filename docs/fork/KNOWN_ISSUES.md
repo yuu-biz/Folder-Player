@@ -1,6 +1,6 @@
 # Known issues
 
-## Limitations of 1.0.0 (current)
+## Limitations (current: 1.4.0)
 
 What a user can run into, in one place. The sections below give the history of each point and what was fixed when.
 
@@ -45,9 +45,19 @@ What a user can run into, in one place. The sections below give the history of e
 - **File viewer**: text shows the first 1 MB, images up to 2560 px (enough to zoom, not the full size of a large scan), GIFs
   without animation, PDFs as pages (no text search, no links, no password-protected files); files over 200 MB are not
   opened. Copies of images and PDFs from a source are kept in the app's cache (up to 300 MB, outside the image cache of
-  Settings). Not yet run on an emulator or a phone (see below).
-- **Not checked**: TalkBack sessions, HyperOS devices, a NAS, a background network retry on a real phone with the
-  screen off (a refused foreground start is caught and logged, see below).
+  Settings). Checked on an API 34 emulator, not on a phone (see below).
+- **Rename, move, delete** (1.4.0): files only, not folders; a move stays inside the file's source. Local folders
+  of the phone (the built-in "Internal Storage" and "SD Card" sources) refuse it for files the app did not create itself
+  (nearly all of them): add the folder as a SAF folder to change files there. Playlists, favourites and
+  the queue keep the old path of a renamed or moved file (see "Rename, move and delete of files" below).
+- **Waveform**: closing the player for more than 5 s throws away a measurement that has not finished; it starts again
+  from the beginning when the player opens. Not timed on a phone or a real NAS (see "Waveform on the seek bar").
+- **Playback that stops by itself**: reported once, cause not known; nothing records why playback stopped (see
+  "Playback that stops by itself").
+- **Not checked**: TalkBack sessions, HyperOS devices, a background network retry on a real phone with the screen off (a
+  refused foreground start is caught and logged, see below). Low priority (owner's decision, 2026-10-24): a real NAS
+  (Synology, QNAP, Windows), SMB search and mDNS on a real LAN, and DLNA with a real TV or speaker; the owner uses the
+  app with a NAS on the phone and reports what goes wrong.
 
 ## Waveform on the seek bar (1.3.0, faster in 1.3.1 and 1.3.2)
 
@@ -91,7 +101,7 @@ What a user can run into, in one place. The sections below give the history of e
   have its bars slightly off in time. Timings were measured on an x86_64 emulator (FFmpeg without assembly there) with
   a NAS simulated by 5 ms per read; on a phone the owner found it much faster, but did not time it.
 
-## Image thumbnails, browser-only wide layout, shuffle in the menu (after 1.3.0)
+## Image thumbnails, browser-only wide layout, shuffle in the menu (1.3.0)
 
 - **Image files have their own thumbnail.** An image in the list (jpg, png, gif, webp, bmp, heic) is shown by its own
   picture: the whole picture, not cropped, on a framed tile with an image badge in its corner. A folder's image fills its
@@ -110,7 +120,7 @@ What a user can run into, in one place. The sections below give the history of e
 `BrowserUiTest#a19` and `AdaptiveLayoutTest#a11` passed on an API 34 emulator before the 1.3.0 tag (VERIFICATION 5.27).
 Not checked on a real foldable.
 
-## File viewer (after 1.3.0)
+## File viewer (1.3.0)
 
 Text, images and PDF beside the songs open in a viewer of the browser (a tap, or "Open" in the long-press sheet); "Open in
 another app" hands the file to an app chosen by Android. How it works and why:
@@ -142,6 +152,37 @@ Open points:
   cover the file kinds, decoding and the copies (`FileViewerTest`).
 - The viewer's copies are not part of Settings → image cache (usage and Clear); Android may clear them when storage
   runs low. Search results list folders, songs and CUE sheets only, not files the viewer opens.
+
+## Rename, move and delete of files (1.4.0)
+
+The long-press sheet of a file (any file: songs, images, text, PDF, CUE…) and the ⋮ menu of the viewer offer "Rename",
+"Move to…" and "Delete". Each one asks first: rename shows the name with the part before the extension selected, "Move to…"
+lists the folders of the same source starting at the file's own folder (up one level, into a folder, "Move here"),
+delete asks for a confirmation that names the source. Afterwards the folder is read again and the viewer stays on the
+file (rename) or goes on to the next image (move, delete; it closes when there is none).
+
+- **Files only.** Folders cannot be renamed, moved or deleted: a folder delete means different things per protocol (SMB
+  and FTP refuse one that is not empty, WebDAV deletes everything below it), and bookmarks, favourites and playlists
+  point into folders.
+- **Nothing is overwritten.** The sources' own rename replaces an existing file (the favourites sync relies on it), so
+  the target folder is listed first and a name that is already there is refused, ignoring case (SMB shares, SD cards
+  and SAF folders treat `a.mp3` and `A.mp3` as one file). Names with `/ \ : * ? " < > |`, control characters, `.` / `..`
+  or more than 255 bytes are refused on every source, since some sources cannot hold them.
+- **The file that is playing** is refused (play another one first).
+- **Local folders** (the built-in "Internal Storage" and "SD Card" sources, read through the file system): Android 10
+  and later lets an app rename, move or delete only files it created itself, and on Android 8–9 the app does not ask
+  for the storage write permission; for the other files the app shows a message pointing to SAF. Adding the same folder as a SAF folder (the + on the source list) works, as do SMB, FTP and
+  WebDAV with an account that may write. Asking Android for consent per file (`MediaStore.createWriteRequest` /
+  `createDeleteRequest`) is not done.
+- **SAF**: rename through `DocumentsContract.renameDocument`, move through `moveDocument`. A provider that cannot move
+  documents (some cloud providers) refuses the move with a message; nothing is copied instead.
+- **References keep the old path.** Playlists, favourites, the playing queue's saved state, the track-length and waveform
+  caches and a `fav.json` on another device are not rewritten: a renamed or moved song shows as missing there until it
+  is added again. The image and viewer caches are keyed by path and size, so a moved file is simply read again once.
+- Delete is final on every source (no recycle bin; a NAS may keep its own recycle bin for SMB).
+- Checked with JVM tests over an in-memory source and on an API 34 emulator (see VERIFICATION.md 5.30); the protocol
+  servers in Docker (Samba, FTP, WebDAV) were used only through the tests listed there. Not checked on a phone or a
+  real NAS.
 
 ## Playback that stops by itself (investigated after 1.2.0, nothing changed yet)
 
@@ -200,7 +241,7 @@ foreground notification, or at least hold a partial wake lock and Wi-Fi lock whi
   (not measured). The older entry "Thumbnail files were keyed by the exact requested pixels…" below describes the cache of
   1.0 and is superseded by this section.
 
-## SMB search (after 1.0.0)
+## SMB search (1.1.0)
 
 - "Search network" in the SMB editor looks only when the button is pressed (about 12 s at most). It finds servers that
   announce themselves through mDNS (NAS boxes, Macs, Samba with Avahi) and hosts that answer on TCP 445 in the /24 around
@@ -220,17 +261,19 @@ foreground notification, or at least hold a partial wake lock and Wi-Fi lock whi
   Synology, QNAP or Windows). A newer Android may ask for a local-network
   permission before apps reach LAN devices; it is not needed on API 34, the only level run for this change.
 
-## Bookmarks (after 1.0.0)
+## Bookmarks (1.1.0; order and names in 1.4.0)
 
 - Bookmarks are folders (a source root or a place inside it) kept on this device only: they are not part of `fav.json` and
   are not synced, because which places are handy depends on the device. They are not removed when the source is removed;
   they are hidden while their source does not exist.
 - A bookmark is a path, not a check: a folder that was renamed or deleted on the server opens as an unreadable folder (the
   folder error with "Retry"); remove the bookmark from its long-press menu on the source list.
-- There is no reordering or renaming: bookmarks are listed in the order they were added, under the name the folder had
-  (the source's name for a source root).
+- A new bookmark is added at the end of the list, under the name the folder had (the source's name for a source root).
+  Its long-press menu renames it (the name is only what the list shows; the folder is not touched) and moves it up or
+  down one place. Bookmarks of a removed source are hidden and skipped when moving: a bookmark moves past the next one
+  that is shown. There is no drag to reorder.
 
-## Favourites shared between devices (after 1.0.0)
+## Favourites shared between devices (1.1.0)
 
 - A source id is a random UUID per installation, so favourites synced through a NAS `fav.json` were not shown on a second
   device (the entries arrived but pointed at the other device's source). The file now stores an entry on the source it

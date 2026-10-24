@@ -1,8 +1,20 @@
 Folder Player Fork {VERSION} — an unofficial personal fork of
 [Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000. It is not affiliated with the original
-project. This release follows 1.3.1.
+project. This release follows 1.3.2.
 
-## What's new in 1.3.2
+## What's new in 1.4.0
+
+- **Rename, move and delete files**: the long-press menu of a file and the ⋮ menu of the file viewer can rename it, move it
+  to another folder of the same source (picked in a folder list) or delete it, each after a confirmation. Handy for
+  tidying up scans, logs and covers beside the songs, or a misnamed track. Works on SMB, FTP, WebDAV and SAF folders. A
+  name that is already taken in the target folder is refused, so nothing is overwritten; folders and the song that is
+  playing are left alone. In the phone's own storage ("Internal Storage", "SD Card") Android lets the app change only
+  files it created itself: there the app says so and suggests adding the folder as a SAF folder (+ on the source list).
+- **Bookmarks in your order and under your names**: the long-press menu of a bookmark renames it (only the name in the
+  list changes) and moves it up or down.
+- While the file viewer is open, messages of the browser show as a short pop-up instead of behind the viewer.
+
+## New in 1.3.2
 
 - **Waveform, faster again and drawn at once**: the waveform is now measured with the bundled FFmpeg decoder for every
   format (as Namida does), instead of Android's media codecs, which some phones make slow (a 30-minute MP3 took about
@@ -64,7 +76,7 @@ editor, favourites shared through one `fav.json` on a NAS, and bookmarks for fol
 - **Large screens and foldables**: on a tablet, an unfolded foldable or a wide window the browser and the player sit
   side by side, and Settings has two panes. The layout follows the window, so folding, rotating or resizing keeps
   playback and your place in the browser.
-- **Search, filter, favourites and playlists**: search below the current folder, a name filter for the folder on screen, favourites (optional `fav.json` that several devices can share), bookmarks for folders, playlists with drag reordering, track lengths in the list.
+- **Search, filter, favourites and playlists**: search below the current folder, a name filter for the folder on screen, favourites (optional `fav.json` that several devices can share), bookmarks for folders (renamed and ordered as you like), playlists with drag reordering, track lengths in the list.
 - **Cover artwork**: folder image first, then the embedded picture, in the player, notification and lock screen for
   every source; grid or list with thumbnails (thumbnails of network sources are opt-in and Wi-Fi only).
 - **Sorting**: by name, modified time, created time or size, remembered per folder. "Created" is the time a local file
@@ -75,6 +87,8 @@ editor, favourites shared through one `fav.json` on a NAS, and bookmarks for fol
 - **Formats**: ALAC, WMA, APE, DSF and DFF through FFmpeg 7.1.5, in addition to what Android plays (DST-compressed DSD
   is not supported).
 - **Waveform on the seek bar**: loudness over the whole track, measured once in the background and kept.
+- **File viewer and simple file management**: text, images and PDFs beside the songs open in the app; files can be
+  renamed, moved within their source and deleted.
 - **More**: sleep timer, next-folder playback, optional saving of network tracks played to the end, retries of short
   network outages, custom fonts.
 - **Languages**: English, 日本語, 简体中文, 繁體中文, Français, Italiano. On Android 13+ the language can also be
@@ -93,6 +107,9 @@ Details: [docs/fork/FEATURES.md]({REPO}/blob/{VERSION_TAG}/docs/fork/FEATURES.md
   then made again). The network account is an estimate, not the bytes on the wire. The cache and the account were tested with
   a Samba server in Docker, not with a real NAS, and the saving on a large real library was not measured.
 - Settings shows no mini player.
+- Rename, move and delete work on files, not folders, and a move stays within the source. In the phone's own storage most
+  files cannot be changed by the app; use a SAF folder there. Playlists and favourites keep the old path of a
+  renamed or moved song.
 - The waveform of a long file is a rough trend from samples (from a NAS about one point per 1 % of the file for an MP3),
   and it was timed on an emulator with a simulated NAS, not on a real NAS. Files longer than the limit in Settings, and
   network files on mobile data, keep the plain seek bar.
