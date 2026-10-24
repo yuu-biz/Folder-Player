@@ -3,8 +3,6 @@ package com.wing.folderplayer.ui.player
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,15 +15,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.PointerInputChange
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -38,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.wing.folderplayer.R
 import com.wing.folderplayer.data.playlist.PlaylistItem
+import com.wing.folderplayer.ui.reorderGesture
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -241,29 +234,5 @@ fun PlaylistTrackList(uiState: PlayerUiState, viewModel: PlayerViewModel, onPlay
                 )
             }
         }
-    }
-}
-
-/**
- * Vertical drag for reordering. Movement is measured in root coordinates: the dragged row is moved to other slots while
- * the finger is down, so positions local to it would jump at every move.
- */
-private fun Modifier.reorderGesture(longPress: Boolean, onStart: () -> Unit, onDrag: (Float) -> Unit, onEnd: () -> Unit): Modifier = composed {
-    var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    var lastY by remember { mutableFloatStateOf(0f) }
-    val start by rememberUpdatedState(onStart)
-    val drag by rememberUpdatedState(onDrag)
-    val end by rememberUpdatedState(onEnd)
-    fun rootY(local: Offset): Float = coordinates?.takeIf { it.isAttached }?.localToRoot(local)?.y ?: local.y
-    onGloballyPositioned { coordinates = it }.pointerInput(longPress) {
-        val onDragStart: (Offset) -> Unit = { o -> lastY = rootY(o); start() }
-        val onDragMove: (PointerInputChange, Offset) -> Unit = { change, _ ->
-            change.consume()
-            val y = rootY(change.position)
-            drag(y - lastY)
-            lastY = y
-        }
-        if (longPress) detectDragGesturesAfterLongPress(onDragStart, { end() }, { end() }, onDragMove)
-        else detectDragGestures(onDragStart, { end() }, { end() }, onDragMove)
     }
 }

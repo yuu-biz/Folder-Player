@@ -49,6 +49,9 @@ import com.wing.folderplayer.data.source.SourceRegistry
 import com.wing.folderplayer.data.source.SourceType
 import com.wing.folderplayer.playback.ExportSettings
 import com.wing.folderplayer.playback.NativeDecoder
+import com.wing.folderplayer.playback.PlaybackEvent
+import com.wing.folderplayer.playback.PlaybackLog
+import com.wing.folderplayer.playback.PlaybackLogFormat
 import com.wing.folderplayer.data.waveform.WaveformSettings
 import com.wing.folderplayer.ui.browser.BrowserViewModel
 import com.wing.folderplayer.ui.player.PlayerViewModel
@@ -83,7 +86,7 @@ internal fun SettingsCategoryPage(
     onNotchModeChange: (String) -> Unit,
 ) {
     when (category) {
-        SettingsCategory.PLAYBACK -> PlaybackPage()
+        SettingsCategory.PLAYBACK -> PlaybackPage(openSub)
         SettingsCategory.DISPLAY -> DisplayPage(openSub, playerViewModel, onOrientationChange, onNotchModeChange)
         SettingsCategory.LIBRARY -> LibraryPage(openSub, browserViewModel)
         SettingsCategory.LYRICS -> LyricsPage(openSub, playerViewModel)
@@ -101,13 +104,14 @@ internal fun SettingsSubPage(sub: SettingsSub, snackbar: SnackbarHostState, brow
         SettingsSub.THUMBNAILS -> ThumbnailsPage()
         SettingsSub.IMAGE_CACHE -> ImageCachePage(snackbar, browserViewModel)
         SettingsSub.AI -> AiPage()
+        SettingsSub.PLAYBACK_LOG -> PlaybackLogPage(snackbar)
     }
 }
 
 // ---------------------------------------------------------------- Playback
 
 @Composable
-private fun PlaybackPage() {
+private fun PlaybackPage(openSub: (SettingsSub) -> Unit) {
     val context = LocalContext.current
     val castSettings = remember { CastSettings(context) }
     val exportSettings = remember { ExportSettings(context) }
@@ -144,6 +148,59 @@ private fun PlaybackPage() {
             else stringResource(R.string.settings_native_decoder_missing),
             modifier = Modifier.testTag("native_decoder_status"),
         )
+        SettingsDivider()
+        SettingsNavRow(stringResource(R.string.settings_playback_log), null, "open_playback_log", { openSub(SettingsSub.PLAYBACK_LOG) })
+    }
+}
+
+/** What started, paused or stopped playback ([PlaybackLog]), newest first, to share when playback stopped by itself. */
+@Composable
+private fun PlaybackLogPage(snackbar: SnackbarHostState) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var rev by remember { mutableIntStateOf(0) }
+    val events by produceState<List<PlaybackEvent>?>(null, rev) {
+        value = withContext(Dispatchers.IO) {
+            // The service may not have run since the app started; the log is there all the same.
+            PlaybackLog.init(context)
+            PlaybackLog.read().asReversed()
+        }
+    }
+    SettingsPage {
+        SettingsHelp(stringResource(R.string.settings_playback_log_help))
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        val text = withContext(Dispatchers.IO) { PlaybackLog.text() }
+                        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+                        context.startActivity(Intent.createChooser(send, null))
+                    }
+                },
+                modifier = Modifier.testTag("playback_log_share"),
+            ) { Text(stringResource(R.string.playback_log_share)) }
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        withContext(Dispatchers.IO) { PlaybackLog.clear() }
+                        rev++
+                        snackbar.showSnackbar(context.getString(R.string.playback_log_cleared))
+                    }
+                },
+                modifier = Modifier.testTag("playback_log_clear"),
+            ) { Text(stringResource(R.string.playback_log_clear)) }
+        }
+        val list = events
+        when {
+            list == null -> Unit
+            list.isEmpty() -> SettingsInfo(
+                stringResource(R.string.playback_log_empty), Modifier.testTag("playback_log_empty"), MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            else -> Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("playback_log_list")) {
+                val style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                list.forEach { Text(PlaybackLogFormat.encode(it), style = style, modifier = Modifier.padding(vertical = 2.dp).testTag("playback_log_row")) }
+            }
+        }
     }
 }
 

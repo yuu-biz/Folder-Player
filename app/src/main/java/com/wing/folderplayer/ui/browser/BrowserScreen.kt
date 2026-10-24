@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -31,10 +32,13 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -46,6 +50,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.wing.folderplayer.R
@@ -60,6 +65,9 @@ import com.wing.folderplayer.data.source.SourceRef
 import com.wing.folderplayer.data.source.SourceType
 import com.wing.folderplayer.data.viewer.ViewerKind
 import com.wing.folderplayer.data.viewer.ViewerTypes
+import com.wing.folderplayer.ui.reorderGesture
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -389,6 +397,7 @@ fun BrowserScreen(
                                 onBookmarkRemove = { viewModel.removeBookmark(it) },
                                 onBookmarkRename = { b, name -> viewModel.renameBookmark(b, name) },
                                 onBookmarkMove = { b, delta -> viewModel.moveBookmark(b, delta) },
+                                onBookmarkReorder = { viewModel.reorderBookmarks(it) },
                                 onFavoritesClick = { viewModel.showFavorites() },
                                 onSourceClick = { viewModel.selectSource(it) },
                                 onEditSource = { sourceToEdit = it },
@@ -626,6 +635,8 @@ fun SourceList(
     onBookmarkRename: (Bookmark, String) -> Unit,
     /** -1 up, +1 down. */
     onBookmarkMove: (Bookmark, Int) -> Unit,
+    /** Ids of [bookmarks] in the order a drag left them. */
+    onBookmarkReorder: (List<String>) -> Unit,
     onSourceClick: (SourceConfig) -> Unit,
     onEditSource: (SourceConfig) -> Unit,
     onDeleteSource: (SourceConfig) -> Unit,
@@ -646,7 +657,87 @@ fun SourceList(
             onDismiss = { renaming = null },
         )
     }
-    LazyColumn(modifier = Modifier.testTag("source_list")) {
+
+    val listState = rememberLazyListState()
+    val haptics = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    fun rowKey(id: String) = "bookmark:$id"
+    fun isBookmarkKey(key: Any) = (key as? String)?.startsWith("bookmark:") == true
+
+    // The rows follow the shown bookmarks except while one is dragged; the new order is stored when the finger is lifted.
+    val rows = remember { mutableStateListOf<Bookmark>().apply { addAll(bookmarks) } }
+    var draggingId by remember { mutableStateOf<String?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(bookmarks, draggingId == null) {
+        if (draggingId != null || rows.toList() == bookmarks) return@LaunchedEffect
+        rows.clear()
+        rows.addAll(bookmarks)
+    }
+
+    fun startDrag(id: String) {
+        if (rows.none { it.id == id }) return
+        draggingId = id
+        dragOffset = 0f
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+    }
+
+    fun dragBy(dy: Float) {
+        val id = draggingId ?: return
+        dragOffset += dy
+        val visible = listState.layoutInfo.visibleItemsInfo
+        val current = visible.firstOrNull { it.key == rowKey(id) } ?: return
+        val center = current.offset + dragOffset + current.size / 2f
+        // Only past other bookmarks: the favourites entry, the header and the sources are not slots for a bookmark.
+        val target = visible.firstOrNull { it.key != current.key && isBookmarkKey(it.key) && center >= it.offset && center <= it.offset + it.size } ?: return
+        val from = rows.indexOfFirst { it.id == id }
+        val to = rows.indexOfFirst { rowKey(it.id) == target.key }
+        if (from < 0 || to < 0) return
+        // Moving the first visible row would make the list scroll along with it; keep the viewport where it is.
+        val firstIndex = listState.firstVisibleItemIndex
+        val firstOffset = listState.firstVisibleItemScrollOffset
+        rows.add(to, rows.removeAt(from))
+        // The dragged row is now laid out in the target's place: keep it under the finger.
+        dragOffset -= (target.offset - current.offset)
+        if (current.index == firstIndex || target.index == firstIndex) {
+            scope.launch { listState.scrollToItem(firstIndex, firstOffset) }
+        }
+    }
+
+    fun endDrag() {
+        if (draggingId == null) return
+        draggingId = null
+        dragOffset = 0f
+        val order = rows.map { it.id }
+        if (order != bookmarks.map { it.id }) onBookmarkReorder(order)
+    }
+
+    // Scroll while a row is held near the top or bottom edge.
+    LaunchedEffect(draggingId) {
+        val id = draggingId ?: return@LaunchedEffect
+        while (draggingId == id) {
+            val info = listState.layoutInfo
+            val item = info.visibleItemsInfo.firstOrNull { it.key == rowKey(id) }
+            if (item != null) {
+                val top = item.offset + dragOffset
+                val bottom = top + item.size
+                val edge = item.size.toFloat()
+                val step = when {
+                    bottom > info.viewportEndOffset - edge / 2 -> edge / 6
+                    top < info.viewportStartOffset + edge / 2 -> -edge / 6
+                    else -> 0f
+                }
+                if (step != 0f) {
+                    val consumed = listState.scrollBy(step)
+                    dragOffset += consumed
+                    dragBy(0f)
+                }
+            }
+            delay(16)
+        }
+    }
+
+    LazyColumn(state = listState, modifier = Modifier.testTag("source_list")) {
         item {
             ListItem(
                 headlineContent = { Text(stringResource(R.string.browser_favorites)) },
@@ -656,7 +747,7 @@ fun SourceList(
             )
             Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
         }
-        if (bookmarks.isNotEmpty()) {
+        if (rows.isNotEmpty()) {
             item(key = "bookmarks_header") {
                 Text(
                     stringResource(R.string.browser_bookmarks),
@@ -665,46 +756,67 @@ fun SourceList(
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp).semantics { heading() }.testTag("bookmarks_header")
                 )
             }
-            itemsIndexed(bookmarks, key = { _, it -> "bookmark:" + it.id }) { index, bookmark ->
+            itemsIndexed(rows, key = { _, it -> rowKey(it.id) }) { index, bookmark ->
                 var showMenu by remember { mutableStateOf(false) }
                 val sourceName = sources.firstOrNull { it.id == bookmark.sourceId }?.name.orEmpty()
-                Box {
-                    ListItem(
-                        headlineContent = { Text(bookmark.name.ifEmpty { SourcePath.name(bookmark.path) }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        supportingContent = { Text(sourceName + " · " + bookmark.path, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        leadingContent = { Icon(Icons.Default.Bookmark, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                        modifier = Modifier
-                            .combinedClickable(onClick = { onBookmarkClick(bookmark) }, onLongClick = { showMenu = true })
-                            .testTag("bookmark_${bookmark.name}")
-                    )
-                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.common_rename)) },
-                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
-                            onClick = { renaming = bookmark; showMenu = false },
-                            modifier = Modifier.testTag("bookmark_rename")
+                val dragging = draggingId == bookmark.id
+                Column(
+                    (if (dragging) Modifier.zIndex(1f) else Modifier.animateItemPlacement())
+                        .graphicsLayer {
+                            translationY = if (dragging) dragOffset else 0f
+                            shadowElevation = if (dragging) 8.dp.toPx() else 0f
+                        }
+                ) {
+                    Box {
+                        ListItem(
+                            headlineContent = { Text(bookmark.name.ifEmpty { SourcePath.name(bookmark.path) }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            supportingContent = { Text(sourceName + " · " + bookmark.path, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            leadingContent = { Icon(Icons.Default.Bookmark, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                            // Handle: drag at once; a long press on the row stays the menu.
+                            trailingContent = {
+                                Box(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .reorderGesture(longPress = false, onStart = { startDrag(bookmark.id) }, onDrag = ::dragBy, onEnd = ::endDrag)
+                                        .testTag("bookmark_handle_${bookmark.name}"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.DragHandle, contentDescription = stringResource(R.string.bookmark_drag))
+                                }
+                            },
+                            modifier = Modifier
+                                .combinedClickable(onClick = { onBookmarkClick(bookmark) }, onLongClick = { showMenu = true })
+                                .testTag("bookmark_${bookmark.name}")
                         )
-                        if (index > 0) DropdownMenuItem(
-                            text = { Text(stringResource(R.string.common_move_up)) },
-                            leadingIcon = { Icon(Icons.Default.ArrowUpward, contentDescription = null) },
-                            onClick = { onBookmarkMove(bookmark, -1); showMenu = false },
-                            modifier = Modifier.testTag("bookmark_move_up")
-                        )
-                        if (index < bookmarks.lastIndex) DropdownMenuItem(
-                            text = { Text(stringResource(R.string.common_move_down)) },
-                            leadingIcon = { Icon(Icons.Default.ArrowDownward, contentDescription = null) },
-                            onClick = { onBookmarkMove(bookmark, +1); showMenu = false },
-                            modifier = Modifier.testTag("bookmark_move_down")
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.browser_remove_bookmark)) },
-                            leadingIcon = { Icon(Icons.Default.BookmarkBorder, contentDescription = null) },
-                            onClick = { onBookmarkRemove(bookmark); showMenu = false },
-                            modifier = Modifier.testTag("bookmark_remove")
-                        )
+                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.common_rename)) },
+                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                                onClick = { renaming = bookmark; showMenu = false },
+                                modifier = Modifier.testTag("bookmark_rename")
+                            )
+                            if (index > 0) DropdownMenuItem(
+                                text = { Text(stringResource(R.string.common_move_up)) },
+                                leadingIcon = { Icon(Icons.Default.ArrowUpward, contentDescription = null) },
+                                onClick = { onBookmarkMove(bookmark, -1); showMenu = false },
+                                modifier = Modifier.testTag("bookmark_move_up")
+                            )
+                            if (index < rows.lastIndex) DropdownMenuItem(
+                                text = { Text(stringResource(R.string.common_move_down)) },
+                                leadingIcon = { Icon(Icons.Default.ArrowDownward, contentDescription = null) },
+                                onClick = { onBookmarkMove(bookmark, +1); showMenu = false },
+                                modifier = Modifier.testTag("bookmark_move_down")
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.browser_remove_bookmark)) },
+                                leadingIcon = { Icon(Icons.Default.BookmarkBorder, contentDescription = null) },
+                                onClick = { onBookmarkRemove(bookmark); showMenu = false },
+                                modifier = Modifier.testTag("bookmark_remove")
+                            )
+                        }
                     }
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                 }
-                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             }
         }
         items(sources, key = { it.id }) { source ->

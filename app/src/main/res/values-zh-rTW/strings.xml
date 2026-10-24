@@ -351,4 +351,11 @@
     <string name="file_op_playing">此檔案正在播放。請先播放其他檔案。</string>
     <string name="file_op_local_refused">在此資料夾中，Android 只允許本應用程式修改它自己建立的檔案。要在這裡重新命名、移動或刪除檔案，請從來源清單的 + 用「本機資料夾（SAF）…」新增該資料夾。</string>
     <string name="file_op_failed">無法變更檔案：%1$s</string>
+    <string name="settings_playback_log">播放記錄</string>
+    <string name="settings_playback_log_help">在本機記錄播放的開始、暫停、停止及其原因（最近 500 筆）。如果播放自行停止，請在停止後立即分享此記錄。</string>
+    <string name="playback_log_empty">尚無記錄。</string>
+    <string name="playback_log_share">分享</string>
+    <string name="playback_log_clear">清除</string>
+    <string name="playback_log_cleared">已清除播放記錄</string>
+    <string name="bookmark_drag">拖曳以排序</string>
 </resources>

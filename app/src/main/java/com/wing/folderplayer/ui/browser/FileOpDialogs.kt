@@ -40,6 +40,7 @@ import com.wing.folderplayer.data.source.MusicFile
 import com.wing.folderplayer.data.source.SourcePath
 import com.wing.folderplayer.data.source.SourceRef
 import com.wing.folderplayer.ui.player.PlaybackErrorText
+import kotlinx.coroutines.CancellationException
 
 /** A change to one file that the user asked for from the long-press sheet or the viewer; its dialog confirms it. */
 sealed interface FileOp {
@@ -143,7 +144,13 @@ private fun MoveFileDialog(file: MusicFile, busy: Boolean, sourceName: String, a
     var folder by remember(file) { mutableStateOf(home) }
     val folders by produceState<Result<List<MusicFile>>?>(null, folder) {
         value = null
-        value = runCatching { actions.listFolders(SourceRef(file.sourceId, folder)) }
+        value = try {
+            Result.success(actions.listFolders(SourceRef(file.sourceId, folder)))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
     AlertDialog(
         onDismissRequest = actions.onDismiss,

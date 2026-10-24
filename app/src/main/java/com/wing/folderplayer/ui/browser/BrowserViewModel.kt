@@ -693,9 +693,13 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     /** Up ([delta] < 0) or down past the next bookmark the source list shows (those of removed sources are hidden). */
     fun moveBookmark(bookmark: Bookmark, delta: Int) {
-        val sources = _uiState.value.availableSources
-        bookmarksRepository.move(bookmark.id, delta) { b -> sources.any { it.id == b.sourceId } }
+        val state = _uiState.value
+        val shown = state.bookmarks.filter { b -> state.availableSources.any { it.id == b.sourceId } }.map { it.id }
+        bookmarksRepository.reorder(BookmarksRepository.swapped(shown, bookmark.id, delta))
     }
+
+    /** The order of the bookmarks the source list shows, after a drag; hidden ones keep their place. */
+    fun reorderBookmarks(shownIds: List<String>) = bookmarksRepository.reorder(shownIds)
 
     /** The favourites list (entered from the source list, or from a folder when called from elsewhere). */
     fun showFavorites() {

@@ -41,29 +41,35 @@ data class RetryStatus(val attempt: Int = 0, val pendingDelayMs: Long = 0, val g
  * When a network source fails with a transient I/O error, re-prepare at the same position with growing delays
  * for up to 5 minutes. Authentication / not-found / decoding errors are not retried. A pending retry is cancelled
  * when the user pauses/stops or the track changes.
+ *
+ * While a retry waits the player is IDLE and holds no wake or Wi-Fi lock of its own, so with the screen off the delayed
+ * retry might only run when the device wakes: [keepAwake] is true exactly while a retry is pending.
  */
 class NetworkRetryController(
     private val player: Player,
     private val policy: RetryPolicy = RetryPolicy(),
     private val clock: () -> Long = System::currentTimeMillis,
+    private val keepAwake: (Boolean) -> Unit = {},
+    private val isNetworkItem: (MediaItem?) -> Boolean = ::isNetworkSource,
 ) : Player.Listener {
     private val handler = Handler(Looper.getMainLooper())
     private var attempt = 0
     private var firstFailureAt = 0L
     private var pending: Runnable? = null
+        set(value) {
+            val changed = (field == null) != (value == null)
+            field = value
+            if (changed) keepAwake(value != null)
+        }
     private var resumePosition = 0L
     private var resumeIndex = 0
 
     fun attach() = player.addListener(this)
-    fun detach() { cancel(); player.removeListener(this) }
-
-    private fun isNetworkItem(item: MediaItem?): Boolean {
-        val ref = SourceUris.parse(item?.localConfiguration?.uri?.toString() ?: item?.mediaId) ?: return false
-        return SourceRegistry.get(ref.sourceId)?.isNetwork == true
-    }
+    fun detach() { cancel("detached"); player.removeListener(this) }
 
     override fun onPlayerError(error: PlaybackException) {
         if (!policy.isRetryable(error.errorCode) || !isNetworkItem(player.currentMediaItem)) {
+            if (attempt > 0) PlaybackLog.record(PlaybackEventKind.RETRY_GAVE_UP, "after $attempt retries: ${error.errorCodeName} is not retried")
             _status.value = RetryStatus(attempt, 0, gaveUp = attempt > 0, lastErrorCode = error.errorCode)
             reset(keepStatus = true)
             return
@@ -73,6 +79,7 @@ class NetworkRetryController(
         attempt++
         val delay = policy.nextDelay(attempt, firstFailureAt, now)
         if (delay == null) {
+            PlaybackLog.record(PlaybackEventKind.RETRY_GAVE_UP, "after ${attempt - 1} retries in ${(now - firstFailureAt) / 1000}s: ${error.errorCodeName}")
             _status.value = RetryStatus(attempt, 0, gaveUp = true, lastErrorCode = error.errorCode)
             reset(keepStatus = true)
             return
@@ -81,11 +88,14 @@ class NetworkRetryController(
         resumeIndex = player.currentMediaItemIndex
         _status.value = RetryStatus(attempt, delay, false, error.errorCode)
         android.util.Log.w(TAG, "network error ${error.errorCodeName}; retry #$attempt in ${delay}ms")
+        PlaybackLog.record(PlaybackEventKind.RETRY, "#$attempt in ${delay}ms after ${error.errorCodeName}")
+        pending?.let { handler.removeCallbacks(it) }
         val r = Runnable {
-            pending = null
             player.seekTo(resumeIndex, resumePosition)
             player.prepare()
             player.play()
+            // Released only now: from here on the player holds its own locks (WAKE_MODE_NETWORK).
+            pending = null
         }
         pending = r
         handler.postDelayed(r, delay)
@@ -94,25 +104,29 @@ class NetworkRetryController(
     override fun onPlaybackStateChanged(state: Int) {
         if (state == Player.STATE_READY && attempt > 0 && pending == null) {
             android.util.Log.i(TAG, "playback recovered after $attempt retries")
+            PlaybackLog.record(PlaybackEventKind.RETRY_RECOVERED, "after $attempt retries")
             reset()
         }
     }
 
     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
         if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST) {
-            cancel()
+            cancel("paused")
         }
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
         if (pending != null || attempt > 0) {
             // Our own seekTo(resumeIndex) does not change the item; any other transition is a user/track change.
-            if (player.currentMediaItemIndex != resumeIndex || reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) cancel()
+            if (player.currentMediaItemIndex != resumeIndex || reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) cancel("track changed")
         }
     }
 
-    fun cancel() {
-        pending?.let { handler.removeCallbacks(it) }
+    private fun cancel(why: String) {
+        pending?.let {
+            handler.removeCallbacks(it)
+            PlaybackLog.record(PlaybackEventKind.RETRY_CANCELLED, "$why, retry #$attempt was pending")
+        }
         pending = null
         if (attempt > 0) _status.value = _status.value.copy(pendingDelayMs = 0)
         reset(keepStatus = true)
@@ -129,4 +143,9 @@ class NetworkRetryController(
         private val _status = MutableStateFlow(RetryStatus())
         val status: StateFlow<RetryStatus> = _status.asStateFlow()
     }
+}
+
+private fun isNetworkSource(item: MediaItem?): Boolean {
+    val ref = SourceUris.parse(item?.localConfiguration?.uri?.toString() ?: item?.mediaId) ?: return false
+    return SourceRegistry.get(ref.sourceId)?.isNetwork == true
 }

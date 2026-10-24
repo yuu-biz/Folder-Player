@@ -135,20 +135,28 @@ class BookmarksRepository(private val file: File, private val clock: () -> Long 
     }
 
     /**
-     * Swaps the bookmark with the next one up ([delta] < 0) or down among those [shown] (the list hides bookmarks whose
-     * source was removed: moving past one of them would change nothing on screen). Nothing happens at either end.
+     * The bookmarks of [shownIds] take that order, in the slots they hold now. The others keep their slots: the list
+     * hides bookmarks whose source was removed, and they come back where they were if the source returns.
      */
-    fun move(id: String, delta: Int, shown: (Bookmark) -> Boolean = { true }) {
-        if (delta == 0) return
+    fun reorder(shownIds: List<String>) {
         synchronized(lock) {
             val list = _items.value
-            val from = list.indexOfFirst { it.id == id }
-            if (from < 0) return
-            val step = if (delta < 0) -1 else 1
-            var to = from + step
-            while (to in list.indices && !shown(list[to])) to += step
-            if (to !in list.indices) return
-            store(list.toMutableList().also { val t = it[from]; it[from] = it[to]; it[to] = t })
+            val byId = list.associateBy { it.id }
+            val ordered = shownIds.distinct().mapNotNull { byId[it] }
+            val moving = ordered.mapTo(HashSet()) { it.id }
+            val inOrder = ordered.iterator()
+            val result = list.map { if (it.id in moving) inOrder.next() else it }
+            if (result != list) store(result)
+        }
+    }
+
+    companion object {
+        /** The ids of [shown] with [id] swapped with its neighbour up ([delta] < 0) or down; unchanged at either end. */
+        fun swapped(shown: List<String>, id: String, delta: Int): List<String> {
+            val from = shown.indexOf(id)
+            val to = from + delta.coerceIn(-1, 1)
+            if (from < 0 || to == from || to !in shown.indices) return shown
+            return shown.toMutableList().also { it[from] = shown[to]; it[to] = id }
         }
     }
 }

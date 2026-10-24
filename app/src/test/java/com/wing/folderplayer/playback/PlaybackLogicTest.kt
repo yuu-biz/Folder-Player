@@ -1,6 +1,9 @@
 package com.wing.folderplayer.playback
 
+import androidx.annotation.OptIn
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import com.wing.folderplayer.testutil.InMemoryFileSystem
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
@@ -46,6 +49,57 @@ class PlaybackLogicTest {
         }
         assertTrue("gave up after ${now}ms", now <= 5 * 60 * 1000L)
         assertNull(p.nextDelay(attempt + 1, start, 5 * 60 * 1000L))
+    }
+
+    // ---- device kept awake while a retry waits ----
+
+    /** A player that answers 0 / false / null to everything: the controller only reads its position and index. */
+    private fun idlePlayer(): Player = java.lang.reflect.Proxy.newProxyInstance(Player::class.java.classLoader, arrayOf(Player::class.java)) { _, method, _ ->
+        when (method.returnType) {
+            java.lang.Long.TYPE -> 0L
+            Integer.TYPE -> 0
+            java.lang.Boolean.TYPE -> false
+            java.lang.Float.TYPE -> 0f
+            else -> null
+        }
+    } as Player
+
+    private fun retryWith(awake: MutableList<Boolean>, network: Boolean = true) =
+        NetworkRetryController(idlePlayer(), keepAwake = { awake += it }, isNetworkItem = { network })
+
+    @OptIn(UnstableApi::class)
+    private fun playbackError(code: Int) = PlaybackException("test", null, code)
+
+    @Test fun awakeWhileRetryPendingUntilUserPauses() {
+        val awake = mutableListOf<Boolean>()
+        val retry = retryWith(awake)
+        retry.onPlayerError(playbackError(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED))
+        assertEquals(listOf(true), awake)
+        retry.onPlayerError(playbackError(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT))
+        assertEquals("still one retry pending", listOf(true), awake)
+        retry.onPlayWhenReadyChanged(false, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
+        assertEquals(listOf(true, false), awake)
+        retry.detach()
+        assertEquals(listOf(true, false), awake)
+    }
+
+    @Test fun awakeEndsWhenTrackChangesOrControllerDetaches() {
+        val awake = mutableListOf<Boolean>()
+        val retry = retryWith(awake)
+        retry.onPlayerError(playbackError(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED))
+        retry.onMediaItemTransition(null, Player.MEDIA_ITEM_TRANSITION_REASON_SEEK)
+        assertEquals(listOf(true, false), awake)
+
+        val detached = mutableListOf<Boolean>()
+        retryWith(detached).apply { onPlayerError(playbackError(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT)) }.detach()
+        assertEquals(listOf(true, false), detached)
+    }
+
+    @Test fun notAwakeForErrorsThatAreNotRetried() {
+        val awake = mutableListOf<Boolean>()
+        retryWith(awake).onPlayerError(playbackError(PlaybackException.ERROR_CODE_DECODING_FAILED))
+        retryWith(awake, network = false).onPlayerError(playbackError(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED))
+        assertEquals(emptyList<Boolean>(), awake)
     }
 
     // ---- export never publishes partial data ----

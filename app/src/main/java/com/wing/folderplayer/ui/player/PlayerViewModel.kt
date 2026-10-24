@@ -155,7 +155,8 @@ class PlayerViewModel : ViewModel() {
 
     /**
      * Waveform of the current track for the seek bar (measured in the background, see [WaveformRepository]); null while
-     * there is none. Measured only while a seek bar shows it; a setting change measures (or hides) it again.
+     * there is none. A track starts being measured when a seek bar shows it, and the measurement then runs to its end
+     * even when the player closes (reopening it joins the measurement); a setting change measures (or hides) it again.
      */
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val waveform: StateFlow<TrackWaveform?> = combine(currentMediaId, WaveformSettings.changes) { id, _ -> id }

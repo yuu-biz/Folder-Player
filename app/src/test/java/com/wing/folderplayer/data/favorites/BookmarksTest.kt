@@ -103,21 +103,46 @@ class BookmarksTest {
         assertTrue(repo().isBookmarked(album))
     }
 
-    @Test fun moveSwapsWithTheNextShownBookmarkAndStopsAtTheEnds() {
-        val r = repo()
-        val hidden = SourceRef("removed-source", "/")
-        r.add(SourceRef("s", "/a"), "a"); r.add(hidden, "hidden"); r.add(SourceRef("s", "/b"), "b"); r.add(SourceRef("s", "/c"), "c")
-        val shown = { b: Bookmark -> b.sourceId != "removed-source" }
-        fun names() = r.items.value.map { it.name }
-        fun id(name: String) = r.items.value.first { it.name == name }.id
-        r.move(id("a"), -1, shown)
-        assertEquals("first stays first", listOf("a", "hidden", "b", "c"), names())
-        r.move(id("a"), +1, shown)
-        assertEquals("passes the hidden one: a moves below b on screen", listOf("b", "hidden", "a", "c"), names())
-        r.move(id("c"), -1, shown)
-        assertEquals(listOf("b", "hidden", "c", "a"), names())
-        r.move(id("a"), +1, shown)
-        assertEquals("last stays last", listOf("b", "hidden", "c", "a"), names())
-        assertEquals("kept in the file", names(), repo().items.value.map { it.name })
+    /** a, hidden (its source was removed), b, c. */
+    private fun repoWithAHiddenOne(): BookmarksRepository = repo().apply {
+        add(SourceRef("s", "/a"), "a"); add(SourceRef("removed-source", "/"), "hidden"); add(SourceRef("s", "/b"), "b"); add(SourceRef("s", "/c"), "c")
+    }
+    private fun BookmarksRepository.names() = items.value.map { it.name }
+    private fun BookmarksRepository.id(name: String) = items.value.first { it.name == name }.id
+    private fun BookmarksRepository.shownIds() = items.value.filter { it.sourceId != "removed-source" }.map { it.id }
+
+    @Test fun reorderPutsTheShownInTheGivenOrderAndHiddenOnesKeepTheirSlot() {
+        val r = repoWithAHiddenOne()
+        r.reorder(listOf(r.id("c"), r.id("a"), r.id("b")))
+        assertEquals(listOf("c", "hidden", "a", "b"), r.names())
+        r.reorder(listOf(r.id("b"), "no-such-id", r.id("c"), r.id("b")))
+        assertEquals("unknown and repeated ids are ignored; a left out of the list keeps its slot",
+            listOf("b", "hidden", "a", "c"), r.names())
+        assertEquals("kept in the file", r.names(), repo().names())
+    }
+
+    @Test fun reorderWritesNothingWhenTheOrderDoesNotChange() {
+        val r = repoWithAHiddenOne()
+        file.delete()
+        r.reorder(r.shownIds())
+        r.reorder(emptyList())
+        r.reorder(listOf("no-such-id"))
+        assertFalse(file.exists())
+        assertEquals(listOf("a", "hidden", "b", "c"), r.names())
+    }
+
+    @Test fun upAndDownSwapWithTheNextShownBookmarkAndStopAtTheEnds() {
+        val r = repoWithAHiddenOne()
+        fun move(name: String, delta: Int) = r.reorder(BookmarksRepository.swapped(r.shownIds(), r.id(name), delta))
+        move("a", -1)
+        assertEquals("first stays first", listOf("a", "hidden", "b", "c"), r.names())
+        move("a", +1)
+        assertEquals("passes the hidden one: a moves below b on screen", listOf("b", "hidden", "a", "c"), r.names())
+        move("c", -1)
+        assertEquals(listOf("b", "hidden", "c", "a"), r.names())
+        move("a", +1)
+        assertEquals("last stays last", listOf("b", "hidden", "c", "a"), r.names())
+        assertEquals("unknown id: unchanged", listOf("x", "y"), BookmarksRepository.swapped(listOf("x", "y"), "z", 1))
+        assertEquals("kept in the file", r.names(), repo().names())
     }
 }

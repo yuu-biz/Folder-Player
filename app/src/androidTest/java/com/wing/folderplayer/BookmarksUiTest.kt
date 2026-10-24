@@ -1,8 +1,10 @@
 package com.wing.folderplayer
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.wing.folderplayer.data.source.SourceRef
@@ -131,5 +133,42 @@ class BookmarksUiTest : UiTestBase() {
         assertEquals("kept in the file", listOf("fixture", "Jazz", "Album-B"), stored.items.value.map { it.name })
         click("bookmark_Jazz")
         until(15_000, "the renamed bookmark opens its folder") { browser.uiState.value.currentFolder?.path == "$fx/Album-A" && !browser.uiState.value.isLoading }
+    }
+
+    /** The handle at the end of a bookmark row moves it among the bookmarks, never past the favourites or the sources. */
+    @Test fun c41_dragTheHandleReorders() {
+        onUi { browser.uiState.value.bookmarks.forEach { browser.removeBookmark(it) } }
+        until(5_000, "no bookmarks") { browser.uiState.value.bookmarks.isEmpty() }
+        onUi {
+            for (name in listOf("Album-A", "Album-B")) browser.bookmarksRepository.add(SourceRef(local, "$fx/$name"), name)
+            browser.bookmarksRepository.add(SourceRef(local, fx), "fixture")
+            browser.exitSource()
+        }
+        until(5_000, "source list") { shown("bookmark_handle_fixture") }
+        fun names() = browser.uiState.value.bookmarks.map { it.name }
+        fun top(tag: String) = node(tag).fetchSemanticsNode().boundsInRoot.top
+        val pitch = top("bookmark_Album-B") - top("bookmark_Album-A")
+        fun drag(name: String, rows: Float) {
+            node("bookmark_handle_$name").performTouchInput {
+                down(center)
+                val steps = 24
+                repeat(steps) { moveBy(Offset(0f, rows * pitch / steps)) }
+                up()
+            }
+            compose.waitForIdle()
+        }
+
+        drag("Album-A", 2.2f)
+        until(5_000, "first dragged below the third: ${names()}") { names() == listOf("Album-B", "fixture", "Album-A") }
+        until(5_000, "rows in the new order") { top("bookmark_Album-B") < top("bookmark_fixture") && top("bookmark_fixture") < top("bookmark_Album-A") }
+        val stored = com.wing.folderplayer.data.favorites.BookmarksRepository(java.io.File(Fx.ctx.filesDir, "favorites/bookmarks.json"))
+        assertEquals("kept in the file", listOf("Album-B", "fixture", "Album-A"), stored.items.value.map { it.name })
+
+        drag("Album-B", -1.5f)
+        assertEquals("the first stays first", listOf("Album-B", "fixture", "Album-A"), names())
+        assertTrue("the favourites entry stays above", top("entry_favorites") < top("bookmark_Album-B"))
+        drag("Album-A", 2f)
+        assertEquals("the last stays last, above the sources", listOf("Album-B", "fixture", "Album-A"), names())
+        assertTrue(top("bookmark_fixture") < top("bookmark_Album-A"))
     }
 }

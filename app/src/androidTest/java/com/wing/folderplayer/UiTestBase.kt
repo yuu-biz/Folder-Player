@@ -64,10 +64,14 @@ abstract class UiTestBase {
         tag.startsWith("cache") || tag.startsWith("netstat") -> "library" to "imagecache"
         tag == "clear_image_cache" || tag.startsWith("perm_") -> "storage" to null
         tag == "ai_lyrics_auto" || tag.startsWith("lyrics_priority_") -> "lyrics" to null
-        tag == "dlna_enabled" || tag == "auto_save" || tag == "native_decoder_status" -> "playback" to null
+        tag == "dlna_enabled" || tag == "auto_save" || tag == "native_decoder_status" || tag == "open_playback_log" -> "playback" to null
+        tag.startsWith("playback_log_") -> "playback" to "playbacklog"
         tag == "about_version" || tag == "open_licenses" -> "about" to null
         else -> null
     }
+
+    /** Pages whose row is not tagged `settings_sub_<page>`. */
+    private val subRows = mapOf("playbacklog" to "open_playback_log")
 
     /** Opens the Settings page of the control [tag] (from wherever Settings is now) and scrolls the control into view. */
     protected fun settingsReveal(tag: String) {
@@ -76,8 +80,8 @@ abstract class UiTestBase {
             var up = 0
             while (!exists("settings_cat_$category") && up++ < 4) { compose.onNodeWithTag("settings_up").performClick(); compose.waitForIdle() }
             // (Scrolled to first: with a large font a row can be below the visible part of the list.)
-            for (row in listOfNotNull("settings_cat_$category", sub?.let { "settings_sub_$it" })) {
-                if (row.startsWith("settings_sub_") && exists(tag)) break
+            for (row in listOfNotNull("settings_cat_$category", sub?.let { subRows[it] ?: "settings_sub_$it" })) {
+                if (row != "settings_cat_$category" && exists(tag)) break
                 runCatching { compose.onNodeWithTag(row, useUnmergedTree = true).performScrollTo() }
                 compose.onNodeWithTag(row, useUnmergedTree = true).performClick(); compose.waitForIdle()
             }

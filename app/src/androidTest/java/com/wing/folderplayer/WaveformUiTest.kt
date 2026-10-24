@@ -21,6 +21,7 @@ import com.wing.folderplayer.data.waveform.WaveformRepository
 import com.wing.folderplayer.playback.NativePcmDataSource
 import com.wing.folderplayer.service.MusicService
 import com.wing.folderplayer.ui.player.PlayerViewModel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
@@ -28,6 +29,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -381,5 +383,24 @@ class WaveformUiTest : UiTestBase() {
         assertTrue("quiet elsewhere ${stBars.toList()}", stBars.take(3).all { it < 0.3f } && stBars.drop(7).all { it < 0.3f })
         assertTrue("next to the loud part ${stBars.toList()}", stBars[3] < 0.5f && stBars[6] < 0.5f)
         assertTrue("long-seektable.flac measured in $stMs ms (limit 4000)", stMs < 4_000)
+    }
+
+    /** A measurement outlives the seek bar that asked for it: watched for a moment only, it still finishes and is kept. */
+    @Test fun w10_aMeasurementGoesOnWhenNobodyWatches() {
+        val file = File(formatsDir, "long-scenes.mp3")
+        assertTrue("$file missing: run instrument.sh <serial> push-long-files", file.length() > 1_000_000)
+        cacheDir.deleteRecursively()
+        val ref = SourceRef(formats, "/Formats/long-scenes.mp3")
+        fun kept() = cacheDir.listFiles().orEmpty().any { it.name.endsWith(".wf") }
+        runBlocking { withTimeoutOrNull(300) { repo.waveform(ref).collect {} } }
+        assertFalse("not finished within 0.3 s (else this proves nothing)", kept())
+        val deadline = SystemClock.elapsedRealtime() + 30_000
+        while (!kept() && SystemClock.elapsedRealtime() < deadline) Thread.sleep(200)
+        assertTrue("finished and kept with nobody watching", kept())
+        val start = SystemClock.elapsedRealtime()
+        val w = runBlocking { withTimeout(5_000) { repo.waveform(ref).first { it != null } } }
+        Fx.log("long-scenes.mp3 after the watcher left: kept, read again in ${SystemClock.elapsedRealtime() - start} ms")
+        assertTrue(w!!.complete)
+        assertTrue("read from the cache", SystemClock.elapsedRealtime() - start < 1_000)
     }
 }

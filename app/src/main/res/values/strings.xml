@@ -371,4 +371,11 @@
     <string name="file_op_playing">This file is playing. Play another one first.</string>
     <string name="file_op_local_refused">Android lets this app change only its own files in this folder. To rename, move or delete files here, add the folder with “Folder on this device (SAF)…” (+ on the source list).</string>
     <string name="file_op_failed">Could not change the file: %1$s</string>
+    <string name="settings_playback_log">Playback log</string>
+    <string name="settings_playback_log_help">What started, paused or stopped playback and why, kept on this device (the last 500 events). If playback stops by itself, share this log right after it happened.</string>
+    <string name="playback_log_empty">Nothing recorded yet.</string>
+    <string name="playback_log_share">Share</string>
+    <string name="playback_log_clear">Clear</string>
+    <string name="playback_log_cleared">Playback log cleared</string>
+    <string name="bookmark_drag">Drag to reorder</string>
 </resources>
