@@ -1,8 +1,21 @@
 Folder Player Fork {VERSION} — an unofficial personal fork of
 [Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000. It is not affiliated with the original
-project. This release follows 1.3.2.
+project. This release follows 1.4.0.
 
-## What's new in 1.4.0
+## What's new in 1.5.0
+
+- **Playback log**: Settings → Playback → Playback log records what started, paused or stopped playback and why: the
+  reason Android gave (another app took the audio, headphones or Bluetooth disconnected, the end of the queue…), which app
+  sent a play or pause (system UI, Bluetooth, a car, this app), errors and network retries, the sleep timer, and, on
+  Android 11+, why the app was closed before (low memory, killed by the system…). If playback stops by itself, open it
+  right after and share it. It stays on the device (the last 500 events) and holds file names, no passwords.
+- **Network retries with the screen off**: while the app waits to retry a dropped network connection, it keeps the phone
+  and Wi-Fi awake (for up to 5 minutes), so the retry happens on time instead of when the screen is turned on.
+- **Bookmarks by drag**: drag the handle at the end of a bookmark to put it elsewhere in the list.
+- **Waveform kept when the player is closed**: a waveform that is being measured now finishes even if you close the
+  player, and is there when you open it again (before, closing the player for a few seconds threw it away).
+
+## New in 1.4.0
 
 - **Rename, move and delete files**: the long-press menu of a file and the ⋮ menu of the file viewer can rename it, move it
   to another folder of the same source (picked in a folder list) or delete it, each after a confirmation. Handy for

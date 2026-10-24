@@ -24,9 +24,9 @@ mkdir -p ~/android-sdk/cmdline-tools && cd ~/android-sdk/cmdline-tools \
   && unzip -q ct.zip && mv cmdline-tools latest && rm ct.zip
 yes | ~/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null
 ~/android-sdk/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-34" "build-tools;35.0.0"
-mkdir -p ~/jdks/jbrsdk-21.0.11-linux-x64-b1163.116 && curl -fsSL -o /tmp/jbr.tar.gz \
+mkdir -p ~/dev/jdks/jbrsdk-21.0.11-linux-x64-b1163.116 && curl -fsSL -o /tmp/jbr.tar.gz \
   https://cache-redirector.jetbrains.com/intellij-jbr/jbrsdk-21.0.11-linux-x64-b1163.116.tar.gz \
-  && tar -xzf /tmp/jbr.tar.gz -C ~/jdks/jbrsdk-21.0.11-linux-x64-b1163.116 --strip-components=1
+  && tar -xzf /tmp/jbr.tar.gz -C ~/dev/jdks/jbrsdk-21.0.11-linux-x64-b1163.116 --strip-components=1
 chmod +x gradlew && git config core.fileMode false   # the checkout may lose the executable bit
 ```
 
@@ -139,6 +139,26 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
   real LAN: low priority (owner's decision 2026-10-24); the owner uses a NAS with the app and reports problems.
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
+
+### 5.31 Playback log, retry locks, bookmarks by drag, waveform kept when the player closes (1.5.0, 2026-10-24)
+
+Branch `feature/playback-log`. What changed and its limits: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) "Playback that stops by
+itself", "Waveform on the seek bar" ("When it is measured") and "Bookmarks". The playlist's drag gesture moved to
+`ui/ReorderGesture.kt` and serves both lists. Emulator `fp_api34` (API 34), targeted tests. The WSL JetBrains JDK is now
+looked for in `~/dev/jdks` (scripts/wsl-gradle.sh, §1).
+
+| Check | Result |
+|---|---|
+| JVM: new `PlaybackLogTest` (10: line format round trip, newlines, bad lines skipped, bound to the last 500 above 1000 lines on a real file, clear, nothing before init, exit-reason filter, no `user:password@` in error text), `PlaybackLogicTest` (11, three new: wake / Wi-Fi locks held exactly while a retry is pending, released on pause, track change and detach, never for a decode error or a local file), new `LatestJobTest` (7: one run per key, a run outlives its watchers, another key cancels it, progress reaches watchers), `WaveformTest`, `BookmarksTest` (11: reorder of the shown bookmarks, hidden ones keep their slot, no write when unchanged, up / down), `StringResourcesParityTest` | all PASS (10/10, 11/11, 7/7, 16/16, 11/11, 4/4) |
+| New `PlaybackLogServiceTest`: play, a pause from this app's controller, headphones unplugged (the intent handed to the service's receiver) | PASS: PLAY / PAUSE with `USER_REQUEST`, `COMMAND PLAY_PAUSE from com.wing.folderplayer.fork`, `NOISY` before its pause, `SERVICE_START`; the log also showed `PROCESS_EXIT reason=USER_REQUESTED … [FORCE STOP]` for the test runner's force stops |
+| New `PlaybackLogUiTest`: Settings → Playback → Playback log lists an event and Clear empties it | PASS after two test faults (several rows share a tag; an event left by the failed run matched twice) |
+| `BookmarksUiTest` c40 (menu) and new c41 (drag the handle below the third bookmark, and past either end: no change) | 2/2 PASS |
+| New `WaveformUiTest#w10`: a 30-minute MP3 watched for 0.3 s only, then nobody watches | PASS: finished and kept, read again from the cache in 3 ms (not run against the 1.4.0 code, which by reading cancels the measurement with its last watcher and keeps nothing). First run did not start: the new method had been inserted inside w09 (test fault) |
+| `WaveformUiTest#w08`, `FileOpsUiTest#f02` (move dialog after the cancellation fix), `NavigationUiTest` (17 methods, n14 drags the playlist through the moved gesture), `PlaybackServiceTest#headphoneUnplugPauses` | PASS; `NavigationUiTest#n15` SKIP (needs the SMB fixture server, not started) |
+| All JVM tests and `lintDebug` at the end | 297 tests, 28 skipped (the protocol tests without the fixture properties), 0 failures; lint 0 errors, no new warning in the changed files (one `UseKtx` in `PlaybackLog.kt` fixed) |
+
+Not run: a phone, a real network outage with the screen off (the locks are covered by the JVM test only), the full
+suites, other API levels.
 
 ### 5.30 Rename, move and delete of files; bookmark order and names (1.4.0, 2026-10-24)
 
