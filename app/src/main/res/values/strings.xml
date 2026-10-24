@@ -391,4 +391,32 @@
     <string name="player_seek_fine">Fine seek</string>
     <string name="browser_favorite_songs">Favorite songs</string>
     <string name="browser_favorite_folders">Favorite folders</string>
+    <string name="sort_length">Length</string>
+    <string name="length_scan_folder">Read song lengths (this folder and below)</string>
+    <string name="length_scan_bookmarks">Read song lengths of the bookmarks</string>
+    <string name="length_scan_bookmark">Read song lengths</string>
+    <string name="length_scan_busy">Song lengths are already being read</string>
+    <string name="length_scan_counts">%1$d folders, %2$d songs, %3$d read now</string>
+    <string name="length_scan_running">Reading song lengths: %s</string>
+    <string name="length_scan_cancelled">Stopped: %s</string>
+    <string name="length_scan_done">Song lengths read: %s</string>
+    <string name="length_scan_truncated">stopped at the limit</string>
+    <string name="length_scan_action">Read</string>
+    <string name="length_fill_running">Reading lengths for the order: %1$d / %2$d</string>
+    <plurals name="length_scan_not_read">
+        <item quantity="one">%d not read now</item>
+        <item quantity="other">%d not read now</item>
+    </plurals>
+    <plurals name="length_scan_unparsable">
+        <item quantity="one">%d without a length</item>
+        <item quantity="other">%d without a length</item>
+    </plurals>
+    <plurals name="length_scan_skipped">
+        <item quantity="one">%d folder not readable</item>
+        <item quantity="other">%d folders not readable</item>
+    </plurals>
+    <plurals name="length_fill_unknown">
+        <item quantity="one">%d song without a known length (listed last)</item>
+        <item quantity="other">%d songs without a known length (listed last)</item>
+    </plurals>
 </resources>

@@ -276,6 +276,12 @@ fun BrowserScreen(
                                 BrowserOverflow(onOpenSettings) { close ->
                                     DropdownMenuItem(text = { Text(stringResource(R.string.browser_sync_favorites)) },
                                         onClick = { close(); viewModel.syncFavorites() })
+                                    if (uiState.bookmarks.any { b -> uiState.availableSources.any { it.id == b.sourceId } }) DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.length_scan_bookmarks)) },
+                                        leadingIcon = { Icon(Icons.Default.Timer, contentDescription = null) },
+                                        onClick = { close(); viewModel.scanAllBookmarkLengths() },
+                                        modifier = Modifier.testTag("menu_scan_bookmark_lengths")
+                                    )
                                     PlayerPaneMenuItem(playerPane, close)
                                 }
                             } else {
@@ -310,6 +316,12 @@ fun BrowserScreen(
                                         leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
                                         onClick = { close(); viewModel.refresh() },
                                         modifier = Modifier.testTag("menu_refresh")
+                                    )
+                                    if (uiState.currentFolder != null) DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.length_scan_folder)) },
+                                        leadingIcon = { Icon(Icons.Default.Timer, contentDescription = null) },
+                                        onClick = { close(); viewModel.scanCurrentFolderLengths() },
+                                        modifier = Modifier.testTag("menu_scan_lengths")
                                     )
                                     PlayerPaneMenuItem(playerPane, close)
                                     uiState.currentFolder?.let { folder ->
@@ -352,6 +364,7 @@ fun BrowserScreen(
                     if (uiState.isLoading || uiState.search.running) {
                         LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     }
+                    LengthScanStatus(viewModel)
 
                     if (uiState.search.active) {
                         SearchStatus(uiState.search, onCancel = { viewModel.cancelSearch() })
@@ -360,8 +373,9 @@ fun BrowserScreen(
                             currentField = uiState.sortField,
                             ascending = uiState.sortAscending,
                             onSortClick = { viewModel.sortFiles(it) },
-                            fields = FavoritesSortFields,
+                            fields = if (uiState.favoritesKind == FavoritesKind.SONGS) FavoriteSongsSortFields else FavoriteFoldersSortFields,
                         )
+                        LengthFillStatus(uiState, onScan = null)
                     } else if (uiState.currentFolder != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(
@@ -381,6 +395,7 @@ fun BrowserScreen(
                                 modifier = Modifier.weight(1f),
                             )
                         }
+                        LengthFillStatus(uiState, onScan = { viewModel.scanCurrentFolderLengths() })
                         if (uiState.filterOpen) {
                             // Keyed by folder: Back to a folder brings its filter text back with it.
                             key(uiState.currentFolder) {
@@ -408,6 +423,7 @@ fun BrowserScreen(
                                 onBookmarkRename = { b, name -> viewModel.renameBookmark(b, name) },
                                 onBookmarkMove = { b, delta -> viewModel.moveBookmark(b, delta) },
                                 onBookmarkReorder = { viewModel.reorderBookmarks(it) },
+                                onBookmarkScan = { viewModel.scanBookmarkLengths(it) },
                                 onFavoritesClick = { viewModel.showFavorites(it) },
                                 onSourceClick = { viewModel.selectSource(it) },
                                 onEditSource = { sourceToEdit = it },
@@ -568,6 +584,67 @@ private fun FilterField(filter: String, onChange: (String) -> Unit, onClose: () 
     LaunchedEffect(Unit) { if (filter.isEmpty()) focus.requestFocus() }
 }
 
+/**
+ * An explicit scan of song lengths, on every browser level: what it has done so far with Cancel, then its result until
+ * dismissed.
+ */
+@Composable
+private fun LengthScanStatus(viewModel: BrowserViewModel) {
+    val p by viewModel.lengthScan.collectAsState()
+    if (!p.running && !p.showResult) return
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth().testTag("length_scan_status")) {
+        Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (p.running) CircularProgressIndicator(Modifier.padding(end = 12.dp).size(16.dp), strokeWidth = 2.dp)
+            val counts = stringResource(R.string.length_scan_counts, p.folders, p.songs, p.read)
+            val problems = listOfNotNull(
+                if (p.notRead > 0) pluralStringResource(R.plurals.length_scan_not_read, p.notRead, p.notRead) else null,
+                if (p.unparsable > 0) pluralStringResource(R.plurals.length_scan_unparsable, p.unparsable, p.unparsable) else null,
+                if (p.skippedFolders > 0) pluralStringResource(R.plurals.length_scan_skipped, p.skippedFolders, p.skippedFolders) else null,
+                if (p.truncated) stringResource(R.string.length_scan_truncated) else null,
+            )
+            Text(
+                when {
+                    p.running -> stringResource(R.string.length_scan_running, counts) + if (p.current.isNotEmpty()) " · " + p.current else ""
+                    p.cancelled -> stringResource(R.string.length_scan_cancelled, counts)
+                    else -> stringResource(R.string.length_scan_done, counts)
+                } + problems.joinToString("") { " · $it" },
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).testTag("length_scan_text"),
+            )
+            if (p.running) TextButton(onClick = { viewModel.cancelLengthScan() }, modifier = Modifier.testTag("length_scan_cancel")) { Text(stringResource(R.string.common_cancel)) }
+            else IconButton(onClick = { viewModel.dismissLengthScan() }, modifier = Modifier.testTag("length_scan_dismiss")) {
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.common_close))
+            }
+        }
+    }
+}
+
+/**
+ * A list sorted by length whose songs are not all known: how many lengths are being read, or how many are still unknown
+ * (listed last) with a scan of the folder ([onScan]; null in the favourites).
+ */
+@Composable
+private fun LengthFillStatus(uiState: BrowserUiState, onScan: (() -> Unit)?) {
+    if (uiState.sortField != com.wing.folderplayer.data.source.SORT_LENGTH) return
+    val fill = uiState.lengthFill
+    val unknown = remember(uiState.files) { uiState.files.count { !it.isDirectory && MediaTypes.isAudio(it.name) && it.durationMs == null } }
+    if (fill?.running != true && unknown == 0) return
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            if (fill?.running == true) stringResource(R.string.length_fill_running, fill.done, fill.total)
+            else pluralStringResource(R.plurals.length_fill_unknown, unknown, unknown),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f).padding(vertical = 4.dp).testTag("length_fill_status"),
+        )
+        if (fill?.running != true && onScan != null) {
+            TextButton(onClick = onScan, modifier = Modifier.testTag("length_fill_scan")) { Text(stringResource(R.string.length_scan_action)) }
+        }
+    }
+}
+
 @Composable
 private fun SearchStatus(s: SearchUiState, onCancel: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -583,8 +660,11 @@ private fun SearchStatus(s: SearchUiState, onCancel: () -> Unit) {
     }
 }
 
-private val FolderSortFields = listOf("NAME" to R.string.sort_name, "DATE" to R.string.sort_date, "CREATED" to R.string.sort_created, "SIZE" to R.string.sort_size)
-private val FavoritesSortFields = listOf(com.wing.folderplayer.data.favorites.FavoritesSort.ADDED to R.string.sort_added) + FolderSortFields
+private val FileSortFields = listOf("NAME" to R.string.sort_name, "DATE" to R.string.sort_date, "CREATED" to R.string.sort_created, "SIZE" to R.string.sort_size)
+// By length: the songs (folders stay first, by name).
+private val FolderSortFields = FileSortFields + (com.wing.folderplayer.data.source.SORT_LENGTH to R.string.sort_length)
+private val FavoriteSongsSortFields = listOf(com.wing.folderplayer.data.favorites.FavoritesSort.ADDED to R.string.sort_added) + FolderSortFields
+private val FavoriteFoldersSortFields = listOf(com.wing.folderplayer.data.favorites.FavoritesSort.ADDED to R.string.sort_added) + FileSortFields
 
 /** [fields]: the sort fields offered, with their labels (the favourites list adds "Added" in front). */
 @Composable
@@ -658,6 +738,8 @@ fun SourceList(
     onBookmarkMove: (Bookmark, Int) -> Unit,
     /** Ids of [bookmarks] in the order a drag left them. */
     onBookmarkReorder: (List<String>) -> Unit,
+    /** Reads the song lengths in the bookmarked folder and below. */
+    onBookmarkScan: (Bookmark) -> Unit,
     onSourceClick: (SourceConfig) -> Unit,
     onEditSource: (SourceConfig) -> Unit,
     onDeleteSource: (SourceConfig) -> Unit,
@@ -835,6 +917,12 @@ fun SourceList(
                                 leadingIcon = { Icon(Icons.Default.ArrowDownward, contentDescription = null) },
                                 onClick = { onBookmarkMove(bookmark, +1); showMenu = false },
                                 modifier = Modifier.testTag("bookmark_move_down")
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.length_scan_bookmark)) },
+                                leadingIcon = { Icon(Icons.Default.Timer, contentDescription = null) },
+                                onClick = { onBookmarkScan(bookmark); showMenu = false },
+                                modifier = Modifier.testTag("bookmark_scan_lengths")
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.browser_remove_bookmark)) },

@@ -380,16 +380,21 @@ class FavoritesRepository(private val file: File, private val clock: () -> Long 
 object FavoritesSort {
     const val ADDED = "ADDED"
 
-    /** The fields whose values the entries written before 1.6.0 lack (read from the sources when the list is sorted by them). */
-    fun needsFileTimes(field: String): Boolean = field == "DATE" || field == "CREATED"
+    /**
+     * The fields whose values the entries written before 1.6.0 lack (read from the sources when the list is sorted by them;
+     * a length is kept under the file's size and time).
+     */
+    fun needsFileTimes(field: String): Boolean = field == "DATE" || field == "CREATED" || field == com.wing.folderplayer.data.source.SORT_LENGTH
 
-    fun sort(items: List<FavoriteItem>, field: String, ascending: Boolean): List<FavoriteItem> {
+    /** [length]: the known length of a song (by length only). */
+    fun sort(items: List<FavoriteItem>, field: String, ascending: Boolean, length: (MusicFile) -> Long? = { null }): List<FavoriteItem> {
         if (field == ADDED) {
             // Equal times (a sync that added several at once) keep the order of the file.
             val byAdded = items.withIndex().sortedWith(compareBy({ it.value.timestamp }, { it.index })).map { it.value }
             return if (ascending) byAdded else byAdded.reversed()
         }
-        val files = items.associateBy { asFile(it) }
+        val byLength = field == com.wing.folderplayer.data.source.SORT_LENGTH
+        val files = items.associateBy { asFile(it).let { m -> if (byLength && !m.isDirectory) m.copy(durationMs = length(m)) else m } }
         val (folders, songs) = files.keys.partition { it.isDirectory }
         return (com.wing.folderplayer.data.source.sortMusicFiles(folders, field, ascending) +
             com.wing.folderplayer.data.source.sortMusicFiles(songs, field, ascending)).map { files.getValue(it) }

@@ -51,4 +51,12 @@ class SortOrderTest {
         assertEquals(listOf("c.mp3", "b.mp3", "A.mp3"), names(sortMusicFiles(l, "NAME", false)))
         assertEquals("unknown field = name", names(sortMusicFiles(l, null, true)), names(sortMusicFiles(l, "NAME", true)))
     }
+
+    @Test fun byLengthTheUnknownComeLastInEitherDirection() {
+        val l = listOf(f("c").copy(durationMs = 300), f("x"), f("a").copy(durationMs = 100), f("b").copy(durationMs = 200), f("m"))
+        assertEquals(listOf("a", "b", "c", "m", "x"), names(sortMusicFiles(l, SORT_LENGTH, true)))
+        assertEquals(listOf("c", "b", "a", "m", "x"), names(sortMusicFiles(l, SORT_LENGTH, false)))
+        val tie = listOf(f("z").copy(durationMs = 5), f("a").copy(durationMs = 5))
+        assertEquals(listOf("a", "z"), names(sortMusicFiles(tie, SORT_LENGTH, false)))
+    }
 }

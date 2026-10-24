@@ -369,4 +369,28 @@
     <string name="player_seek_fine">微调</string>
     <string name="browser_favorite_songs">收藏的歌曲</string>
     <string name="browser_favorite_folders">收藏的文件夹</string>
+    <string name="sort_length">时长</string>
+    <string name="length_scan_folder">读取歌曲时长（此文件夹及子文件夹）</string>
+    <string name="length_scan_bookmarks">读取书签中的歌曲时长</string>
+    <string name="length_scan_bookmark">读取歌曲时长</string>
+    <string name="length_scan_busy">已在读取歌曲时长</string>
+    <string name="length_scan_counts">%1$d 个文件夹，%2$d 首，本次读取 %3$d 首</string>
+    <string name="length_scan_running">正在读取歌曲时长：%s</string>
+    <string name="length_scan_cancelled">已停止：%s</string>
+    <string name="length_scan_done">已读取歌曲时长：%s</string>
+    <string name="length_scan_truncated">已达上限</string>
+    <string name="length_scan_action">读取</string>
+    <string name="length_fill_running">正在读取时长以排序：%1$d / %2$d</string>
+    <plurals name="length_scan_not_read">
+        <item quantity="other">%d 首未能读取</item>
+    </plurals>
+    <plurals name="length_scan_unparsable">
+        <item quantity="other">%d 首无时长</item>
+    </plurals>
+    <plurals name="length_scan_skipped">
+        <item quantity="other">%d 个文件夹无法读取</item>
+    </plurals>
+    <plurals name="length_fill_unknown">
+        <item quantity="other">%d 首时长未知（排在最后）</item>
+    </plurals>
 </resources>

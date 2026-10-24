@@ -33,8 +33,9 @@ class PlayerRepository(private val context: Context) {
         SourceRegistry.fileSystem(folder).list(folder.path)
     }
 
+    /** In the order of the browser list (by length: the lengths known, as the list has them). */
     fun sortFiles(files: List<MusicFile>, field: String?, ascending: Boolean): List<MusicFile> =
-        sortMusicFiles(files, field, ascending)
+        sortMusicFiles(if (field == com.wing.folderplayer.data.source.SORT_LENGTH) com.wing.folderplayer.data.metadata.DurationRepository.get(context).withCachedLengths(files) else files, field, ascending)
 
     /** Folder image URI for the player/notification (independent of thumbnail switches). */
     suspend fun coverFor(folder: SourceRef, known: List<MusicFile>? = null): String? =

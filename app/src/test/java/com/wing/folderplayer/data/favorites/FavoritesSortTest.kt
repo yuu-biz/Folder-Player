@@ -2,6 +2,7 @@ package com.wing.folderplayer.data.favorites
 
 import com.wing.folderplayer.data.source.MusicFile
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -56,5 +57,13 @@ class FavoritesSortTest {
         repo2.updateMetadata(mapOf(old.key to MusicFile("new.flac", "/new.flac", false, 8, lastModified = 600, sourceId = "nas", createdAt = 300)))
         val filled = FavoritesRepository(File(tmp.root, "old.json")) { now }.items.value.single()
         assertEquals("kept in the file", listOf(8L, 600L, 300L, 1_000L), listOf(filled.size, filled.modified, filled.created, filled.timestamp))
+    }
+
+    @Test fun favouriteSongsByLengthWithTheKnownLengths() {
+        val items = listOf(item("long.flac", added = 1), item("short.flac", added = 2), item("new.flac", added = 3))
+        val lengths = mapOf("long.flac" to 300_000L, "short.flac" to 10_000L)
+        val sorted = FavoritesSort.sort(items, com.wing.folderplayer.data.source.SORT_LENGTH, true) { lengths[it.name] }
+        assertEquals(listOf("short.flac", "long.flac", "new.flac"), sorted.map { it.name })
+        assertTrue(FavoritesSort.needsFileTimes(com.wing.folderplayer.data.source.SORT_LENGTH))
     }
 }
