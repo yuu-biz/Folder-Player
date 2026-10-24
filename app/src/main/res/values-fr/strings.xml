@@ -365,4 +365,11 @@
     <string name="file_op_playing">Ce fichier est en cours de lecture. Lancez-en un autre d\'abord.</string>
     <string name="file_op_local_refused">Android ne permet à cette application de modifier que ses propres fichiers dans ce dossier. Pour renommer, déplacer ou supprimer des fichiers ici, ajoutez le dossier avec « Dossier sur cet appareil (SAF)… » (+ dans la liste des sources).</string>
     <string name="file_op_failed">Impossible de modifier le fichier : %1$s</string>
+    <string name="settings_playback_log">Journal de lecture</string>
+    <string name="settings_playback_log_help">Ce qui a lancé, mis en pause ou arrêté la lecture et pourquoi, conservé sur cet appareil (les 500 derniers événements). Si la lecture s\'arrête toute seule, partagez ce journal juste après.</string>
+    <string name="playback_log_empty">Rien n\'a encore été enregistré.</string>
+    <string name="playback_log_share">Partager</string>
+    <string name="playback_log_clear">Effacer</string>
+    <string name="playback_log_cleared">Journal de lecture effacé</string>
+    <string name="bookmark_drag">Faire glisser pour réorganiser</string>
 </resources>

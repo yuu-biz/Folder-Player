@@ -11,14 +11,17 @@ import com.wing.folderplayer.data.source.SourcePath
 import com.wing.folderplayer.data.source.SourceRef
 import com.wing.folderplayer.data.source.SourceRegistry
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import java.io.DataInputStream
@@ -62,9 +65,11 @@ class WaveformRepository private constructor(private val context: Context) {
     val settings = WaveformSettings(context)
     private val dir = File(context.cacheDir, CACHE_DIR)
 
-    // One file at a time: the next track's analysis waits for the previous one to notice its cancellation.
+    // One file at a time: the next track's analysis waits for the previous one to notice its cancellation. Watchers run on
+    // IO instead: a measurement holds this thread, and a watcher must still reach the cache or stop that measurement.
     @OptIn(ExperimentalCoroutinesApi::class)
     private val dispatcher = Dispatchers.IO.limitedParallelism(1)
+    private val measurements = LatestJob<String, Waveform>(CoroutineScope(SupervisorJob() + dispatcher))
 
     private class TooLong : Exception()
 
@@ -72,6 +77,9 @@ class WaveformRepository private constructor(private val context: Context) {
      * The waveform of [ref]: null first, then the waveform, once (a slow source may show a coarse one first and the
      * full one after). Stays null when the setting is off, the file is too long, on mobile data for a network file, or
      * it cannot be decoded.
+     *
+     * A measurement, once started, runs to its end and keeps its result even when nobody collects any more; collecting
+     * the same file again joins it. Asking for another file that needs measuring stops it.
      */
     fun waveform(ref: SourceRef): Flow<Waveform?> = flow {
         emit(null)
@@ -80,23 +88,25 @@ class WaveformRepository private constructor(private val context: Context) {
         val cfg = SourceRegistry.get(ref.sourceId) ?: return@flow
         val fs = SourceRegistry.fileSystem(ref)
         val entry = try { fs.stat(ref.path) } catch (e: IOException) { null }
-        val file = File(dir, key(ref, entry?.size, entry?.lastModified) + ".wf")
+        val key = key(ref, entry?.size, entry?.lastModified)
+        val file = File(dir, "$key.wf")
         readCache(file)?.let { emit(it); return@flow }
         if (cfg.isNetwork && !ThumbnailRepository.get(context).isOnWifi()) return@flow
-        val result = try {
-            measureFile({ fs.openRandomAccess(ref.path) }, ext, settings.limitMs, network = cfg.isNetwork) { emit(it) }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: TooLong) {
-            Log.i(TAG, "${ref.name}: longer than ${settings.limitMs} ms, not measured")
-            null
-        } catch (e: Exception) {
-            Log.w(TAG, "${ref.name}: cannot measure: $e")
-            null
-        } ?: return@flow
-        emit(result)
-        writeCache(file, result)
-    }.flowOn(dispatcher)
+        emitAll(measurements.watch(key) { coarse ->
+            try {
+                measureFile({ fs.openRandomAccess(ref.path) }, ext, settings.limitMs, network = cfg.isNetwork, coarse = coarse)
+                    .also { writeCache(file, it) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: TooLong) {
+                Log.i(TAG, "${ref.name}: longer than ${settings.limitMs} ms, not measured")
+                null
+            } catch (e: Exception) {
+                Log.w(TAG, "${ref.name}: cannot measure: $e")
+                null
+            }
+        })
+    }.flowOn(Dispatchers.IO)
 
     /**
      * Measures the file [open] reads ([native] false: through MediaCodec, for comparison in tests). A local file is

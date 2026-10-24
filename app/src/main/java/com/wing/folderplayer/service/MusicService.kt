@@ -3,7 +3,10 @@ package com.wing.folderplayer.service
 import android.app.PendingIntent
 import android.content.Intent
 import androidx.annotation.OptIn
+import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSourceBitmapLoader
 import androidx.media3.exoplayer.ExoPlayer
@@ -15,9 +18,15 @@ import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.wing.folderplayer.BuildConfig
 import com.wing.folderplayer.MainActivity
 import com.wing.folderplayer.data.source.SourceRegistry
+import com.wing.folderplayer.data.source.SourceUris
 import com.wing.folderplayer.playback.NetworkRetryController
+import com.wing.folderplayer.playback.PlaybackEventKind
+import com.wing.folderplayer.playback.PlaybackLog
+import com.wing.folderplayer.playback.PlaybackLogFormat
+import com.wing.folderplayer.playback.PlayerNames
 import com.wing.folderplayer.playback.PlaybackExportManager
 import com.wing.folderplayer.playback.RoutingDataSource
 import com.wing.folderplayer.playback.SourceBitmapLoader
@@ -25,9 +34,12 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.IntentFilter
 import android.media.AudioManager
+import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 
 @OptIn(UnstableApi::class)
@@ -63,19 +75,63 @@ class MusicService : MediaLibraryService() {
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS, sleepTimer.state()))
         }
+
+        // Which app (system UI, Bluetooth, a car, this app's own controller) asked to play, pause or change the track.
+        // Deprecated in Media3 1.2.0, but the only hook of this version that names the controller of a command.
+        @Suppress("DEPRECATION")
+        override fun onPlayerCommandRequest(session: MediaSession, controller: MediaSession.ControllerInfo, playerCommand: Int): Int {
+            PlayerNames.loggedCommand(playerCommand)?.let {
+                PlaybackLog.record(PlaybackEventKind.COMMAND, "$it from ${controller.packageName} playWhenReady=${player.playWhenReady}")
+            }
+            return super.onPlayerCommandRequest(session, controller, playerCommand)
+        }
     }
 
     internal val becomingNoisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
+                PlaybackLog.record(PlaybackEventKind.NOISY, "audio output lost, pausing ${where()}")
                 player.pause()
             }
+        }
+    }
+
+    /** The current file's name and position for the log (mediaIds are `fpsrc://` refs, without credentials). */
+    private fun where(): String {
+        val name = SourceUris.parse(player.currentMediaItem?.mediaId)?.name ?: "-"
+        return "$name at ${player.currentPosition / 1000}s"
+    }
+
+    private var retryWakeLock: PowerManager.WakeLock? = null
+    private var retryWifiLock: WifiManager.WifiLock? = null
+
+    /** Held while [NetworkRetryController] waits to retry: the idle player holds no lock and the screen may be off. */
+    @Suppress("DEPRECATION") // WIFI_MODE_FULL_HIGH_PERF, as ExoPlayer and the DLNA session use it
+    private fun keepAwakeForRetry(on: Boolean) {
+        if (on) {
+            if (retryWakeLock == null) retryWakeLock = runCatching {
+                getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "FolderPlayer:retry")
+                    .apply { setReferenceCounted(false); acquire(6 * 60 * 1000L) }
+            }.getOrNull()
+            if (retryWifiLock == null) retryWifiLock = runCatching {
+                applicationContext.getSystemService(WifiManager::class.java)?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "FolderPlayer:retry")
+                    ?.apply { setReferenceCounted(false); acquire() }
+            }.getOrNull()
+        } else {
+            runCatching { retryWakeLock?.release() }; retryWakeLock = null
+            runCatching { retryWifiLock?.release() }; retryWifiLock = null
         }
     }
 
     override fun onCreate() {
         super.onCreate()
         current = this
+        PlaybackLog.init(applicationContext)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) PlaybackLog.recordProcessExits(applicationContext)
+        PlaybackLog.record(
+            PlaybackEventKind.SERVICE_START,
+            "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) ${Build.MANUFACTURER} ${Build.MODEL} Android ${Build.VERSION.RELEASE}",
+        )
         SourceRegistry.init(applicationContext)
 
         // Notification / lock screen tap: the running activity (if any) shows the full player for the current track;
@@ -120,22 +176,47 @@ class MusicService : MediaLibraryService() {
 
         player.volume = 1.0f
 
-        player.addListener(object : androidx.media3.common.Player.Listener {
-            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+        // Also the playback log: what started, paused or stopped playback and why.
+        player.addListener(object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
                 android.util.Log.e("MusicService", "Player Error: ${error.errorCodeName} (${error.errorCode}) ${error.message}")
+                val root = generateSequence<Throwable>(error) { it.cause }.take(10).last()
+                val cause = if (root === error) "" else "; cause ${root.javaClass.name}: ${root.message}"
+                PlaybackLog.record(
+                    PlaybackEventKind.ERROR,
+                    PlaybackLogFormat.withoutUserInfo("${error.errorCodeName} ${where()}: ${error.message}$cause"),
+                )
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
-                    androidx.media3.common.Player.STATE_BUFFERING -> android.util.Log.d("MusicService", "Buffering...")
-                    androidx.media3.common.Player.STATE_READY -> android.util.Log.d("MusicService", "Ready to play")
-                    androidx.media3.common.Player.STATE_ENDED -> android.util.Log.d("MusicService", "Playback ended")
-                    else -> {}
+                    Player.STATE_BUFFERING -> android.util.Log.d("MusicService", "Buffering...")
+                    Player.STATE_READY -> android.util.Log.d("MusicService", "Ready to play")
+                    Player.STATE_ENDED -> {
+                        android.util.Log.d("MusicService", "Playback ended")
+                        PlaybackLog.record(PlaybackEventKind.STATE, "ENDED ${where()}")
+                    }
+                    Player.STATE_IDLE -> PlaybackLog.record(PlaybackEventKind.STATE, "IDLE ${where()}")
                 }
+            }
+
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                PlaybackLog.record(
+                    if (playWhenReady) PlaybackEventKind.PLAY else PlaybackEventKind.PAUSE,
+                    "${PlayerNames.playWhenReadyReason(reason)} ${where()}",
+                )
+            }
+
+            override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) {
+                PlaybackLog.record(PlaybackEventKind.SUPPRESSED, "${PlayerNames.suppressionReason(playbackSuppressionReason)} ${where()}")
+            }
+
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                PlaybackLog.record(PlaybackEventKind.TRACK, "${PlayerNames.transitionReason(reason)} ${SourceUris.parse(mediaItem?.mediaId)?.name ?: "-"}")
             }
         })
 
-        retry = NetworkRetryController(player).also { it.attach() }
+        retry = NetworkRetryController(player, keepAwake = ::keepAwakeForRetry).also { it.attach() }
         exporter = PlaybackExportManager(applicationContext, player).also { it.attach() }
 
         mediaSession = MediaLibrarySession.Builder(this, player, SessionCallback())
@@ -208,7 +289,9 @@ class MusicService : MediaLibraryService() {
         unregisterReceiver(becomingNoisyReceiver)
         sleepTimer.detach()
         retry.detach()
+        keepAwakeForRetry(false)
         exporter?.detach()
+        PlaybackLog.record(PlaybackEventKind.SERVICE_STOP, where())
         mediaSession.run {
             player.release()
             release()

@@ -75,7 +75,8 @@ internal enum class SettingsSub(val id: String, val title: Int, val parent: Sett
     FONT("font", R.string.settings_font, SettingsCategory.DISPLAY),
     THUMBNAILS("thumbnails", R.string.settings_thumbnails, SettingsCategory.LIBRARY),
     IMAGE_CACHE("imagecache", R.string.settings_image_cache, SettingsCategory.LIBRARY),
-    AI("ai", R.string.settings_ai, SettingsCategory.LYRICS);
+    AI("ai", R.string.settings_ai, SettingsCategory.LYRICS),
+    PLAYBACK_LOG("playbacklog", R.string.settings_playback_log, SettingsCategory.PLAYBACK);
 
     companion object {
         fun byId(id: String?) = values().firstOrNull { it.id == id }

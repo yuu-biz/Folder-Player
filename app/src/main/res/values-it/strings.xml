@@ -365,4 +365,11 @@
     <string name="file_op_playing">Questo file è in riproduzione. Riproducine prima un altro.</string>
     <string name="file_op_local_refused">Android consente a questa app di modificare solo i propri file in questa cartella. Per rinominare, spostare o eliminare file qui, aggiungi la cartella con «Cartella su questo dispositivo (SAF)…» (+ nell\'elenco delle sorgenti).</string>
     <string name="file_op_failed">Impossibile modificare il file: %1$s</string>
+    <string name="settings_playback_log">Registro di riproduzione</string>
+    <string name="settings_playback_log_help">Cosa ha avviato, messo in pausa o fermato la riproduzione e perché, conservato su questo dispositivo (gli ultimi 500 eventi). Se la riproduzione si ferma da sola, condividi questo registro subito dopo.</string>
+    <string name="playback_log_empty">Ancora nessuna voce.</string>
+    <string name="playback_log_share">Condividi</string>
+    <string name="playback_log_clear">Cancella</string>
+    <string name="playback_log_cleared">Registro di riproduzione cancellato</string>
+    <string name="bookmark_drag">Trascina per riordinare</string>
 </resources>

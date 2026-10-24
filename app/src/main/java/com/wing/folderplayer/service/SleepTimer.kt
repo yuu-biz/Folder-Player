@@ -6,6 +6,8 @@ import android.os.SystemClock
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.SessionCommand
+import com.wing.folderplayer.playback.PlaybackEventKind
+import com.wing.folderplayer.playback.PlaybackLog
 
 /**
  * Sleep timer of the playback, kept by [MusicService]: it lives as long as the playback does, with or without a
@@ -77,6 +79,7 @@ internal class SleepTimer(
         if (type != TYPE_TIME) return
         val left = deadline - clock()
         if (left > 0) { handler.postDelayed(expire, left); return }
+        PlaybackLog.record(PlaybackEventKind.SLEEP_TIMER, "time is up, pausing")
         player.pause()
         cancel()
     }
@@ -90,6 +93,7 @@ internal class SleepTimer(
         if (type != TYPE_SONGS || reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) return
         songsLeft--
         if (songsLeft <= 0) {
+            PlaybackLog.record(PlaybackEventKind.SLEEP_TIMER, "last song ended, pausing")
             player.pause()
             cancel()
         } else onChange(state())

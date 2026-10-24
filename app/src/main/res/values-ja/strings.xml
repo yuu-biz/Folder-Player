@@ -351,4 +351,11 @@
     <string name="file_op_playing">このファイルは再生中です。先に別の曲を再生してください。</string>
     <string name="file_op_local_refused">このフォルダでは、Android はこのアプリが作ったファイルしか変更させません。名前の変更・移動・削除をするには、ソース一覧の＋から「この端末のフォルダ（SAF）…」でフォルダを追加してください。</string>
     <string name="file_op_failed">ファイルを変更できませんでした: %1$s</string>
+    <string name="settings_playback_log">再生ログ</string>
+    <string name="settings_playback_log_help">再生の開始・一時停止・停止とその理由を、この端末に記録します（直近 500 件）。再生が勝手に止まったときは、その直後にこのログを共有してください。</string>
+    <string name="playback_log_empty">まだ記録はありません。</string>
+    <string name="playback_log_share">共有</string>
+    <string name="playback_log_clear">消去</string>
+    <string name="playback_log_cleared">再生ログを消去しました</string>
+    <string name="bookmark_drag">ドラッグで並べ替え</string>
 </resources>
