@@ -328,6 +328,12 @@
     <plurals name="browser_favorites_count">
         <item quantity="other">%d 项</item>
     </plurals>
+    <plurals name="browser_favorite_songs_count">
+        <item quantity="other">%d 首</item>
+    </plurals>
+    <plurals name="browser_favorite_folders_count">
+        <item quantity="other">%d 个文件夹</item>
+    </plurals>
     <plurals name="source_test_ok">
         <item quantity="other">已连接 – 根目录有 %d 项</item>
     </plurals>
@@ -361,4 +367,6 @@
     <string name="bookmark_drag">拖动以排序</string>
     <string name="player_open_folder">显示文件夹</string>
     <string name="player_seek_fine">微调</string>
+    <string name="browser_favorite_songs">收藏的歌曲</string>
+    <string name="browser_favorite_folders">收藏的文件夹</string>
 </resources>

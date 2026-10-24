@@ -72,7 +72,7 @@ class BookmarksUiTest : UiTestBase() {
         // Source list: a section above the sources; a bookmark opens its folder.
         onUi { browser.exitSource() }
         until(5_000, "source list") { shown("bookmarks_header") }
-        assertTrue(shown("bookmark_Album-B") && shown("bookmark_Album-A") && shown("entry_favorites"))
+        assertTrue(shown("bookmark_Album-B") && shown("bookmark_Album-A") && shown("entry_favorite_folders"))
         click("bookmark_Album-B")
         until(15_000, "bookmark opens its folder") { browser.uiState.value.currentFolder?.path == "$fx/Album-B" && !browser.uiState.value.isLoading }
 
@@ -97,7 +97,7 @@ class BookmarksUiTest : UiTestBase() {
         until(5_000, "no bookmark left") { browser.uiState.value.bookmarks.isEmpty() }
         until(5_000, "row gone") { !shown("bookmark_Album-B") }
         until(5_000, "section header gone") { !shown("bookmarks_header") }
-        assertTrue(exists("entry_favorites") && exists("source_list"))
+        assertTrue(exists("entry_favorite_folders") && exists("source_list"))
     }
 
     /** Long-press menu of a bookmark: rename (only the name the list shows) and move up / down, kept after the change. */
@@ -166,7 +166,7 @@ class BookmarksUiTest : UiTestBase() {
 
         drag("Album-B", -1.5f)
         assertEquals("the first stays first", listOf("Album-B", "fixture", "Album-A"), names())
-        assertTrue("the favourites entry stays above", top("entry_favorites") < top("bookmark_Album-B"))
+        assertTrue("the favourites entry stays above", top("entry_favorite_folders") < top("bookmark_Album-B"))
         drag("Album-A", 2f)
         assertEquals("the last stays last, above the sources", listOf("Album-B", "fixture", "Album-A"), names())
         assertTrue(top("bookmark_fixture") < top("bookmark_Album-A"))

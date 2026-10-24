@@ -10,6 +10,7 @@ import com.wing.folderplayer.data.artwork.ThumbnailRepository
 import com.wing.folderplayer.data.favorites.Bookmark
 import com.wing.folderplayer.data.favorites.BookmarksRepository
 import com.wing.folderplayer.data.favorites.FavoriteItem
+import com.wing.folderplayer.data.favorites.FavoritesKind
 import com.wing.folderplayer.data.favorites.FavoritesRepository
 import com.wing.folderplayer.data.favorites.FavoritesSort
 import com.wing.folderplayer.data.favorites.SyncAnchor
@@ -69,7 +70,8 @@ data class SearchUiState(
 data class BrowserUiState(
     /** null = source list (root). */
     val currentFolder: SourceRef? = null,
-    val showingFavorites: Boolean = false,
+    /** The favourites list on screen (songs or folders); null: a folder or the source list. */
+    val favoritesKind: FavoritesKind? = null,
     val files: List<MusicFile> = emptyList(),
     val isLoading: Boolean = false,
     val currentlyPlayingMediaId: String? = null,
@@ -105,6 +107,7 @@ data class BrowserUiState(
     /** [files] narrowed by [filter]: the list on screen (playing a song of it queues the songs shown). */
     val visibleFiles: List<MusicFile> by lazy(LazyThreadSafetyMode.NONE) { NameFilter.apply(files, filter) }
 
+    val showingFavorites: Boolean get() = favoritesKind != null
     val currentSource: SourceConfig? get() = currentFolder?.let { f -> availableSources.firstOrNull { it.id == f.sourceId } }
     val isRoot: Boolean get() = currentFolder == null && !showingFavorites
 
@@ -137,15 +140,15 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     /** A place Back can lead to: the source list, the favourites list or a folder. */
     private sealed interface Place {
         object SourceList : Place
-        object Favorites : Place
+        data class Favorites(val kind: FavoritesKind) : Place
         data class Folder(val ref: SourceRef, val filter: String = "") : Place
     }
 
     /** The places left by navigating, latest last: Back goes to the previous one (see [navigateUp]). */
     private val backStack = ArrayDeque<Place>()
     private val MAX_BACK_STACK = 100
-    /** Scroll position of the favourites list, kept for the way back from a favourite. */
-    private var favoritesScroll: Pair<Int, Int> = 0 to 0
+    /** Scroll position of each favourites list, kept for the way back from a favourite. */
+    private val favoritesScroll = HashMap<FavoritesKind, Pair<Int, Int>>()
     private var searchJob: Job? = null
 
     /** Last [BrowserUiState.scrollTrigger] the list has scrolled for (kept here: same lifetime as the counter). */
@@ -159,7 +162,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         SourceRegistry.init(application)
         sourcePreferences = SourcePreferences(application)
         thumbnails = ThumbnailRepository.get(application)
-        favoritesRepository = FavoritesRepository(File(application.filesDir, "favorites/fav.json"))
+        favoritesRepository = FavoritesRepository.get(application)
         bookmarksRepository = BookmarksRepository(File(application.filesDir, "favorites/bookmarks.json"))
 
         viewModelScope.launch {
@@ -168,7 +171,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             favoritesRepository.items.collect { list ->
                 _uiState.value = _uiState.value.copy(favorites = list)
-                if (_uiState.value.showingFavorites) showFavorites()
+                _uiState.value.favoritesKind?.let { renderFavorites(it, restoreScroll = false) }
             }
         }
         viewModelScope.launch {
@@ -251,7 +254,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     // ---------------- navigation ----------------
 
     private fun currentPlace(): Place = when {
-        _uiState.value.showingFavorites -> Place.Favorites
+        _uiState.value.favoritesKind != null -> Place.Favorites(_uiState.value.favoritesKind!!)
         else -> _uiState.value.currentFolder?.let { Place.Folder(it, _uiState.value.filter) } ?: Place.SourceList
     }
 
@@ -317,7 +320,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             isLoading = true,
             currentFolder = folder,
             loadError = null,
-            showingFavorites = false,
+            favoritesKind = null,
             viewMode = sourcePreferences.getViewMode(folder),
             filter = newFilter,
             filterOpen = newFilter.isNotEmpty() || (sameFolder && _uiState.value.filterOpen),
@@ -407,7 +410,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun saveScrollPosition(index: Int, offset: Int) {
-        if (_uiState.value.showingFavorites) { favoritesScroll = index to offset; return }
+        _uiState.value.favoritesKind?.let { favoritesScroll[it] = index to offset; return }
         val key = _uiState.value.currentFolder?.toUriString() ?: return
         directoryCache[key]?.let { entry ->
             directoryCache[key] = entry.copy(scrollIndex = index, scrollOffset = offset, scrollFilter = _uiState.value.filter)
@@ -426,10 +429,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun sortFiles(by: String) {
-        if (_uiState.value.showingFavorites) {
+        _uiState.value.favoritesKind?.let { kind ->
             val s = _uiState.value
-            sourcePreferences.saveFavoritesSort(by, if (s.sortField == by) !s.sortAscending else true)
-            renderFavorites(restoreScroll = false)
+            sourcePreferences.saveFavoritesSort(kind, by, if (s.sortField == by) !s.sortAscending else true)
+            renderFavorites(kind, restoreScroll = false)
             return
         }
         viewModelScope.launch(exceptionHandler) {
@@ -469,7 +472,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         if (previous != null) {
             when (previous) {
                 Place.SourceList -> showSourceList()
-                Place.Favorites -> renderFavorites(restoreScroll = true)
+                is Place.Favorites -> renderFavorites(previous.kind, restoreScroll = true)
                 is Place.Folder -> loadFolder(previous.ref, isBackNavigation = true, filter = previous.filter)
             }
             return
@@ -499,7 +502,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         loadJob?.cancel()
         closeSearch()
         sourcePreferences.saveLastBrowsedState(null)
-        _uiState.value = _uiState.value.copy(currentFolder = null, showingFavorites = false, files = emptyList(), isLoading = false, filter = "", filterOpen = false)
+        _uiState.value = _uiState.value.copy(currentFolder = null, favoritesKind = null, files = emptyList(), isLoading = false, filter = "", filterOpen = false)
     }
 
     fun onFileClicked(
@@ -738,12 +741,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     /** The order of the bookmarks the source list shows, after a drag; hidden ones keep their place. */
     fun reorderBookmarks(shownIds: List<String>) = bookmarksRepository.reorder(shownIds)
 
-    /** The favourites list (entered from the source list, or from a folder when called from elsewhere). */
-    fun showFavorites() {
-        if (!_uiState.value.showingFavorites) {
-            if (_uiState.value.currentFolder == null) startFromSourceList() else rememberCurrentPlace()
-        }
-        renderFavorites(restoreScroll = false)
+    /** A favourites list (entered from the source list, or from a folder or the other list when called from elsewhere). */
+    fun showFavorites(kind: FavoritesKind) {
+        val state = _uiState.value
+        if (state.favoritesKind == kind) return renderFavorites(kind, restoreScroll = false)
+        if (state.currentFolder == null && state.favoritesKind == null) startFromSourceList() else rememberCurrentPlace()
+        renderFavorites(kind, restoreScroll = false)
     }
 
     /** Entries whose file times were asked for in this run of the app (an entry that cannot be read is not asked again). */
@@ -775,16 +778,16 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private fun renderFavorites(restoreScroll: Boolean) {
+    private fun renderFavorites(kind: FavoritesKind, restoreScroll: Boolean) {
         closeSearch()
         loadJob?.cancel()
         val sources = SourceRegistry.sources.value.map { it.id }.toSet()
-        val sort = sourcePreferences.getFavoritesSort()
-        val shown = favoritesRepository.items.value.filter { it.ref != null && it.sourceId in sources }
+        val sort = sourcePreferences.getFavoritesSort(kind)
+        val shown = favoritesRepository.items.value.filter { it.ref != null && it.sourceId in sources && it.type == kind.type }
         val entries = FavoritesSort.sort(shown, sort.field, sort.ascending).map(FavoritesSort::asFile)
         if (FavoritesSort.needsFileTimes(sort.field)) fillFavoriteTimes(shown)
         _uiState.value = _uiState.value.copy(
-            showingFavorites = true,
+            favoritesKind = kind,
             currentFolder = null,
             filter = "",
             filterOpen = false,
@@ -794,8 +797,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             isLoading = false,
             viewMode = sourcePreferences.getDefaultViewMode(),
             // Back from a favourite: the list is as it was left (kept by [saveScrollPosition]).
-            scrollToIndex = if (restoreScroll) favoritesScroll.first else _uiState.value.scrollToIndex,
-            scrollToOffset = if (restoreScroll) favoritesScroll.second else _uiState.value.scrollToOffset,
+            scrollToIndex = if (restoreScroll) favoritesScroll[kind]?.first ?: 0 else _uiState.value.scrollToIndex,
+            scrollToOffset = if (restoreScroll) favoritesScroll[kind]?.second ?: 0 else _uiState.value.scrollToOffset,
             scrollTrigger = if (restoreScroll) _uiState.value.scrollTrigger + 1 else _uiState.value.scrollTrigger,
         )
     }

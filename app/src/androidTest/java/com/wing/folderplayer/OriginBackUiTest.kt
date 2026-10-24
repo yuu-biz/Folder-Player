@@ -44,8 +44,8 @@ class OriginBackUiTest : UiTestBase() {
         had.filter { !it.second }.forEach { (f, _) -> onUi { browser.toggleFavorite(f) } }
         try {
             onUi { browser.exitSource() }
-            until(5_000, "source list") { exists("entry_favorites") }
-            click("entry_favorites")
+            until(5_000, "source list") { exists("entry_favorite_folders") }
+            click("entry_favorite_folders")
             until(5_000, "favourites") { bs.showingFavorites && shown("item_Music") && shown("item_Album-B") }
 
             // Into the first favourite and two folders deeper.

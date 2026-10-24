@@ -195,8 +195,8 @@ class NavigationUiTest : UiTestBase() {
         if (!wasFavorite) onUi { browser.toggleFavorite(song) }
         try {
             onUi { browser.exitSource() }
-            until(5_000, "source list") { exists("entry_favorites") }
-            click("entry_favorites")
+            until(5_000, "source list") { exists("entry_favorite_songs") }
+            click("entry_favorite_songs")
             until(5_000, "favourites") { bs.showingFavorites && exists("item_02 track.mp3") }
             click("item_02 track.mp3")
             until(5_000, "full player") { playerOpen() }
@@ -307,7 +307,7 @@ class NavigationUiTest : UiTestBase() {
         click("btn_view_mode")
         until(5_000, "list") { exists("file_list") }
 
-        onUi { browser.showFavorites() }
+        onUi { browser.showFavorites(com.wing.folderplayer.data.favorites.FavoritesKind.FOLDERS) }
         until(5_000, "favourites") { bs.showingFavorites }
         viaSettingsAndBack()
         assertTrue(bs.showingFavorites)

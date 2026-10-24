@@ -328,6 +328,12 @@
     <plurals name="browser_favorites_count">
         <item quantity="other">%d 件</item>
     </plurals>
+    <plurals name="browser_favorite_songs_count">
+        <item quantity="other">%d 曲</item>
+    </plurals>
+    <plurals name="browser_favorite_folders_count">
+        <item quantity="other">%d フォルダ</item>
+    </plurals>
     <plurals name="source_test_ok">
         <item quantity="other">接続しました – ルートに %d 項目</item>
     </plurals>
@@ -361,4 +367,6 @@
     <string name="bookmark_drag">ドラッグで並べ替え</string>
     <string name="player_open_folder">フォルダを表示</string>
     <string name="player_seek_fine">微調整</string>
+    <string name="browser_favorite_songs">お気に入りの曲</string>
+    <string name="browser_favorite_folders">お気に入りのフォルダ</string>
 </resources>
