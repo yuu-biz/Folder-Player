@@ -147,4 +147,76 @@ class DurationRepositoryTest {
         assertAbout(30_000, repo.duration(f))
         assertEquals("read again", 1, opens.get())
     }
+
+    private fun waitScan(repo: DurationRepository, before: Int): DurationRepository.ScanProgress {
+        val end = System.currentTimeMillis() + 60_000
+        while (System.currentTimeMillis() < end) {
+            val p = repo.scan.value
+            if (!p.running && p.finished > before) return p
+            Thread.sleep(100)
+        }
+        error("scan did not end: ${repo.scan.value}")
+    }
+
+    /** The cache answers without reading; a file moved elsewhere on its source (same name, size, time) is found again. */
+    @Test fun cachedIsMemoryOnlyAndFollowsAMovedFile() = runBlocking {
+        val opens = AtomicInteger()
+        val repo = repo(opens, 0) { real(it) }
+        assertNull("not read yet", repo.cached(mp3))
+        assertAbout(30_000, repo.duration(mp3))
+        assertAbout(30_000, repo.cached(mp3))
+        val moved = mp3.copy(path = "${Fx.FX}/Elsewhere/02 track.mp3")
+        assertAbout(30_000, repo.cached(moved))
+        assertNull("another file of the same name", repo.cached(mp3.copy(path = "${Fx.FX}/X/02 track.mp3", size = mp3.size + 1)))
+        assertEquals("read once", 1, opens.get())
+    }
+
+    /** A scan reads each song once (a second scan reads nothing), keeps the lengths on disk, drops files no longer there. */
+    @Test fun scanReadsOnceKeepsTheResultAndDropsWhatIsGone() = runBlocking {
+        val album = SourceRef(local, "${Fx.FX}/Album-A")
+        val opens = AtomicInteger()
+        val ghost = MusicFile("ghost.mp3", "${album.path}/ghost.mp3", false, 10, 1L, local)
+        val repo = DurationRepository(Fx.ctx, dir) { f ->
+            opens.incrementAndGet()
+            if (f.name == ghost.name) FailingReaderOfNothing else real(f)
+        }
+        assertNull(repo.duration(ghost)) // kept as unparsable: a file that is not in the folder
+        val afterGhost = opens.get()
+        assertNull(repo.duration(ghost))
+        assertEquals("unparsable kept", afterGhost, opens.get())
+
+        var before = repo.scan.value.finished
+        assertTrue(repo.startScan(listOf(album)))
+        val first = waitScan(repo, before)
+        assertEquals("folder", 1, first.folders)
+        assertEquals("two songs read", 2, first.read)
+        val opensAfterFirst = opens.get()
+
+        before = repo.scan.value.finished
+        assertTrue(repo.startScan(listOf(album)))
+        val second = waitScan(repo, before)
+        assertEquals(2, second.songs)
+        assertEquals("nothing read again", 0, second.read)
+        assertEquals(opensAfterFirst, opens.get())
+
+        // The ghost is not in the folder: its entry went, so it is looked at again.
+        repo.duration(ghost)
+        assertEquals(opensAfterFirst + 1, opens.get())
+
+        // Written at the end of the scan: another instance knows the lengths without reading.
+        val fresh = DurationRepository(Fx.ctx, dir) { error("must not read ${it.name}") }
+        assertAbout(30_000, fresh.cached(mp3))
+    }
+
+    private object FailingReaderOfNothing : RandomAccessReader {
+        private val bytes = ByteArray(10) { 'x'.code.toByte() }
+        override val size: Long get() = bytes.size.toLong()
+        override fun read(position: Long, buffer: ByteArray, offset: Int, len: Int): Int {
+            if (position >= bytes.size) return -1
+            val n = minOf(len.toLong(), bytes.size - position).toInt()
+            System.arraycopy(bytes, position.toInt(), buffer, offset, n)
+            return n
+        }
+        override fun close() = Unit
+    }
 }

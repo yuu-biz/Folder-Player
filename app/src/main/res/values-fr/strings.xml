@@ -387,4 +387,36 @@
     <string name="player_seek_fine">Réglage fin</string>
     <string name="browser_favorite_songs">Morceaux favoris</string>
     <string name="browser_favorite_folders">Dossiers favoris</string>
+    <string name="sort_length">Durée</string>
+    <string name="length_scan_folder">Lire les durées (ce dossier et en dessous)</string>
+    <string name="length_scan_bookmarks">Lire les durées des signets</string>
+    <string name="length_scan_bookmark">Lire les durées</string>
+    <string name="length_scan_busy">Les durées sont déjà en cours de lecture</string>
+    <string name="length_scan_counts">%1$d dossiers, %2$d morceaux, %3$d lus maintenant</string>
+    <string name="length_scan_running">Lecture des durées : %s</string>
+    <string name="length_scan_cancelled">Arrêté : %s</string>
+    <string name="length_scan_done">Durées lues : %s</string>
+    <string name="length_scan_truncated">arrêté à la limite</string>
+    <string name="length_scan_action">Lire</string>
+    <string name="length_fill_running">Lecture des durées pour le tri : %1$d / %2$d</string>
+    <plurals name="length_scan_not_read">
+        <item quantity="one">%d non lu</item>
+        <item quantity="many">%d non lus</item>
+        <item quantity="other">%d non lus</item>
+    </plurals>
+    <plurals name="length_scan_unparsable">
+        <item quantity="one">%d sans durée</item>
+        <item quantity="many">%d sans durée</item>
+        <item quantity="other">%d sans durée</item>
+    </plurals>
+    <plurals name="length_scan_skipped">
+        <item quantity="one">%d dossier illisible</item>
+        <item quantity="many">%d dossiers illisibles</item>
+        <item quantity="other">%d dossiers illisibles</item>
+    </plurals>
+    <plurals name="length_fill_unknown">
+        <item quantity="one">%d morceau sans durée connue (à la fin)</item>
+        <item quantity="many">%d morceaux sans durée connue (à la fin)</item>
+        <item quantity="other">%d morceaux sans durée connue (à la fin)</item>
+    </plurals>
 </resources>

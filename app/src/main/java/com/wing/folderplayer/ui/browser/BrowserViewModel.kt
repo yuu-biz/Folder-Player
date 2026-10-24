@@ -25,6 +25,7 @@ import com.wing.folderplayer.data.source.FileOperations
 import com.wing.folderplayer.data.source.MediaTypes
 import com.wing.folderplayer.data.source.MusicFile
 import com.wing.folderplayer.data.source.sortMusicFiles
+import com.wing.folderplayer.data.source.SORT_LENGTH
 import com.wing.folderplayer.data.source.SourceConfig
 import com.wing.folderplayer.data.source.SourceException
 import com.wing.folderplayer.data.source.SourcePath
@@ -56,6 +57,9 @@ data class CacheEntry(
     val sortField: String,
     val sortAscending: Boolean
 )
+
+/** [done] of [total] lengths read for a list sorted by length; [running] until all were tried. */
+data class LengthFill(val done: Int, val total: Int, val running: Boolean = true)
 
 data class SearchUiState(
     val active: Boolean = false,
@@ -103,6 +107,8 @@ data class BrowserUiState(
     /** A rename, move or delete waiting for the user's confirmation (its dialog is shown), or running ([fileOpBusy]). */
     val fileOp: FileOp? = null,
     val fileOpBusy: Boolean = false,
+    /** Sorted by length: the lengths of this list being read (or read) for the order; null when none were missing. */
+    val lengthFill: LengthFill? = null,
 ) {
     /** [files] narrowed by [filter]: the list on screen (playing a song of it queues the songs shown). */
     val visibleFiles: List<MusicFile> by lazy(LazyThreadSafetyMode.NONE) { NameFilter.apply(files, filter) }
@@ -176,6 +182,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
         viewModelScope.launch {
             bookmarksRepository.items.collect { list -> _uiState.value = _uiState.value.copy(bookmarks = list) }
+        }
+        viewModelScope.launch(Dispatchers.IO) { durations.warmUp() }
+        viewModelScope.launch {
+            // A scan read lengths: a list sorted by them is sorted again.
+            var finished = durations.scan.value.finished
+            durations.scan.collect { p -> if (p.finished != finished) { finished = p.finished; resortByLength() } }
         }
         _uiState.value = _uiState.value.copy(gridDensity = sourcePreferences.getGridDensity())
 
@@ -314,6 +326,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         directoryCache.entries.removeIf { now - it.value.timestamp > CACHE_EXPIRY_MS }
         loadJob?.cancel()
 
+        lengthJob?.cancel()
         val sameFolder = folder == _uiState.value.currentFolder
         val newFilter = filter ?: if (sameFolder) _uiState.value.filter else ""
         _uiState.value = _uiState.value.copy(
@@ -321,6 +334,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             currentFolder = folder,
             loadError = null,
             favoritesKind = null,
+            lengthFill = null,
             viewMode = sourcePreferences.getViewMode(folder),
             filter = newFilter,
             filterOpen = newFilter.isNotEmpty() || (sameFolder && _uiState.value.filterOpen),
@@ -335,7 +349,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             val key = folder.toUriString()
             val cached = directoryCache[key]
             if (cached != null && (now - cached.timestamp < CACHE_EXPIRY_MS)) {
-                val finalFiles = if (cached.sortField != field || cached.sortAscending != asc) applySort(cached.files, field, asc) else cached.files
+                // By length: sorted again with the lengths known now (a scan or the rows may have read more since).
+                val finalFiles = if (field == SORT_LENGTH || cached.sortField != field || cached.sortAscending != asc) withContext(Dispatchers.Default) { applySort(cached.files, field, asc) } else cached.files
                 val restore = isBackNavigation && cached.scrollFilter == newFilter
                 _uiState.value = _uiState.value.copy(
                     files = finalFiles,
@@ -346,6 +361,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     scrollToOffset = if (restore && focus == null) cached.scrollOffset else 0,
                     scrollTrigger = _uiState.value.scrollTrigger + 1
                 )
+                fillLengths()
                 return@launch
             }
 
@@ -370,6 +386,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     scrollToOffset = 0,
                     scrollTrigger = _uiState.value.scrollTrigger + 1
                 )
+                fillLengths()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -418,8 +435,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun applySort(list: List<MusicFile>, by: String, ascending: Boolean): List<MusicFile> {
-        // ALWAYS put folders first
+        // ALWAYS put folders first (by name when the songs are by length: a folder has none)
         val (folders, files) = list.partition { it.isDirectory }
+        if (by == SORT_LENGTH) return sortMusicFiles(folders, "NAME", true) + sortMusicFiles(durations.withCachedLengths(files), by, ascending)
 
         return sortMusicFiles(folders, by, ascending) + sortMusicFiles(files, by, ascending)
     }
@@ -442,6 +460,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             val sorted = withContext(Dispatchers.Default) { applySort(state.files, by, newAscending) }
             sourcePreferences.saveDirectorySort(folder, by, newAscending)
             _uiState.value = _uiState.value.copy(files = sorted, sortField = by, sortAscending = newAscending)
+            fillLengths()
             val key = folder.toUriString()
             directoryCache[key]?.let { entry ->
                 directoryCache[key] = entry.copy(files = sorted, sortField = by, sortAscending = newAscending)
@@ -500,9 +519,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     private fun showSourceList() {
         loadJob?.cancel()
+        lengthJob?.cancel()
         closeSearch()
         sourcePreferences.saveLastBrowsedState(null)
-        _uiState.value = _uiState.value.copy(currentFolder = null, favoritesKind = null, files = emptyList(), isLoading = false, filter = "", filterOpen = false)
+        _uiState.value = _uiState.value.copy(currentFolder = null, favoritesKind = null, lengthFill = null, files = emptyList(), isLoading = false, filter = "", filterOpen = false)
     }
 
     fun onFileClicked(
@@ -659,6 +679,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     /** [moved]: the file under its new path, null when it was deleted. */
     private fun afterFileOp(file: MusicFile, moved: MusicFile?) {
+        durations.onFileOp(file, moved)
         val folders = listOfNotNull(SourcePath.parent(file.path), moved?.path?.let(SourcePath::parent)).distinct()
             .map { SourceRef(file.sourceId, it) }
         folders.forEach { directoryCache.remove(it.toUriString()); thumbnails.invalidate(it) }
@@ -778,13 +799,17 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private fun renderFavorites(kind: FavoritesKind, restoreScroll: Boolean) {
+    /** [fill]: read the lengths the list lacks when it is sorted by them (not when it is sorted again after reading them). */
+    private fun renderFavorites(kind: FavoritesKind, restoreScroll: Boolean, fill: Boolean = true) {
         closeSearch()
         loadJob?.cancel()
+        if (fill) lengthJob?.cancel()
         val sources = SourceRegistry.sources.value.map { it.id }.toSet()
         val sort = sourcePreferences.getFavoritesSort(kind)
         val shown = favoritesRepository.items.value.filter { it.ref != null && it.sourceId in sources && it.type == kind.type }
-        val entries = FavoritesSort.sort(shown, sort.field, sort.ascending).map(FavoritesSort::asFile)
+        val byLength = sort.field == SORT_LENGTH
+        val entries = FavoritesSort.sort(shown, sort.field, sort.ascending, durations::cached).map(FavoritesSort::asFile)
+            .map { if (byLength && !it.isDirectory) it.copy(durationMs = durations.cached(it)) else it }
         if (FavoritesSort.needsFileTimes(sort.field)) fillFavoriteTimes(shown)
         _uiState.value = _uiState.value.copy(
             favoritesKind = kind,
@@ -801,7 +826,80 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             scrollToOffset = if (restoreScroll) favoritesScroll[kind]?.second ?: 0 else _uiState.value.scrollToOffset,
             scrollTrigger = if (restoreScroll) _uiState.value.scrollTrigger + 1 else _uiState.value.scrollTrigger,
         )
+        if (fill) fillLengths()
     }
+
+    // ---------------- lengths ----------------
+
+    private var lengthJob: Job? = null
+
+    /**
+     * Sorted by length: reads the lengths the list on screen does not know yet (under the same switches as its rows) and
+     * sorts it once when they are read, not on every length, so the list does not move under the finger meanwhile. A
+     * network source that stops answering is not tried file after file (a timeout each).
+     */
+    private fun fillLengths() {
+        lengthJob?.cancel()
+        val state = _uiState.value
+        val missing = if (state.sortField == SORT_LENGTH) state.files.filter { !it.isDirectory && MediaTypes.isAudio(it.name) && it.durationMs == null } else emptyList()
+        if (missing.isEmpty()) {
+            if (state.lengthFill != null) _uiState.value = state.copy(lengthFill = null)
+            return
+        }
+        val place = currentPlace()
+        _uiState.value = state.copy(lengthFill = LengthFill(0, missing.size))
+        lengthJob = viewModelScope.launch(exceptionHandler) {
+            var found = 0
+            var missedInARow = 0
+            for ((i, f) in missing.withIndex()) {
+                if (durations.duration(f) != null) { found++; missedInARow = 0 }
+                else if (SourceRegistry.get(f.sourceId)?.isNetwork == true && ++missedInARow >= 3) break
+                _uiState.value = _uiState.value.copy(lengthFill = LengthFill(i + 1, missing.size))
+            }
+            if (currentPlace() != place) return@launch
+            _uiState.value = _uiState.value.copy(lengthFill = LengthFill(missing.size, missing.size, running = false))
+            if (found > 0) resortByLength()
+        }
+    }
+
+    /** The list on screen sorted by length again with the lengths known now (the scroll position stays). */
+    private fun resortByLength() {
+        val s = _uiState.value
+        if (s.sortField != SORT_LENGTH) return
+        s.favoritesKind?.let { renderFavorites(it, restoreScroll = false, fill = false); return }
+        val folder = s.currentFolder ?: return
+        viewModelScope.launch(exceptionHandler) {
+            val sorted = withContext(Dispatchers.Default) { applySort(s.files, SORT_LENGTH, s.sortAscending) }
+            val now = _uiState.value
+            if (now.currentFolder != folder || now.sortField != SORT_LENGTH || now.sortAscending != s.sortAscending) return@launch
+            _uiState.value = now.copy(files = sorted)
+            val key = folder.toUriString()
+            directoryCache[key]?.let { directoryCache[key] = it.copy(files = sorted, sortField = SORT_LENGTH, sortAscending = s.sortAscending) }
+        }
+    }
+
+    /** Explicit scans of the song lengths (see [com.wing.folderplayer.data.metadata.DurationRepository.startScan]). */
+    val lengthScan: StateFlow<com.wing.folderplayer.data.metadata.DurationRepository.ScanProgress> = durations.scan
+
+    private fun scanLengths(roots: List<SourceRef>) {
+        if (roots.isEmpty()) return
+        if (!durations.startScan(roots)) _uiState.value = _uiState.value.copy(message = Strings.get(R.string.length_scan_busy))
+    }
+
+    /** The folder on screen and the folders below it. */
+    fun scanCurrentFolderLengths() { _uiState.value.currentFolder?.let { scanLengths(listOf(it)) } }
+
+    fun scanBookmarkLengths(bookmark: Bookmark) = scanLengths(listOf(bookmark.ref))
+
+    /** Every bookmarked folder the source list shows. */
+    fun scanAllBookmarkLengths() {
+        val state = _uiState.value
+        scanLengths(state.bookmarks.filter { b -> state.availableSources.any { it.id == b.sourceId } }.map { it.ref })
+    }
+
+    fun cancelLengthScan() = durations.cancelScan()
+
+    fun dismissLengthScan() = durations.dismissScanResult()
 
     fun syncFavorites() {
         viewModelScope.launch(exceptionHandler) {

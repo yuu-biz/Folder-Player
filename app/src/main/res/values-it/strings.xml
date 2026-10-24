@@ -387,4 +387,36 @@
     <string name="player_seek_fine">Regolazione fine</string>
     <string name="browser_favorite_songs">Brani preferiti</string>
     <string name="browser_favorite_folders">Cartelle preferite</string>
+    <string name="sort_length">Durata</string>
+    <string name="length_scan_folder">Leggi le durate (questa cartella e sottocartelle)</string>
+    <string name="length_scan_bookmarks">Leggi le durate dei segnalibri</string>
+    <string name="length_scan_bookmark">Leggi le durate</string>
+    <string name="length_scan_busy">Le durate sono già in lettura</string>
+    <string name="length_scan_counts">%1$d cartelle, %2$d brani, %3$d letti ora</string>
+    <string name="length_scan_running">Lettura delle durate: %s</string>
+    <string name="length_scan_cancelled">Interrotto: %s</string>
+    <string name="length_scan_done">Durate lette: %s</string>
+    <string name="length_scan_truncated">interrotto al limite</string>
+    <string name="length_scan_action">Leggi</string>
+    <string name="length_fill_running">Lettura delle durate per l\'ordine: %1$d / %2$d</string>
+    <plurals name="length_scan_not_read">
+        <item quantity="one">%d non letto</item>
+        <item quantity="many">%d non letti</item>
+        <item quantity="other">%d non letti</item>
+    </plurals>
+    <plurals name="length_scan_unparsable">
+        <item quantity="one">%d senza durata</item>
+        <item quantity="many">%d senza durata</item>
+        <item quantity="other">%d senza durata</item>
+    </plurals>
+    <plurals name="length_scan_skipped">
+        <item quantity="one">%d cartella non leggibile</item>
+        <item quantity="many">%d cartelle non leggibili</item>
+        <item quantity="other">%d cartelle non leggibili</item>
+    </plurals>
+    <plurals name="length_fill_unknown">
+        <item quantity="one">%d brano senza durata nota (in fondo)</item>
+        <item quantity="many">%d brani senza durata nota (in fondo)</item>
+        <item quantity="other">%d brani senza durata nota (in fondo)</item>
+    </plurals>
 </resources>

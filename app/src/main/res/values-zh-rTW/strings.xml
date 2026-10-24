@@ -369,4 +369,28 @@
     <string name="player_seek_fine">微調</string>
     <string name="browser_favorite_songs">收藏的歌曲</string>
     <string name="browser_favorite_folders">收藏的資料夾</string>
+    <string name="sort_length">長度</string>
+    <string name="length_scan_folder">讀取歌曲長度（此資料夾及子資料夾）</string>
+    <string name="length_scan_bookmarks">讀取書籤中的歌曲長度</string>
+    <string name="length_scan_bookmark">讀取歌曲長度</string>
+    <string name="length_scan_busy">已在讀取歌曲長度</string>
+    <string name="length_scan_counts">%1$d 個資料夾，%2$d 首，本次讀取 %3$d 首</string>
+    <string name="length_scan_running">正在讀取歌曲長度：%s</string>
+    <string name="length_scan_cancelled">已停止：%s</string>
+    <string name="length_scan_done">已讀取歌曲長度：%s</string>
+    <string name="length_scan_truncated">已達上限</string>
+    <string name="length_scan_action">讀取</string>
+    <string name="length_fill_running">正在讀取長度以排序：%1$d / %2$d</string>
+    <plurals name="length_scan_not_read">
+        <item quantity="other">%d 首未能讀取</item>
+    </plurals>
+    <plurals name="length_scan_unparsable">
+        <item quantity="other">%d 首無長度</item>
+    </plurals>
+    <plurals name="length_scan_skipped">
+        <item quantity="other">%d 個資料夾無法讀取</item>
+    </plurals>
+    <plurals name="length_fill_unknown">
+        <item quantity="other">%d 首長度未知（排在最後）</item>
+    </plurals>
 </resources>

@@ -75,15 +75,17 @@ class FavoritesSortUiTest : UiTestBase() {
         assertEquals(track.path, item.path)
         assertTrue("size and time read", item.size > 0 && item.modified > 0)
 
-        click("btn_collapse_player")
+        toBrowser()
         onUi { browser.exitSource() }
+        until(5_000, "source list") { exists("entry_favorite_songs") }
         click("entry_favorite_songs")
         until(5_000, "in the songs list") { exists("item_track.flac") }
         onUi { player.pauseLocal() }
         toPlayer()
         click("btn_favorite_song")
         until(5_000, "taken out") { !player.currentIsFavorite.value && browser.favoritesRepository.items.value.isEmpty() }
-        click("btn_collapse_player")
-        until(5_000, "the songs list follows") { !exists("item_track.flac") }
+        toBrowser()
+        // (The list may keep the row node for reuse: the entries say it.)
+        until(5_000, "the songs list follows") { bs.showingFavorites && bs.files.isEmpty() }
     }
 }
