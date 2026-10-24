@@ -356,4 +356,19 @@
         <item quantity="one">%d song</item>
         <item quantity="other">%d songs</item>
     </plurals>
+    <string name="common_rename">Rename</string>
+    <string name="common_name">Name</string>
+    <string name="file_move">Move to…</string>
+    <string name="file_move_title">Move “%1$s” to</string>
+    <string name="file_move_here">Move here</string>
+    <string name="file_name_invalid">Not a valid file name (not allowed: / \ : * ? \" &lt; &gt; |)</string>
+    <string name="file_name_taken">There is already a file named “%1$s” there</string>
+    <string name="file_delete_title">Delete this file?</string>
+    <string name="file_delete_text">“%1$s” is deleted from %2$s. This cannot be undone.</string>
+    <string name="file_renamed">Renamed to %1$s</string>
+    <string name="file_moved">Moved to %1$s</string>
+    <string name="file_deleted">Deleted %1$s</string>
+    <string name="file_op_playing">This file is playing. Play another one first.</string>
+    <string name="file_op_local_refused">Android lets this app change only its own files in this folder. To rename, move or delete files here, add the folder with “Folder on this device (SAF)…” (+ on the source list).</string>
+    <string name="file_op_failed">Could not change the file: %1$s</string>
 </resources>

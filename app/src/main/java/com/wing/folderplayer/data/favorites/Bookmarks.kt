@@ -61,7 +61,7 @@ object BookmarksCodec {
     }
 }
 
-/** The bookmarks of this device, in the order they were added. Writes go through a temporary file. */
+/** The bookmarks of this device, in the order the user put them (new ones at the end). Writes go through a temporary file. */
 class BookmarksRepository(private val file: File, private val clock: () -> Long = System::currentTimeMillis) {
     private val lock = Any()
 
@@ -120,5 +120,35 @@ class BookmarksRepository(private val file: File, private val clock: () -> Long 
 
     fun toggle(ref: SourceRef, name: String) {
         synchronized(lock) { if (isBookmarked(ref)) remove(ref) else add(ref, name) }
+    }
+
+    /** The name the list shows; a blank name is ignored (the list would fall back to the folder's own name). */
+    fun rename(id: String, name: String) {
+        val n = name.trim()
+        if (n.isEmpty()) return
+        synchronized(lock) {
+            val list = _items.value
+            val i = list.indexOfFirst { it.id == id }
+            if (i < 0 || list[i].name == n) return
+            store(list.toMutableList().also { it[i] = it[i].copy(name = n) })
+        }
+    }
+
+    /**
+     * Swaps the bookmark with the next one up ([delta] < 0) or down among those [shown] (the list hides bookmarks whose
+     * source was removed: moving past one of them would change nothing on screen). Nothing happens at either end.
+     */
+    fun move(id: String, delta: Int, shown: (Bookmark) -> Boolean = { true }) {
+        if (delta == 0) return
+        synchronized(lock) {
+            val list = _items.value
+            val from = list.indexOfFirst { it.id == id }
+            if (from < 0) return
+            val step = if (delta < 0) -1 else 1
+            var to = from + step
+            while (to in list.indices && !shown(list[to])) to += step
+            if (to !in list.indices) return
+            store(list.toMutableList().also { val t = it[from]; it[from] = it[to]; it[to] = t })
+        }
     }
 }

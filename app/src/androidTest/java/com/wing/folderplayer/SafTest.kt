@@ -17,6 +17,7 @@ import androidx.test.uiautomator.UiScrollable
 import androidx.test.uiautomator.UiSelector
 import androidx.test.uiautomator.Until
 import com.wing.folderplayer.data.nfo.NfoParser
+import com.wing.folderplayer.data.source.FileOperations
 import com.wing.folderplayer.data.source.SourceConfig
 import com.wing.folderplayer.data.source.SourceException
 import com.wing.folderplayer.data.source.SourceRef
@@ -186,5 +187,54 @@ class SafTest : ServiceTestBase() {
         waitFor(10_000, "cover") { state.coverUri?.toString()?.contains("cover.jpg") == true }
         val nfo = NfoParser.parse(fs.readBytes("/Info.nfo", 1 shl 20), "Info.nfo")
         assertEquals("Album A (NFO)", nfo.title)
+    }
+
+    /**
+     * Rename, move and delete through SAF (renameDocument / moveDocument), on scratch files written into the folder picked by
+     * `a_`; the fixture's own files are not touched. Also the rename that replaces a file, which the favourites sync uses.
+     */
+    @Test fun e_renameMoveDeleteThroughSaf() {
+        val src = safSource() ?: error("run a_pickNomediaFolderThroughSystemPicker first")
+        val fs = SourceRegistry.fileSystem(src.id)
+        val tree = Uri.parse(src.url)
+        val resolver = Fx.ctx.contentResolver
+        fun cleanUp() {
+            for (p in listOf("/fileops-a.txt", "/fileops-b.txt", "/fileops-taken.txt", "/fileops-dir/fileops-b.txt", "/fileops-dir/x.txt")) runCatching { fs.delete(p) }
+            runCatching { fs.delete("/fileops-dir") }
+        }
+        cleanUp()
+        try {
+            android.provider.DocumentsContract.createDocument(resolver,
+                android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, android.provider.DocumentsContract.getTreeDocumentId(tree)),
+                android.provider.DocumentsContract.Document.MIME_TYPE_DIR, "fileops-dir") ?: error("no folder created")
+            fs.write("/fileops-a.txt", "A".toByteArray(), overwrite = false)
+            fs.write("/fileops-taken.txt", "T".toByteArray(), overwrite = false)
+
+            val renamed = FileOperations.rename(fs, fs.stat("/fileops-a.txt")!!, "fileops-b.txt")
+            assertEquals("/fileops-b.txt", renamed.path)
+            assertEquals(null, fs.stat("/fileops-a.txt"))
+            assertEquals("A", fs.readText("/fileops-b.txt"))
+
+            val taken = runCatching { FileOperations.rename(fs, renamed, "FILEOPS-TAKEN.txt") }.exceptionOrNull()
+            assertTrue("taken name refused: $taken", taken is FileOperations.Failure.AlreadyExists)
+            assertEquals("T", fs.readText("/fileops-taken.txt"))
+
+            val moved = FileOperations.move(fs, renamed, "/fileops-dir")
+            assertEquals("/fileops-dir/fileops-b.txt", moved.path)
+            assertEquals(null, fs.stat("/fileops-b.txt"))
+            assertEquals("A", fs.readText("/fileops-dir/fileops-b.txt"))
+
+            // The favourites sync: a temporary file renamed over the real one (here from another folder).
+            fs.write("/fileops-dir/x.txt", "new".toByteArray(), overwrite = false)
+            assertTrue(fs.rename("/fileops-dir/x.txt", "/fileops-taken.txt"))
+            assertEquals("new", fs.readText("/fileops-taken.txt"))
+            assertEquals(listOf("fileops-taken.txt"), fs.list("/").map { it.name }.filter { it.startsWith("fileops-") && it != "fileops-dir" })
+
+            FileOperations.delete(fs, moved)
+            assertEquals(null, fs.stat("/fileops-dir/fileops-b.txt"))
+            Fx.log("SAF file operations: rename, move, replace, delete PASS")
+        } finally {
+            cleanUp()
+        }
     }
 }

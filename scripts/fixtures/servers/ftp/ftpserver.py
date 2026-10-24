@@ -21,7 +21,7 @@ def prepare():
     if os.path.exists(ROOT):
         shutil.rmtree(ROOT)
     shutil.copytree("/fixture", ROOT)
-    os.makedirs(os.path.join(ROOT, "rw"), exist_ok=True)
+    os.makedirs(os.path.join(ROOT, "rw", "sub"), exist_ok=True)
     locked = os.path.join(ROOT, "Locked")
     os.makedirs(locked, exist_ok=True)
 

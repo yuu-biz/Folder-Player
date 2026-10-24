@@ -1,6 +1,8 @@
 package com.wing.folderplayer
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.wing.folderplayer.data.source.SourceRef
@@ -94,5 +96,40 @@ class BookmarksUiTest : UiTestBase() {
         until(5_000, "row gone") { !shown("bookmark_Album-B") }
         until(5_000, "section header gone") { !shown("bookmarks_header") }
         assertTrue(exists("entry_favorites") && exists("source_list"))
+    }
+
+    /** Long-press menu of a bookmark: rename (only the name the list shows) and move up / down, kept after the change. */
+    @Test fun c40_renameAndMoveFromTheLongPressMenu() {
+        onUi { browser.uiState.value.bookmarks.forEach { browser.removeBookmark(it) } }
+        until(5_000, "no bookmarks") { browser.uiState.value.bookmarks.isEmpty() }
+        onUi {
+            for (name in listOf("Album-A", "Album-B")) browser.bookmarksRepository.add(SourceRef(local, "$fx/$name"), name)
+            browser.bookmarksRepository.add(SourceRef(local, fx), "fixture")
+            browser.exitSource()
+        }
+        until(5_000, "source list") { shown("bookmark_fixture") }
+        fun names() = browser.uiState.value.bookmarks.map { it.name }
+
+        longClick("bookmark_Album-A")
+        assertFalse("the first one cannot move up", exists("bookmark_move_up"))
+        click("bookmark_rename")
+        until(5_000, "name dialog") { exists("name_field") }
+        compose.onNodeWithTag("name_field").performTextReplacement("  Jazz  ")
+        click("name_confirm")
+        until(5_000, "renamed") { names() == listOf("Jazz", "Album-B", "fixture") && shown("bookmark_Jazz") }
+        assertEquals("the folder stays the same", "$fx/Album-A", browser.uiState.value.bookmarks[0].path)
+
+        longClick("bookmark_fixture")
+        assertFalse("the last one cannot move down", exists("bookmark_move_down"))
+        click("bookmark_move_up")
+        until(5_000, "moved up") { names() == listOf("Jazz", "fixture", "Album-B") }
+        longClick("bookmark_Jazz")
+        click("bookmark_move_down")
+        until(5_000, "moved down") { names() == listOf("fixture", "Jazz", "Album-B") }
+
+        val stored = com.wing.folderplayer.data.favorites.BookmarksRepository(java.io.File(Fx.ctx.filesDir, "favorites/bookmarks.json"))
+        assertEquals("kept in the file", listOf("fixture", "Jazz", "Album-B"), stored.items.value.map { it.name })
+        click("bookmark_Jazz")
+        until(15_000, "the renamed bookmark opens its folder") { browser.uiState.value.currentFolder?.path == "$fx/Album-A" && !browser.uiState.value.isLoading }
     }
 }

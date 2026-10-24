@@ -17,11 +17,14 @@ import com.wing.folderplayer.data.prefs.SourcePreferences
 import com.wing.folderplayer.data.search.NameFilter
 import com.wing.folderplayer.data.search.SearchProgress
 import com.wing.folderplayer.data.search.SearchRepository
+import com.wing.folderplayer.R
 import com.wing.folderplayer.data.source.ConnectionTestResult
+import com.wing.folderplayer.data.source.FileOperations
 import com.wing.folderplayer.data.source.MediaTypes
 import com.wing.folderplayer.data.source.MusicFile
 import com.wing.folderplayer.data.source.sortMusicFiles
 import com.wing.folderplayer.data.source.SourceConfig
+import com.wing.folderplayer.data.source.SourceException
 import com.wing.folderplayer.data.source.SourcePath
 import com.wing.folderplayer.data.source.SourceRef
 import com.wing.folderplayer.data.source.SourceRegistry
@@ -30,6 +33,7 @@ import com.wing.folderplayer.data.viewer.ViewerCache
 import com.wing.folderplayer.data.viewer.ViewerKind
 import com.wing.folderplayer.data.viewer.ViewerText
 import com.wing.folderplayer.data.viewer.ViewerTypes
+import com.wing.folderplayer.utils.Strings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -93,6 +97,9 @@ data class BrowserUiState(
     val filterOpen: Boolean = false,
     /** The file open in the viewer (text, image or PDF beside the songs), or null. */
     val viewer: ViewerRequest? = null,
+    /** A rename, move or delete waiting for the user's confirmation (its dialog is shown), or running ([fileOpBusy]). */
+    val fileOp: FileOp? = null,
+    val fileOpBusy: Boolean = false,
 ) {
     /** [files] narrowed by [filter]: the list on screen (playing a song of it queues the songs shown). */
     val visibleFiles: List<MusicFile> by lazy(LazyThreadSafetyMode.NONE) { NameFilter.apply(files, filter) }
@@ -551,6 +558,91 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         _uiState.value = _uiState.value.copy(selectedFileForPlaylist = null)
     }
 
+    // ---------------- file operations ----------------
+
+    /** Asks for a rename, a move or a delete of a file ([FileOp]); the file that is playing is refused. */
+    fun startFileOp(op: FileOp) {
+        val playing = _uiState.value.currentlyPlayingMediaId?.let { com.wing.folderplayer.data.source.SourceUris.parse(it) }
+        if (playing == op.file.ref) {
+            _uiState.value = _uiState.value.copy(selectedFileForPlaylist = null, message = Strings.get(R.string.file_op_playing))
+            return
+        }
+        _uiState.value = _uiState.value.copy(selectedFileForPlaylist = null, fileOp = op)
+    }
+
+    fun cancelFileOp() {
+        if (!_uiState.value.fileOpBusy) _uiState.value = _uiState.value.copy(fileOp = null)
+    }
+
+    /** The folders inside [folder], by name, for the folder picker of "Move to". */
+    suspend fun listFolders(folder: SourceRef): List<MusicFile> = runInterruptible(Dispatchers.IO) {
+        sortMusicFiles(SourceRegistry.fileSystem(folder).list(folder.path).filter { it.isDirectory }, "NAME", true)
+    }
+
+    fun renameFile(file: MusicFile, name: String) = runFileOp(file, { fs -> FileOperations.rename(fs, file, name) }) {
+        Strings.get(R.string.file_renamed, it!!.name)
+    }
+
+    fun moveFile(file: MusicFile, folder: String) = runFileOp(file, { fs -> FileOperations.move(fs, file, folder) }) {
+        Strings.get(R.string.file_moved, folder)
+    }
+
+    fun deleteFile(file: MusicFile) = runFileOp(file, { fs -> FileOperations.delete(fs, file); null }) {
+        Strings.get(R.string.file_deleted, file.name)
+    }
+
+    /** Runs [op] on the file's source; on success the folders it touched are read again and the viewer follows the file. */
+    private fun runFileOp(file: MusicFile, op: (com.wing.folderplayer.data.source.SourceFileSystem) -> MusicFile?, done: (MusicFile?) -> String) {
+        if (_uiState.value.fileOpBusy) return
+        _uiState.value = _uiState.value.copy(fileOpBusy = true)
+        viewModelScope.launch(exceptionHandler) {
+            val result = runCatching { runInterruptible(Dispatchers.IO) { op(SourceRegistry.fileSystem(file.ref)) } }
+            _uiState.value = _uiState.value.copy(fileOpBusy = false)
+            result.onFailure { e ->
+                _uiState.value = _uiState.value.copy(fileOp = null)
+                _error.value = describeFileOpFailure(file, e)
+            }.onSuccess { moved ->
+                afterFileOp(file, moved)
+                _uiState.value = _uiState.value.copy(fileOp = null, message = done(moved))
+            }
+        }
+    }
+
+    private fun describeFileOpFailure(file: MusicFile, e: Throwable): String = when (e) {
+        is FileOperations.Failure.InvalidName -> Strings.get(R.string.file_name_invalid)
+        is FileOperations.Failure.AlreadyExists -> Strings.get(R.string.file_name_taken, e.name)
+        is FileOperations.Failure.Refused, is SourceException.PermissionDenied, is SourceException.ReadOnly ->
+            if (SourceRegistry.get(file.sourceId)?.type == SourceType.LOCAL) Strings.get(R.string.file_op_local_refused)
+            else Strings.get(R.string.file_op_failed, com.wing.folderplayer.ui.player.PlaybackErrorText.describe(e))
+        else -> Strings.get(R.string.file_op_failed, com.wing.folderplayer.ui.player.PlaybackErrorText.describe(e))
+    }
+
+    /** [moved]: the file under its new path, null when it was deleted. */
+    private fun afterFileOp(file: MusicFile, moved: MusicFile?) {
+        val folders = listOfNotNull(SourcePath.parent(file.path), moved?.path?.let(SourcePath::parent)).distinct()
+            .map { SourceRef(file.sourceId, it) }
+        folders.forEach { directoryCache.remove(it.toUriString()); thumbnails.invalidate(it) }
+        bumpThumbnails()
+        val same = { f: MusicFile -> f.sourceId == file.sourceId && f.path == file.path }
+        val state = _uiState.value
+        val viewer = state.viewer?.let { v ->
+            val i = v.files.indexOfFirst(same)
+            when {
+                i < 0 -> v
+                // Renamed: still shown; moved away or deleted: the next image (or none).
+                moved != null && SourcePath.parent(moved.path) == SourcePath.parent(file.path) ->
+                    v.copy(files = v.files.toMutableList().also { it[i] = moved })
+                else -> {
+                    val rest = v.files.filterIndexed { j, _ -> j != i }
+                    if (rest.isEmpty()) null else ViewerRequest(rest, minOf(v.index, rest.lastIndex))
+                }
+            }
+        }
+        val results = state.search.results.mapNotNull { if (same(it)) moved else it }
+        _uiState.value = state.copy(viewer = viewer, search = state.search.copy(results = results))
+        state.currentFolder?.takeIf { it in folders }?.let { loadFolder(it) }
+    }
+
     // ---------------- thumbnails ----------------
 
     suspend fun folderThumbnail(folder: SourceRef): ArtworkResult = thumbnails.folderThumbnail(folder)
@@ -596,6 +688,14 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun removeBookmark(bookmark: Bookmark) = bookmarksRepository.remove(bookmark.ref)
+
+    fun renameBookmark(bookmark: Bookmark, name: String) = bookmarksRepository.rename(bookmark.id, name)
+
+    /** Up ([delta] < 0) or down past the next bookmark the source list shows (those of removed sources are hidden). */
+    fun moveBookmark(bookmark: Bookmark, delta: Int) {
+        val sources = _uiState.value.availableSources
+        bookmarksRepository.move(bookmark.id, delta) { b -> sources.any { it.id == b.sourceId } }
+    }
 
     /** The favourites list (entered from the source list, or from a folder when called from elsewhere). */
     fun showFavorites() {

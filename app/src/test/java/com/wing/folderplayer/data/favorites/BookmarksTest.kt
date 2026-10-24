@@ -9,7 +9,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 
-/** Bookmarks: folders of this device, kept in their own file, in the order they were added. */
+/** Bookmarks: folders of this device, kept in their own file, new ones at the end; renamed and moved by the user. */
 class BookmarksTest {
     @get:Rule val tmp = TemporaryFolder()
     private var now = 1_000L
@@ -89,5 +89,35 @@ class BookmarksTest {
         file.parentFile!!.mkdirs(); file.writeText(text)
         assertTrue(repo().items.value.isEmpty())
         assertTrue(file.parentFile!!.listFiles()!!.any { it.name.startsWith("bookmarks.json.corrupt-") && it.readText() == text })
+    }
+
+    @Test fun renameKeepsThePlaceAndIsStored() {
+        val r = repo()
+        r.add(album, "Album #1+%"); r.add(root, "NAS")
+        val id = r.items.value[0].id
+        r.rename(id, "  Jazz  ")
+        r.rename(id, "   ")
+        r.rename("no-such-id", "x")
+        assertEquals("trimmed; a blank name is ignored", listOf("Jazz", "NAS"), r.items.value.map { it.name })
+        assertEquals("kept in the file", listOf("Jazz", "NAS"), repo().items.value.map { it.name })
+        assertTrue(repo().isBookmarked(album))
+    }
+
+    @Test fun moveSwapsWithTheNextShownBookmarkAndStopsAtTheEnds() {
+        val r = repo()
+        val hidden = SourceRef("removed-source", "/")
+        r.add(SourceRef("s", "/a"), "a"); r.add(hidden, "hidden"); r.add(SourceRef("s", "/b"), "b"); r.add(SourceRef("s", "/c"), "c")
+        val shown = { b: Bookmark -> b.sourceId != "removed-source" }
+        fun names() = r.items.value.map { it.name }
+        fun id(name: String) = r.items.value.first { it.name == name }.id
+        r.move(id("a"), -1, shown)
+        assertEquals("first stays first", listOf("a", "hidden", "b", "c"), names())
+        r.move(id("a"), +1, shown)
+        assertEquals("passes the hidden one: a moves below b on screen", listOf("b", "hidden", "a", "c"), names())
+        r.move(id("c"), -1, shown)
+        assertEquals(listOf("b", "hidden", "c", "a"), names())
+        r.move(id("a"), +1, shown)
+        assertEquals("last stays last", listOf("b", "hidden", "c", "a"), names())
+        assertEquals("kept in the file", names(), repo().items.value.map { it.name })
     }
 }
