@@ -36,6 +36,9 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DriveFileMove
+import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material3.AlertDialog
@@ -151,7 +154,10 @@ fun FileViewerDialog(
     loadText: TextLoader,
     loadFile: FileLoader,
     onOpenExternal: (MusicFile) -> Unit,
+    /** Rename, move or delete of the file shown (asked in the ⋮ menu; [overlay] shows its dialog). */
+    onFileOp: (FileOp) -> Unit,
     onDismiss: () -> Unit,
+    overlay: @Composable () -> Unit = {},
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         val pager = rememberPagerState(initialPage = request.index) { request.files.size }
@@ -192,27 +198,48 @@ fun FileViewerDialog(
                             IconButton(onClick = { onOpenExternal(current) }, modifier = Modifier.testTag("viewer_open_external")) {
                                 Icon(Icons.Default.OpenInNew, contentDescription = stringResource(R.string.viewer_open_external))
                             }
-                            if (kind == ViewerKind.TEXT) Box {
+                            Box {
                                 IconButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("viewer_menu")) {
                                     Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.browser_more))
                                 }
                                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                                     DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.viewer_monospace)) },
-                                        leadingIcon = { if (monospace) Icon(Icons.Default.Check, contentDescription = null) },
-                                        onClick = { monospace = !monospace; menuOpen = false },
-                                        modifier = Modifier.testTag("viewer_monospace"),
+                                        text = { Text(stringResource(R.string.common_rename)) },
+                                        leadingIcon = { Icon(Icons.Default.DriveFileRenameOutline, contentDescription = null) },
+                                        onClick = { menuOpen = false; onFileOp(FileOp.Rename(current)) },
+                                        modifier = Modifier.testTag("viewer_rename"),
                                     )
-                                    Divider()
-                                    Text(stringResource(R.string.viewer_encoding), style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                                    TextEncoding.values().forEach { enc ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.file_move)) },
+                                        leadingIcon = { Icon(Icons.Default.DriveFileMove, contentDescription = null) },
+                                        onClick = { menuOpen = false; onFileOp(FileOp.Move(current)) },
+                                        modifier = Modifier.testTag("viewer_move"),
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.common_delete)) },
+                                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                                        onClick = { menuOpen = false; onFileOp(FileOp.Delete(current)) },
+                                        modifier = Modifier.testTag("viewer_delete"),
+                                    )
+                                    if (kind == ViewerKind.TEXT) {
+                                        Divider()
                                         DropdownMenuItem(
-                                            text = { Text(if (enc == TextEncoding.AUTO) usedEncoding?.takeIf { encoding == TextEncoding.AUTO }?.let { stringResource(R.string.viewer_encoding_auto, it.label) } ?: stringResource(R.string.viewer_encoding_automatic) else enc.label) },
-                                            leadingIcon = { if (enc == encoding) Icon(Icons.Default.Check, contentDescription = null) },
-                                            onClick = { encoding = enc; menuOpen = false },
-                                            modifier = Modifier.testTag("viewer_encoding_${enc.name}"),
+                                            text = { Text(stringResource(R.string.viewer_monospace)) },
+                                            leadingIcon = { if (monospace) Icon(Icons.Default.Check, contentDescription = null) },
+                                            onClick = { monospace = !monospace; menuOpen = false },
+                                            modifier = Modifier.testTag("viewer_monospace"),
                                         )
+                                        Divider()
+                                        Text(stringResource(R.string.viewer_encoding), style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                                        TextEncoding.values().forEach { enc ->
+                                            DropdownMenuItem(
+                                                text = { Text(if (enc == TextEncoding.AUTO) usedEncoding?.takeIf { encoding == TextEncoding.AUTO }?.let { stringResource(R.string.viewer_encoding_auto, it.label) } ?: stringResource(R.string.viewer_encoding_automatic) else enc.label) },
+                                                leadingIcon = { if (enc == encoding) Icon(Icons.Default.Check, contentDescription = null) },
+                                                onClick = { encoding = enc; menuOpen = false },
+                                                modifier = Modifier.testTag("viewer_encoding_${enc.name}"),
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -234,6 +261,7 @@ fun FileViewerDialog(
                 }
             }
         }
+        overlay()
     }
 }
 

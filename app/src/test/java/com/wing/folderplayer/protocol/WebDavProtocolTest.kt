@@ -51,6 +51,8 @@ class WebDavProtocolTest {
         assertOutcome(ConnectionOutcome.ROOT_NOT_FOUND, fs("alice", "pa:ss/1", "/nope"))
     }
 
+    @Test fun fileOperations() = fs("alice", "pa:ss/1").use { ProtocolFixture.checkFileOperations(it) }
+
     @Test fun favoritesSyncAndNfoSaveRespectWriteRights() {
         val path = "/rw/fav-${System.nanoTime()}.json"
         val alice = fs("alice", "pa:ss/1")

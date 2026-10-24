@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -116,6 +117,22 @@ fun BrowserScreen(
         )
     }
 
+    val fileOpActions = remember(viewModel) {
+        FileOpActions(
+            listFolders = viewModel::listFolders,
+            onRename = viewModel::renameFile,
+            onMove = viewModel::moveFile,
+            onDelete = viewModel::deleteFile,
+            onDismiss = viewModel::cancelFileOp,
+        )
+    }
+    val fileOpDialog: @Composable () -> Unit = {
+        uiState.fileOp?.let { op ->
+            val sourceName = uiState.availableSources.firstOrNull { it.id == op.file.sourceId }?.name.orEmpty()
+            FileOpDialog(op, uiState.fileOpBusy, sourceName, fileOpActions)
+        }
+    }
+
     val externalOpener = rememberExternalOpener(viewModel::viewerFile)
     ExternalOpenProgress(externalOpener)
     uiState.viewer?.let { request ->
@@ -124,9 +141,13 @@ fun BrowserScreen(
             loadText = viewModel::viewerText,
             loadFile = viewModel::viewerFile,
             onOpenExternal = { externalOpener.open(it) },
+            onFileOp = viewModel::startFileOp,
             onDismiss = { viewModel.closeViewer() },
+            // The viewer is a window of its own: its file dialogs are shown inside it, above the file.
+            overlay = { fileOpDialog() },
         )
     }
+    if (uiState.viewer == null) fileOpDialog()
 
     val selected = uiState.selectedFileForPlaylist
     if (selected != null && !showPlaylistPicker) {
@@ -139,6 +160,7 @@ fun BrowserScreen(
             onAddToPlaylist = { showPlaylistPicker = true },
             onToggleFavorite = { viewModel.toggleFavorite(selected); viewModel.closePlaylistDialog() },
             onToggleBookmark = if (selected.isDirectory) ({ viewModel.toggleBookmark(selected); viewModel.closePlaylistDialog() }) else null,
+            onFileOp = if (!selected.isDirectory) viewModel::startFileOp else null,
             onDismiss = { viewModel.closePlaylistDialog() },
         )
     }
@@ -155,8 +177,19 @@ fun BrowserScreen(
     }
 
     val snackbar = remember { SnackbarHostState() }
-    LaunchedEffect(error) { error?.let { snackbar.showSnackbar(it); viewModel.clearError() } }
-    LaunchedEffect(uiState.message) { uiState.message?.let { snackbar.showSnackbar(it, duration = SnackbarDuration.Long); viewModel.clearMessage() } }
+    // The viewer is a window above the browser and would hide the snackbar: while it is open, a toast says it.
+    LaunchedEffect(error) {
+        error?.let {
+            if (uiState.viewer != null) { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show(); viewModel.clearError() }
+            else { snackbar.showSnackbar(it); viewModel.clearError() }
+        }
+    }
+    LaunchedEffect(uiState.message) {
+        uiState.message?.let {
+            if (uiState.viewer != null) { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show(); viewModel.clearMessage() }
+            else { snackbar.showSnackbar(it, duration = SnackbarDuration.Long); viewModel.clearMessage() }
+        }
+    }
 
     val horizontalSafePadding = WindowInsets.displayCutout.asPaddingValues().let {
         val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
@@ -354,6 +387,8 @@ fun BrowserScreen(
                                 bookmarks = uiState.bookmarks.filter { b -> uiState.availableSources.any { it.id == b.sourceId } },
                                 onBookmarkClick = { viewModel.openBookmark(it) },
                                 onBookmarkRemove = { viewModel.removeBookmark(it) },
+                                onBookmarkRename = { b, name -> viewModel.renameBookmark(b, name) },
+                                onBookmarkMove = { b, delta -> viewModel.moveBookmark(b, delta) },
                                 onFavoritesClick = { viewModel.showFavorites() },
                                 onSourceClick = { viewModel.selectSource(it) },
                                 onEditSource = { sourceToEdit = it },
@@ -588,6 +623,9 @@ fun SourceList(
     bookmarks: List<Bookmark>,
     onBookmarkClick: (Bookmark) -> Unit,
     onBookmarkRemove: (Bookmark) -> Unit,
+    onBookmarkRename: (Bookmark, String) -> Unit,
+    /** -1 up, +1 down. */
+    onBookmarkMove: (Bookmark, Int) -> Unit,
     onSourceClick: (SourceConfig) -> Unit,
     onEditSource: (SourceConfig) -> Unit,
     onDeleteSource: (SourceConfig) -> Unit,
@@ -597,6 +635,17 @@ fun SourceList(
     onRepickSaf: () -> Unit,
     onReplaceRemoteFavorites: (SourceConfig) -> Unit,
 ) {
+    var renaming by remember { mutableStateOf<Bookmark?>(null) }
+    renaming?.let { b ->
+        NameDialog(
+            title = stringResource(R.string.common_rename),
+            initial = b.name.ifEmpty { SourcePath.name(b.path) },
+            confirm = stringResource(R.string.common_save),
+            check = { null },
+            onConfirm = { onBookmarkRename(b, it); renaming = null },
+            onDismiss = { renaming = null },
+        )
+    }
     LazyColumn(modifier = Modifier.testTag("source_list")) {
         item {
             ListItem(
@@ -616,7 +665,7 @@ fun SourceList(
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp).semantics { heading() }.testTag("bookmarks_header")
                 )
             }
-            items(bookmarks, key = { "bookmark:" + it.id }) { bookmark ->
+            itemsIndexed(bookmarks, key = { _, it -> "bookmark:" + it.id }) { index, bookmark ->
                 var showMenu by remember { mutableStateOf(false) }
                 val sourceName = sources.firstOrNull { it.id == bookmark.sourceId }?.name.orEmpty()
                 Box {
@@ -629,6 +678,24 @@ fun SourceList(
                             .testTag("bookmark_${bookmark.name}")
                     )
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.common_rename)) },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = { renaming = bookmark; showMenu = false },
+                            modifier = Modifier.testTag("bookmark_rename")
+                        )
+                        if (index > 0) DropdownMenuItem(
+                            text = { Text(stringResource(R.string.common_move_up)) },
+                            leadingIcon = { Icon(Icons.Default.ArrowUpward, contentDescription = null) },
+                            onClick = { onBookmarkMove(bookmark, -1); showMenu = false },
+                            modifier = Modifier.testTag("bookmark_move_up")
+                        )
+                        if (index < bookmarks.lastIndex) DropdownMenuItem(
+                            text = { Text(stringResource(R.string.common_move_down)) },
+                            leadingIcon = { Icon(Icons.Default.ArrowDownward, contentDescription = null) },
+                            onClick = { onBookmarkMove(bookmark, +1); showMenu = false },
+                            modifier = Modifier.testTag("bookmark_move_down")
+                        )
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.browser_remove_bookmark)) },
                             leadingIcon = { Icon(Icons.Default.BookmarkBorder, contentDescription = null) },
@@ -1014,6 +1081,8 @@ private fun FileActionsSheet(
     onToggleFavorite: () -> Unit,
     /** Folders only: null = no bookmark row. */
     onToggleBookmark: (() -> Unit)?,
+    /** Files only: null = no rename / move / delete rows. */
+    onFileOp: ((FileOp) -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -1059,6 +1128,23 @@ private fun FileActionsSheet(
                 leadingContent = { Icon(if (isBookmarked) Icons.Default.BookmarkBorder else Icons.Default.Bookmark, contentDescription = null) },
                 modifier = Modifier.clickable { onToggleBookmark() }.testTag("action_bookmark")
             )
+            if (onFileOp != null) {
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.common_rename)) },
+                    leadingContent = { Icon(Icons.Default.DriveFileRenameOutline, contentDescription = null) },
+                    modifier = Modifier.clickable { onFileOp(FileOp.Rename(file)) }.testTag("action_rename")
+                )
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.file_move)) },
+                    leadingContent = { Icon(Icons.Default.DriveFileMove, contentDescription = null) },
+                    modifier = Modifier.clickable { onFileOp(FileOp.Move(file)) }.testTag("action_move")
+                )
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.common_delete)) },
+                    leadingContent = { Icon(Icons.Default.Delete, contentDescription = null) },
+                    modifier = Modifier.clickable { onFileOp(FileOp.Delete(file)) }.testTag("action_delete")
+                )
+            }
         }
     }
 }

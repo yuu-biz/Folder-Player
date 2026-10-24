@@ -336,4 +336,19 @@
     <plurals name="player_timer_songs_count">
         <item quantity="other">%d 首</item>
     </plurals>
+    <string name="common_rename">重命名</string>
+    <string name="common_name">名称</string>
+    <string name="file_move">移动到…</string>
+    <string name="file_move_title">将“%1$s”移动到</string>
+    <string name="file_move_here">移到这里</string>
+    <string name="file_name_invalid">文件名无效（不可使用：/ \ : * ? \" &lt; &gt; |）</string>
+    <string name="file_name_taken">目标位置已有名为“%1$s”的文件</string>
+    <string name="file_delete_title">删除此文件？</string>
+    <string name="file_delete_text">将从 %2$s 删除“%1$s”。此操作无法撤销。</string>
+    <string name="file_renamed">已重命名为 %1$s</string>
+    <string name="file_moved">已移动到 %1$s</string>
+    <string name="file_deleted">已删除 %1$s</string>
+    <string name="file_op_playing">此文件正在播放。请先播放其他文件。</string>
+    <string name="file_op_local_refused">在此文件夹中，Android 只允许本应用修改它自己创建的文件。要在这里重命名、移动或删除文件，请通过来源列表的 + 用“本机文件夹（SAF）…”添加该文件夹。</string>
+    <string name="file_op_failed">无法更改文件：%1$s</string>
 </resources>

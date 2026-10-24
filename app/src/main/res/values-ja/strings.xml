@@ -336,4 +336,19 @@
     <plurals name="player_timer_songs_count">
         <item quantity="other">%d 曲</item>
     </plurals>
+    <string name="common_rename">名前を変更</string>
+    <string name="common_name">名前</string>
+    <string name="file_move">移動…</string>
+    <string name="file_move_title">「%1$s」の移動先</string>
+    <string name="file_move_here">ここに移動</string>
+    <string name="file_name_invalid">ファイル名に使えません（使えない文字: / \ : * ? \" &lt; &gt; |）</string>
+    <string name="file_name_taken">移動先に「%1$s」という名前のファイルがすでにあります</string>
+    <string name="file_delete_title">このファイルを削除しますか？</string>
+    <string name="file_delete_text">「%1$s」を %2$s から削除します。元に戻せません。</string>
+    <string name="file_renamed">%1$s に名前を変更しました</string>
+    <string name="file_moved">%1$s に移動しました</string>
+    <string name="file_deleted">%1$s を削除しました</string>
+    <string name="file_op_playing">このファイルは再生中です。先に別の曲を再生してください。</string>
+    <string name="file_op_local_refused">このフォルダでは、Android はこのアプリが作ったファイルしか変更させません。名前の変更・移動・削除をするには、ソース一覧の＋から「この端末のフォルダ（SAF）…」でフォルダを追加してください。</string>
+    <string name="file_op_failed">ファイルを変更できませんでした: %1$s</string>
 </resources>

@@ -350,4 +350,19 @@
         <item quantity="many">%d morceaux</item>
         <item quantity="other">%d morceaux</item>
     </plurals>
+    <string name="common_rename">Renommer</string>
+    <string name="common_name">Nom</string>
+    <string name="file_move">Déplacer vers…</string>
+    <string name="file_move_title">Déplacer « %1$s » vers</string>
+    <string name="file_move_here">Déplacer ici</string>
+    <string name="file_name_invalid">Nom de fichier non valide (interdits : / \ : * ? \" &lt; &gt; |)</string>
+    <string name="file_name_taken">Un fichier nommé « %1$s » existe déjà à cet endroit</string>
+    <string name="file_delete_title">Supprimer ce fichier ?</string>
+    <string name="file_delete_text">« %1$s » sera supprimé de %2$s. Cette action est irréversible.</string>
+    <string name="file_renamed">Renommé en %1$s</string>
+    <string name="file_moved">Déplacé vers %1$s</string>
+    <string name="file_deleted">%1$s supprimé</string>
+    <string name="file_op_playing">Ce fichier est en cours de lecture. Lancez-en un autre d\'abord.</string>
+    <string name="file_op_local_refused">Android ne permet à cette application de modifier que ses propres fichiers dans ce dossier. Pour renommer, déplacer ou supprimer des fichiers ici, ajoutez le dossier avec « Dossier sur cet appareil (SAF)… » (+ dans la liste des sources).</string>
+    <string name="file_op_failed">Impossible de modifier le fichier : %1$s</string>
 </resources>

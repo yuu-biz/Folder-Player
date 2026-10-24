@@ -7,7 +7,7 @@ printf 'alicepass\nalicepass\n' | smbpasswd -s -a alice >/dev/null
 printf 'bobpass\nbobpass\n' | smbpasswd -s -a bob >/dev/null
 mkdir -p /srv/music /srv/home/alice/Album /srv/home/bob/Album /srv/alice /srv/public
 cp -a /fixture/. /srv/music/
-mkdir -p /srv/music/rw /srv/music/Locked
+mkdir -p /srv/music/rw/sub /srv/music/Locked
 cp /srv/music/fixture/Album-B/track.flac /srv/music/Locked/secret.flac
 chown -R alice /srv/music/rw
 chown root:root /srv/music/Locked && chmod 0700 /srv/music/Locked

@@ -180,6 +180,47 @@ class SafFileSystem(override val config: SourceConfig, context: Context) : Sourc
         idCache.remove(p)
     }
 
+    /**
+     * A file within this folder tree: renamed in place ([DocumentsContract.renameDocument]) or moved to another folder first
+     * ([DocumentsContract.moveDocument]; false from a provider that cannot move). A file at [to] is replaced, as on the other
+     * sources. A provider that keeps the name taken and picks another one ("a (1).mp3") is undone and reported as false.
+     */
+    override fun rename(from: String, to: String): Boolean {
+        val src = SourcePath.normalize(from)
+        val dst = SourcePath.normalize(to)
+        if (src == dst) return true
+        val srcParent = SourcePath.parent(src) ?: return false
+        val dstParent = SourcePath.parent(dst) ?: return false
+        val name = SourcePath.name(dst)
+        try {
+            stat(dst)?.let { existing -> if (existing.isDirectory || !delete(dst)) return false }
+            var uri = docUri(resolve(src))
+            if (dstParent != srcParent) {
+                uri = DocumentsContract.moveDocument(resolver, uri, docUri(resolve(srcParent)), docUri(resolve(dstParent))) ?: return false
+            }
+            if (name != SourcePath.name(src)) {
+                uri = DocumentsContract.renameDocument(resolver, uri, name) ?: return false
+                if (displayName(uri) != name) {
+                    DocumentsContract.renameDocument(resolver, uri, SourcePath.name(src))
+                    return false
+                }
+            }
+            return true
+        } catch (e: SecurityException) {
+            throw SourceException.PermissionDenied("no write permission for this SAF folder", e)
+        } catch (e: UnsupportedOperationException) {
+            return false
+        } finally {
+            idCache.remove(src)
+            idCache.remove(dst)
+        }
+    }
+
+    private fun displayName(uri: Uri): String? =
+        resolver.query(uri, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        }
+
     override fun delete(path: String): Boolean {
         val p = SourcePath.normalize(path)
         val ok = DocumentsContract.deleteDocument(resolver, docUri(resolve(p)))

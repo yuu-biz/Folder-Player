@@ -123,6 +123,8 @@ class FtpProtocolTest {
         assertOutcome(ConnectionOutcome.OK, anon)
     }
 
+    @Test fun fileOperations() = fs(2121, "alice", "alicepass").use { ProtocolFixture.checkFileOperations(it) }
+
     @Test fun writeRespectsAccountRights() {
         val name = "/rw/ftp-write-${System.nanoTime()}.json"
         fs(2121, "alice", "alicepass").use { ftp ->

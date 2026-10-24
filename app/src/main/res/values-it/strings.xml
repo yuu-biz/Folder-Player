@@ -350,4 +350,19 @@
         <item quantity="many">%d brani</item>
         <item quantity="other">%d brani</item>
     </plurals>
+    <string name="common_rename">Rinomina</string>
+    <string name="common_name">Nome</string>
+    <string name="file_move">Sposta in…</string>
+    <string name="file_move_title">Sposta «%1$s» in</string>
+    <string name="file_move_here">Sposta qui</string>
+    <string name="file_name_invalid">Nome file non valido (non ammessi: / \ : * ? \" &lt; &gt; |)</string>
+    <string name="file_name_taken">Esiste già un file chiamato «%1$s» in quella cartella</string>
+    <string name="file_delete_title">Eliminare questo file?</string>
+    <string name="file_delete_text">«%1$s» verrà eliminato da %2$s. L\'operazione non può essere annullata.</string>
+    <string name="file_renamed">Rinominato in %1$s</string>
+    <string name="file_moved">Spostato in %1$s</string>
+    <string name="file_deleted">%1$s eliminato</string>
+    <string name="file_op_playing">Questo file è in riproduzione. Riproducine prima un altro.</string>
+    <string name="file_op_local_refused">Android consente a questa app di modificare solo i propri file in questa cartella. Per rinominare, spostare o eliminare file qui, aggiungi la cartella con «Cartella su questo dispositivo (SAF)…» (+ nell\'elenco delle sorgenti).</string>
+    <string name="file_op_failed">Impossibile modificare il file: %1$s</string>
 </resources>

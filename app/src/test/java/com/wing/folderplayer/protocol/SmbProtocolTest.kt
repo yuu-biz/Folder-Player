@@ -134,6 +134,8 @@ class SmbProtocolTest {
         a.close(); b.close()
     }
 
+    @Test fun fileOperations() = fs("alice", "alicepass").use { ProtocolFixture.checkFileOperations(it) }
+
     @Test fun writeNeedsPermission() {
         val name = "/rw/write-test-${System.nanoTime()}.txt"
         fs("alice", "alicepass").use { smb ->
