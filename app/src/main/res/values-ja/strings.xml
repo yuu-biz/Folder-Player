@@ -55,7 +55,6 @@
     <string name="browser_shuffle">シャッフル再生</string>
     <string name="browser_up">1つ上の階層へ</string>
     <string name="browser_refresh">更新</string>
-    <string name="browser_favorites">お気に入り</string>
     <string name="browser_add_to_playlist">プレイリストに追加</string>
     <string name="browser_add_favorite">お気に入りに追加</string>
     <string name="browser_remove_favorite">お気に入りから削除</string>
@@ -229,7 +228,6 @@
     <string name="player_no_song">再生中の曲はありません</string>
     <string name="player_loading">読み込み中…</string>
     <string name="player_switching">曲を切り替えています…</string>
-    <string name="player_no_lyrics">歌詞がありません</string>
     <string name="err_seek_unsupported">このサーバーではシークできません（REST 非対応）</string>
     <string name="err_auth_failed">認証に失敗しました</string>
     <string name="err_permission_denied">権限がありません：%1$s</string>
@@ -325,9 +323,6 @@
     <plurals name="browser_search_skipped">
         <item quantity="other">読み取れないフォルダ %d 個をスキップ</item>
     </plurals>
-    <plurals name="browser_favorites_count">
-        <item quantity="other">%d 件</item>
-    </plurals>
     <plurals name="browser_favorite_songs_count">
         <item quantity="other">%d 曲</item>
     </plurals>
@@ -374,7 +369,7 @@
     <string name="length_scan_bookmarks">ブックマークの曲の長さを解析</string>
     <string name="length_scan_bookmark">曲の長さを解析</string>
     <string name="length_scan_busy">曲の長さはすでに解析中です</string>
-    <string name="length_scan_counts">%1$d フォルダ・%2$d 曲（新たに %3$d 曲）</string>
+    <string name="length_scan_counts">フォルダ %1$d・曲 %2$d（新たに %3$d）</string>
     <string name="length_scan_running">曲の長さを解析中: %s</string>
     <string name="length_scan_cancelled">中止しました: %s</string>
     <string name="length_scan_done">解析しました: %s</string>

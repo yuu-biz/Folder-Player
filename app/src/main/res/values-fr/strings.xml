@@ -55,7 +55,6 @@
     <string name="browser_shuffle">Lecture aléatoire</string>
     <string name="browser_up">Dossier parent</string>
     <string name="browser_refresh">Actualiser</string>
-    <string name="browser_favorites">Favoris</string>
     <string name="browser_add_to_playlist">Ajouter à une playlist</string>
     <string name="browser_add_favorite">Ajouter aux favoris</string>
     <string name="browser_remove_favorite">Retirer des favoris</string>
@@ -229,7 +228,6 @@
     <string name="player_no_song">Aucune lecture</string>
     <string name="player_loading">Chargement…</string>
     <string name="player_switching">Changement de morceau…</string>
-    <string name="player_no_lyrics">Aucune parole disponible</string>
     <string name="err_seek_unsupported">Ce serveur ne permet pas de se déplacer (pas de REST)</string>
     <string name="err_auth_failed">Échec de l\'authentification</string>
     <string name="err_permission_denied">Autorisation refusée : %1$s</string>
@@ -331,11 +329,6 @@
         <item quantity="many">%d dossiers illisibles ignorés</item>
         <item quantity="other">%d dossiers illisibles ignorés</item>
     </plurals>
-    <plurals name="browser_favorites_count">
-        <item quantity="one">%d élément</item>
-        <item quantity="many">%d éléments</item>
-        <item quantity="other">%d éléments</item>
-    </plurals>
     <plurals name="browser_favorite_songs_count">
         <item quantity="one">%d morceau</item>
         <item quantity="many">%d morceaux</item>
@@ -392,7 +385,7 @@
     <string name="length_scan_bookmarks">Lire les durées des signets</string>
     <string name="length_scan_bookmark">Lire les durées</string>
     <string name="length_scan_busy">Les durées sont déjà en cours de lecture</string>
-    <string name="length_scan_counts">%1$d dossiers, %2$d morceaux, %3$d lus maintenant</string>
+    <string name="length_scan_counts">dossiers : %1$d, morceaux : %2$d, lus maintenant : %3$d</string>
     <string name="length_scan_running">Lecture des durées : %s</string>
     <string name="length_scan_cancelled">Arrêté : %s</string>
     <string name="length_scan_done">Durées lues : %s</string>

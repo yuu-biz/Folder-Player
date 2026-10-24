@@ -55,7 +55,6 @@
     <string name="browser_shuffle">随机播放</string>
     <string name="browser_up">上一级</string>
     <string name="browser_refresh">刷新</string>
-    <string name="browser_favorites">收藏</string>
     <string name="browser_add_to_playlist">添加到播放列表</string>
     <string name="browser_add_favorite">加入收藏</string>
     <string name="browser_remove_favorite">取消收藏</string>
@@ -229,7 +228,6 @@
     <string name="player_no_song">未在播放</string>
     <string name="player_loading">加载中…</string>
     <string name="player_switching">正在切换曲目…</string>
-    <string name="player_no_lyrics">暂无歌词</string>
     <string name="err_seek_unsupported">此服务器无法跳转（不支持 REST）</string>
     <string name="err_auth_failed">认证失败</string>
     <string name="err_permission_denied">没有权限：%1$s</string>
@@ -325,9 +323,6 @@
     <plurals name="browser_search_skipped">
         <item quantity="other">跳过 %d 个无法读取的文件夹</item>
     </plurals>
-    <plurals name="browser_favorites_count">
-        <item quantity="other">%d 项</item>
-    </plurals>
     <plurals name="browser_favorite_songs_count">
         <item quantity="other">%d 首</item>
     </plurals>
@@ -374,7 +369,7 @@
     <string name="length_scan_bookmarks">读取书签中的歌曲时长</string>
     <string name="length_scan_bookmark">读取歌曲时长</string>
     <string name="length_scan_busy">已在读取歌曲时长</string>
-    <string name="length_scan_counts">%1$d 个文件夹，%2$d 首，本次读取 %3$d 首</string>
+    <string name="length_scan_counts">文件夹：%1$d，歌曲：%2$d，本次读取：%3$d</string>
     <string name="length_scan_running">正在读取歌曲时长：%s</string>
     <string name="length_scan_cancelled">已停止：%s</string>
     <string name="length_scan_done">已读取歌曲时长：%s</string>
