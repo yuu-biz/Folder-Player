@@ -164,7 +164,9 @@ loud from minute 6 to 9, 29 MB) with a seek table of 90 points added by `scripts
 | `w01`–`w05` (AAC in .m4a now through FFmpeg too), `PlayerSheetUiTest#s06` / `#s09`, `NativeDecodeTest`, `NativeIoErrorTest`, `DurationRepositoryTest` | all PASS (9/9 waveform, 2/2, 4/4, 4/4, 6/6) |
 | `WaveformTest` (JVM, 16: also interpolation of bins not measured, window count), all JVM tests, `lintDebug` | 16/16; all: 258 tests, 25 skipped, 0 failures; lint 0 errors, no warning in the changed files |
 
-Not run: a phone (arm64 FFmpeg with NEON, expected faster than the emulator), a real NAS, CBR MP3 and MP3 without a
+On a phone: the owner tried `1.3.2-dev1` (locally and from a NAS) and found it much faster (2026-10-24; not timed).
+
+Not run: timings on a phone or a real NAS, CBR MP3 and MP3 without a
 TOC, AAC / Ogg files over 2 minutes, a FLAC from a real ripper.
 
 ### 5.28 Faster waveform (1.3.1, 2026-10-23)

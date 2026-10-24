@@ -89,7 +89,7 @@ What a user can run into, in one place. The sections below give the history of e
   about 40 of the 600 windows (fewer measured points), so its bars are coarse; a local image is decoded whole. A file
   whose duration is not known up front is decoded whole and stops at the limit. A VBR MP3 whose length the player estimates differently from the decoder can
   have its bars slightly off in time. Timings were measured on an x86_64 emulator (FFmpeg without assembly there) with
-  a NAS simulated by 5 ms per read, not on a real NAS or a phone.
+  a NAS simulated by 5 ms per read; on a phone the owner found it much faster, but did not time it.
 
 ## Image thumbnails, browser-only wide layout, shuffle in the menu (after 1.3.0)
 
