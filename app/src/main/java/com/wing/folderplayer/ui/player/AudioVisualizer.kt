@@ -10,7 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
+import androidx.compose.animation.core.withInfiniteAnimationFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -52,7 +52,8 @@ fun AudioVisualizer(visible: Boolean, playing: Boolean, accent: Color, modifier:
         if (!visible) return@LaunchedEffect
         var lastNs = 0L
         while (true) {
-            val now = withFrameNanos { it }
+            // An infinite animation: tests (and reduced-motion policies) can hold it, as they hold the other endless ones.
+            val now = withInfiniteAnimationFrameNanos { it }
             val dt = if (lastNs == 0L) 0.016f else ((now - lastNs) / 1e9f).coerceIn(0f, 0.1f)
             lastNs = now
             val got = AudioTap.read(samples)

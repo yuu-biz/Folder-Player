@@ -61,7 +61,6 @@
     <string name="browser_shuffle">Shuffle play</string>
     <string name="browser_up">Up one level</string>
     <string name="browser_refresh">Refresh</string>
-    <string name="browser_favorites">Favorites</string>
     <string name="browser_add_to_playlist">Add to playlist</string>
     <string name="browser_add_favorite">Add to favorites</string>
     <string name="browser_remove_favorite">Remove from favorites</string>
@@ -240,7 +239,6 @@
     <string name="player_no_song">No Song Playing</string>
     <string name="player_loading">Loading…</string>
     <string name="player_switching">Switching track…</string>
-    <string name="player_no_lyrics">No lyrics available</string>
     <string name="err_seek_unsupported">This server cannot seek (no REST support)</string>
     <string name="err_auth_failed">Authentication failed</string>
     <string name="err_permission_denied">Permission denied: %1$s</string>
@@ -341,10 +339,6 @@
         <item quantity="one">%d unreadable folder skipped</item>
         <item quantity="other">%d unreadable folders skipped</item>
     </plurals>
-    <plurals name="browser_favorites_count">
-        <item quantity="one">%d item</item>
-        <item quantity="other">%d items</item>
-    </plurals>
     <plurals name="browser_favorite_songs_count">
         <item quantity="one">%d song</item>
         <item quantity="other">%d songs</item>
@@ -396,7 +390,7 @@
     <string name="length_scan_bookmarks">Read song lengths of the bookmarks</string>
     <string name="length_scan_bookmark">Read song lengths</string>
     <string name="length_scan_busy">Song lengths are already being read</string>
-    <string name="length_scan_counts">%1$d folders, %2$d songs, %3$d read now</string>
+    <string name="length_scan_counts">folders: %1$d, songs: %2$d, read now: %3$d</string>
     <string name="length_scan_running">Reading song lengths: %s</string>
     <string name="length_scan_cancelled">Stopped: %s</string>
     <string name="length_scan_done">Song lengths read: %s</string>

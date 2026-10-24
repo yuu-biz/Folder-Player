@@ -13,6 +13,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import org.junit.Rule
@@ -101,12 +102,21 @@ abstract class UiTestBase {
         val menuItem = inBrowserMenu[tag]
         if (menuItem != null && !exists(tag)) { click("btn_overflow"); click(menuItem); return }
         if (exists("settings_column") && settingsRoute(tag) != null) settingsReveal(tag)
+        reveal(tag)
         runCatching { compose.onNodeWithTag(tag).performScrollTo() }
         compose.onNodeWithTag(tag).performClick()
         compose.waitForIdle()
     }
     protected fun clickText(text: String) { compose.onNode(visibleText(text), useUnmergedTree = true).performClick(); compose.waitForIdle() }
-    protected fun longClick(tag: String) { node(tag).performTouchInput { longClick() }; compose.waitForIdle() }
+    protected fun longClick(tag: String) { reveal(tag); node(tag).performTouchInput { longClick() }; compose.waitForIdle() }
+
+    /** A row of the source list or a folder that is not composed (below the visible part): scrolled into view. */
+    protected fun reveal(tag: String) {
+        if (exists(tag)) return
+        for (list in listOf("source_list", "file_list")) {
+            if (exists(list) && runCatching { compose.onNodeWithTag(list).performScrollToNode(hasTestTag(tag)) }.isSuccess) { compose.waitForIdle(); return }
+        }
+    }
 
     /** Replaces the text of a field inside a (scrollable) dialog. */
     protected fun type(tag: String, value: String) {

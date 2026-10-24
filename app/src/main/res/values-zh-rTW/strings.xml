@@ -55,7 +55,6 @@
     <string name="browser_shuffle">隨機播放</string>
     <string name="browser_up">上一層</string>
     <string name="browser_refresh">重新整理</string>
-    <string name="browser_favorites">收藏</string>
     <string name="browser_add_to_playlist">加入播放清單</string>
     <string name="browser_add_favorite">加入收藏</string>
     <string name="browser_remove_favorite">取消收藏</string>
@@ -229,7 +228,6 @@
     <string name="player_no_song">未在播放</string>
     <string name="player_loading">載入中…</string>
     <string name="player_switching">正在切換曲目…</string>
-    <string name="player_no_lyrics">沒有歌詞</string>
     <string name="err_seek_unsupported">此伺服器無法跳轉（不支援 REST）</string>
     <string name="err_auth_failed">驗證失敗</string>
     <string name="err_permission_denied">沒有權限：%1$s</string>
@@ -325,9 +323,6 @@
     <plurals name="browser_search_skipped">
         <item quantity="other">略過 %d 個無法讀取的資料夾</item>
     </plurals>
-    <plurals name="browser_favorites_count">
-        <item quantity="other">%d 項</item>
-    </plurals>
     <plurals name="browser_favorite_songs_count">
         <item quantity="other">%d 首</item>
     </plurals>
@@ -374,7 +369,7 @@
     <string name="length_scan_bookmarks">讀取書籤中的歌曲長度</string>
     <string name="length_scan_bookmark">讀取歌曲長度</string>
     <string name="length_scan_busy">已在讀取歌曲長度</string>
-    <string name="length_scan_counts">%1$d 個資料夾，%2$d 首，本次讀取 %3$d 首</string>
+    <string name="length_scan_counts">資料夾：%1$d，歌曲：%2$d，本次讀取：%3$d</string>
     <string name="length_scan_running">正在讀取歌曲長度：%s</string>
     <string name="length_scan_cancelled">已停止：%s</string>
     <string name="length_scan_done">已讀取歌曲長度：%s</string>

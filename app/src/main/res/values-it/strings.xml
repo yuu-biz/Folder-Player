@@ -55,7 +55,6 @@
     <string name="browser_shuffle">Riproduzione casuale</string>
     <string name="browser_up">Livello superiore</string>
     <string name="browser_refresh">Aggiorna</string>
-    <string name="browser_favorites">Preferiti</string>
     <string name="browser_add_to_playlist">Aggiungi alla playlist</string>
     <string name="browser_add_favorite">Aggiungi ai preferiti</string>
     <string name="browser_remove_favorite">Rimuovi dai preferiti</string>
@@ -229,7 +228,6 @@
     <string name="player_no_song">Nessun brano in riproduzione</string>
     <string name="player_loading">Caricamento…</string>
     <string name="player_switching">Cambio brano…</string>
-    <string name="player_no_lyrics">Nessun testo disponibile</string>
     <string name="err_seek_unsupported">Questo server non consente lo spostamento (nessun REST)</string>
     <string name="err_auth_failed">Autenticazione non riuscita</string>
     <string name="err_permission_denied">Permesso negato: %1$s</string>
@@ -331,11 +329,6 @@
         <item quantity="many">%d cartelle illeggibili saltate</item>
         <item quantity="other">%d cartelle illeggibili saltate</item>
     </plurals>
-    <plurals name="browser_favorites_count">
-        <item quantity="one">%d elemento</item>
-        <item quantity="many">%d elementi</item>
-        <item quantity="other">%d elementi</item>
-    </plurals>
     <plurals name="browser_favorite_songs_count">
         <item quantity="one">%d brano</item>
         <item quantity="many">%d brani</item>
@@ -392,7 +385,7 @@
     <string name="length_scan_bookmarks">Leggi le durate dei segnalibri</string>
     <string name="length_scan_bookmark">Leggi le durate</string>
     <string name="length_scan_busy">Le durate sono già in lettura</string>
-    <string name="length_scan_counts">%1$d cartelle, %2$d brani, %3$d letti ora</string>
+    <string name="length_scan_counts">cartelle: %1$d, brani: %2$d, letti ora: %3$d</string>
     <string name="length_scan_running">Lettura delle durate: %s</string>
     <string name="length_scan_cancelled">Interrotto: %s</string>
     <string name="length_scan_done">Durate lette: %s</string>
