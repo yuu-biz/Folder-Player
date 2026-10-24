@@ -1,6 +1,6 @@
 # Known issues
 
-## Limitations (current: 1.4.0)
+## Limitations (current: 1.5.0)
 
 What a user can run into, in one place. The sections below give the history of each point and what was fixed when.
 
@@ -50,10 +50,9 @@ What a user can run into, in one place. The sections below give the history of e
   of the phone (the built-in "Internal Storage" and "SD Card" sources) refuse it for files the app did not create itself
   (nearly all of them): add the folder as a SAF folder to change files there. Playlists, favourites and
   the queue keep the old path of a renamed or moved file (see "Rename, move and delete of files" below).
-- **Waveform**: closing the player for more than 5 s throws away a measurement that has not finished; it starts again
-  from the beginning when the player opens. Not timed on a phone or a real NAS (see "Waveform on the seek bar").
-- **Playback that stops by itself**: reported once, cause not known; nothing records why playback stopped (see
-  "Playback that stops by itself").
+- **Waveform**: since 1.5.0 a measurement that has started finishes and is kept even when the player is closed. Not timed on a phone or a real NAS (see "Waveform on the seek bar").
+- **Playback that stops by itself**: reported once, cause not known yet. Since 1.5.0 Settings → Playback → Playback log
+  records what started, paused or stopped playback and why; share it right after a stop (see "Playback that stops by itself").
 - **Not checked**: TalkBack sessions, HyperOS devices, a background network retry on a real phone with the screen off (a
   refused foreground start is caught and logged, see below). Low priority (owner's decision, 2026-10-24): a real NAS
   (Synology, QNAP, Windows), SMB search and mDNS on a real LAN, and DLNA with a real TV or speaker; the owner uses the
@@ -91,10 +90,12 @@ What a user can run into, in one place. The sections below give the history of e
   longer than the limit in Settings, the plain seek bar is shown. The result is kept (`cache/waveforms`, a few KB per file, 500 files), so a
   file is read for its waveform once until it changes; Android may clear the cache when storage runs low. The FFmpeg
   decoders added for it make the APK about 1 MB larger.
-- **When it is measured.** Only while a seek bar shows it (the full player or the player pane), one file at a time;
-  switching tracks stops the old measurement. Closing the player for more than 5 s stops it too, and it starts again
-  from the beginning when the player opens again (only a complete result is kept); since 1.3.1 that is a matter of
-  seconds.
+- **When it is measured.** It starts when a seek bar shows the track (the full player or the player pane), one file at
+  a time. Since 1.5.0 it then runs to its end and is kept even when the player is closed (before, closing the player for
+  more than 5 s threw it away and the next opening started again from the beginning); opening the player again joins it.
+  A track that needs measuring stops the measurement of the previous one; a track whose waveform is kept, or one that is
+  not measured (mobile data, too long, setting off), does not, so the previous one finishes. Turning the setting off does
+  not stop a measurement that has started.
 - **Limits.** A CUE track is a slice of its disc image's bins: on a NAS a 5-minute track of a 70-minute image gets
   about 40 of the 600 windows (fewer measured points), so its bars are coarse; a local image is decoded whole. A file
   whose duration is not known up front is decoded whole and stops at the limit. A VBR MP3 whose length the player estimates differently from the decoder can
@@ -184,7 +185,7 @@ file (rename) or goes on to the next image (move, delete; it closes when there i
   servers in Docker (Samba, FTP, WebDAV) were used only through the tests listed there. Not checked on a phone or a
   real NAS.
 
-## Playback that stops by itself (investigated after 1.2.0, nothing changed yet)
+## Playback that stops by itself (investigated after 1.2.0; playback log and retry locks in 1.5.0)
 
 Report: playback sometimes stops in the middle of a track, also with battery optimisation off for the app. A code
 reading (2026-10-21) found no bug that stops healthy playback of a local file; nothing records why playback stopped, so
@@ -207,11 +208,26 @@ How to tell them apart right after a stop: a plain pause with the notification s
 disconnects), `adb shell dumpsys activity exit-info com.wing.folderplayer.fork` (why the process ended),
 `adb logcat -s MusicService NetworkRetry`. The crash log of debug mode records uncaught exceptions only.
 
-Next steps proposed (not started): (a) a small persistent log in the app of `onPlayWhenReadyChanged` reasons, player
-errors, retry status and `getHistoricalProcessExitReasons` at start, shown or shareable from Settings; (b) retry network
-errors inside ExoPlayer (a `LoadErrorHandlingPolicy` with backoff) so the player stays buffering with its locks and the
-foreground notification, or at least hold a partial wake lock and Wi-Fi lock while a retry is pending; (c) optionally
-`setHandleAudioBecomingNoisy(true)` instead of the own receiver, so the pause reason is visible.
+In 1.5.0:
+
+- **Playback log** (Settings → Playback → Playback log; `playback/PlaybackLog.kt`): the last 500 events, kept in
+  `files/diagnostics/playback.log` (rewritten to the last 500 when it reaches 1000 lines), each one line
+  `date time KIND detail`, in English so it can be shared as it is: play / pause with Media3's reason (`USER_REQUEST`,
+  `AUDIO_FOCUS_LOSS`, `AUDIO_BECOMING_NOISY`, `END_OF_MEDIA_ITEM`…), the file and position; suppression (transient focus
+  loss); idle / ended; track changes; player errors (code, message, cause; a `user:password@` in a URL is removed);
+  commands from controllers with the app that sent them (system UI, Bluetooth, a car, this app); headphones unplugged
+  (the app's own receiver logs `NOISY` before its pause, which Media3 reports as `USER_REQUEST`); the sleep timer; network
+  retries (scheduled, recovered, gave up, cancelled); service start (app version, device, Android version) and stop; and,
+  on Android 11+, why the process ended before (`getHistoricalProcessExitReasons`: low memory, killed by the user or the
+  system, crash, ANR…). Share sends it as text to an app of the user's choice; Clear empties it. It stays on the device
+  and contains file names, no passwords.
+- **Retry with the screen off**: while a network retry is pending (up to 5 minutes) the service holds a partial wake
+  lock and a Wi-Fi lock (released when the retry has prepared the player again, which then holds its own, or when it is
+  cancelled or gives up), so a retry runs on time with the screen off. Not checked on a phone with the screen off.
+
+Still open: the retry status is not shown in the player (only in the log); retries inside ExoPlayer
+(`LoadErrorHandlingPolicy`), which would keep the foreground notification, are not done; the cause of the reported stops
+is not known until a log of one is read.
 
 ## Image cache and network use (1.2.0)
 
@@ -261,7 +277,7 @@ foreground notification, or at least hold a partial wake lock and Wi-Fi lock whi
   Synology, QNAP or Windows). A newer Android may ask for a local-network
   permission before apps reach LAN devices; it is not needed on API 34, the only level run for this change.
 
-## Bookmarks (1.1.0; order and names in 1.4.0)
+## Bookmarks (1.1.0; order and names in 1.4.0, drag in 1.5.0)
 
 - Bookmarks are folders (a source root or a place inside it) kept on this device only: they are not part of `fav.json` and
   are not synced, because which places are handy depends on the device. They are not removed when the source is removed;
@@ -271,7 +287,7 @@ foreground notification, or at least hold a partial wake lock and Wi-Fi lock whi
 - A new bookmark is added at the end of the list, under the name the folder had (the source's name for a source root).
   Its long-press menu renames it (the name is only what the list shows; the folder is not touched) and moves it up or
   down one place. Bookmarks of a removed source are hidden and skipped when moving: a bookmark moves past the next one
-  that is shown. There is no drag to reorder.
+  that is shown. Since 1.5.0 the handle at the end of a row drags it to another place.
 
 ## Favourites shared between devices (1.1.0)
 

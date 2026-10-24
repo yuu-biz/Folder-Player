@@ -112,3 +112,6 @@ with the release key, so they install over 1.2.0); the final `v1.3.0` is version
 
 1.4.0 (rename, move and delete of files; bookmark order and names): `v1.4.0` is versionName `1.4.0`, versionCode `1040099`,
 which installs over 1.3.2.
+
+1.5.0 (playback log, retries with the screen off, bookmarks by drag, waveform kept when the player closes): `v1.5.0` is
+versionName `1.5.0`, versionCode `1050099`, which installs over 1.4.0.
