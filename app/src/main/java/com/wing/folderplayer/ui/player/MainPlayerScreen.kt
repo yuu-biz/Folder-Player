@@ -413,13 +413,9 @@ private fun PortraitPlayerLayout(
                                 }
                             }
                         } else {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text(
-                                    androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_no_lyrics),
-                                    color = Color.White.copy(alpha = 0.6f),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
+                            // No lyrics: the music itself, drawn as it is heard (only while the full player is on screen).
+                            val visible by remember { derivedStateOf { transition.sheet.fraction > 0f } }
+                            AudioVisualizer(visible, uiState.isPlaying, MaterialTheme.colorScheme.primary, Modifier.fillMaxSize())
                         }
                     }
                 }

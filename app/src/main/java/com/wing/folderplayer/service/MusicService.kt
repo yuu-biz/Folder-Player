@@ -155,7 +155,11 @@ class MusicService : MediaLibraryService() {
             )
             .build()
 
-        val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(this)
+        // The audio sink is tapped for the full player's visualiser (see AudioTap); MediaCodec and FFmpeg renderers share it.
+        val renderersFactory = object : androidx.media3.exoplayer.DefaultRenderersFactory(this) {
+            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): androidx.media3.exoplayer.audio.AudioSink? =
+                super.buildAudioSink(context, enableFloatOutput, enableAudioTrackPlaybackParams)?.let { com.wing.folderplayer.playback.TappingAudioSink(it) }
+        }
             .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
 
         val audioAttributes = androidx.media3.common.AudioAttributes.Builder()
