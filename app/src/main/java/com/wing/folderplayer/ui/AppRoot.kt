@@ -106,6 +106,15 @@ fun AppRoot(
         playerViewModel.currentMediaId.collect { browserViewModel.updateCurrentlyPlaying(it) }
     }
 
+    // The folder name in the player: the browser shows the track's folder, and the full player of the phone UI folds away.
+    LaunchedEffect(playerViewModel, browserViewModel, navController) {
+        playerViewModel.openFolderRequests.collect { r ->
+            navController.popBackStack(Routes.BROWSER, inclusive = false)
+            browserViewModel.revealInFolder(r.folder, r.file)
+            if (!wideState.value) sheet.collapse()
+        }
+    }
+
     val entry by navController.currentBackStackEntryAsState()
     val onBrowser = entry?.destination?.route.let { it == null || it == Routes.BROWSER }
 

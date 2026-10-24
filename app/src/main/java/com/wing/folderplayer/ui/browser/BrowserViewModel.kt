@@ -304,8 +304,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     /**
      * @param isBackNavigation If true, we will try to restore the scroll position from cache.
      * @param filter The filter to show the folder with; null: the current one for the same folder (a refresh), none for another.
+     * @param focus A file of the folder to bring into view (the track playing, see [revealInFolder]).
      */
-    fun loadFolder(folder: SourceRef, isBackNavigation: Boolean = false, filter: String? = null) {
+    fun loadFolder(folder: SourceRef, isBackNavigation: Boolean = false, filter: String? = null, focus: SourceRef? = null) {
         val now = System.currentTimeMillis()
         directoryCache.entries.removeIf { now - it.value.timestamp > CACHE_EXPIRY_MS }
         loadJob?.cancel()
@@ -338,8 +339,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     isLoading = false,
                     sortField = field,
                     sortAscending = asc,
-                    scrollToIndex = if (restore) cached.scrollIndex else 0,
-                    scrollToOffset = if (restore) cached.scrollOffset else 0,
+                    scrollToIndex = focusIndex(finalFiles, newFilter, focus) ?: if (restore) cached.scrollIndex else 0,
+                    scrollToOffset = if (restore && focus == null) cached.scrollOffset else 0,
                     scrollTrigger = _uiState.value.scrollTrigger + 1
                 )
                 return@launch
@@ -362,7 +363,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     isLoading = false,
                     sortField = field,
                     sortAscending = asc,
-                    scrollToIndex = 0,
+                    scrollToIndex = focusIndex(files, newFilter, focus) ?: 0,
                     scrollToOffset = 0,
                     scrollTrigger = _uiState.value.scrollTrigger + 1
                 )
@@ -374,6 +375,35 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 _uiState.value = _uiState.value.copy(isLoading = false, files = emptyList(), loadError = _error.value)
             }
         }
+    }
+
+    /** Where the list starts so that [focus] is in view with a row or two above it; null: not in the list. */
+    private fun focusIndex(files: List<MusicFile>, filter: String, focus: SourceRef?): Int? {
+        focus ?: return null
+        val i = NameFilter.apply(files, filter).indexOfFirst { it.sourceId == focus.sourceId && it.path == focus.path }
+        return if (i < 0) null else (i - 2).coerceAtLeast(0)
+    }
+
+    /**
+     * The folder of the track playing, from the player (its folder name): a new step, so Back returns to where the user
+     * was; already there, the list only scrolls to [file] (and the filter goes if it hides it).
+     */
+    fun revealInFolder(folder: SourceRef, file: SourceRef?) {
+        closeSearch()
+        val state = _uiState.value
+        if (state.currentFolder == folder) {
+            val shown = focusIndex(state.files, state.filter, file)
+            val unfiltered = if (shown == null) focusIndex(state.files, "", file) else null
+            val index = shown ?: unfiltered ?: return
+            _uiState.value = _uiState.value.copy(
+                filter = if (unfiltered != null) "" else state.filter,
+                filterOpen = if (unfiltered != null) false else state.filterOpen,
+                scrollToIndex = index, scrollToOffset = 0, scrollTrigger = _uiState.value.scrollTrigger + 1,
+            )
+            return
+        }
+        if (state.currentFolder == null && !state.showingFavorites) startFromSourceList() else rememberCurrentPlace()
+        loadFolder(folder, filter = "", focus = file)
     }
 
     fun saveScrollPosition(index: Int, offset: Int) {

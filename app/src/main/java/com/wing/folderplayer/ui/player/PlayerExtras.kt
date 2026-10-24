@@ -6,6 +6,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -181,23 +182,78 @@ fun PlayerBackground(
     }
 }
 
+/** How the seek bar is being moved by the finger: [NORMAL] follows it across the whole track, [FINE] at [FineSeek.SPAN_MS] per bar width. */
+enum class ScrubMode { NORMAL, FINE }
+
+/** The fine drag of the seek bar (a press held still, then moved): the position moves by time per bar width, not by track share. */
+object FineSeek {
+    /** One bar width of a fine drag: half a minute... */
+    const val SPAN_MS = 30_000L
+    /** ...but never more than a quarter of the track (a short track would barely move otherwise). */
+    private const val MAX_SHARE = 0.25f
+
+    /** Position (0..1) after moving [dxShare] of the bar width from [anchor], for a track of [durationMs]. */
+    fun position(anchor: Float, dxShare: Float, durationMs: Long): Float {
+        val share = if (durationMs > 0) minOf(SPAN_MS.toFloat() / durationMs, MAX_SHARE) else MAX_SHARE
+        return (anchor + dxShare * share).coerceIn(0f, 1f)
+    }
+}
+
 /**
  * Seek bar touch: a tap seeks; a drag that starts sideways moves the thumb ([onPreview]) and seeks on release; a drag
- * that starts vertically is taken and ignored, so it neither seeks nor moves the player or opens the playlist.
+ * that starts vertically is taken and ignored, so it neither seeks nor moves the player or opens the playlist. A press
+ * held still for the long-press time starts a fine drag: the thumb stays where it was ([position]) and moves
+ * [FineSeek.SPAN_MS] per bar width, for an exact place; let go without moving and nothing is seeked. [onScrub] says
+ * which drag is going on (null: none), so the layouts keep the thumb from following playback meanwhile.
  */
-fun Modifier.seekGestures(onPreview: (Float) -> Unit, onSeek: (Float) -> Unit): Modifier = composed {
+fun Modifier.seekGestures(
+    durationMs: Long,
+    position: () -> Float,
+    onPreview: (Float) -> Unit,
+    onSeek: (Float) -> Unit,
+    onScrub: (ScrubMode?) -> Unit = {},
+): Modifier = composed {
     val preview by rememberUpdatedState(onPreview)
     val seek by rememberUpdatedState(onSeek)
+    val scrub by rememberUpdatedState(onScrub)
+    val now by rememberUpdatedState(position)
+    val duration by rememberUpdatedState(durationMs)
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     pointerInput(Unit) {
         fun at(x: Float) = (x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
         awaitEachGesture {
             val down = awaitFirstDown()
             var sideways = false
-            val start = awaitTouchSlopOrCancellation(down.id) { change, over ->
-                change.consume()
-                sideways = abs(over.x) >= abs(over.y)
+            var start: androidx.compose.ui.input.pointer.PointerInputChange? = null
+            val heldStill = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                start = awaitTouchSlopOrCancellation(down.id) { change, over ->
+                    change.consume()
+                    sideways = abs(over.x) >= abs(over.y)
+                }
+            } == null
+            if (heldStill) {
+                haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                val anchor = now()
+                val anchorX = currentEvent.changes.firstOrNull { it.id == down.id }?.position?.x ?: down.position.x
+                var last = anchor
+                var moved = false
+                scrub(ScrubMode.FINE)
+                preview(last)
+                try {
+                    val lifted = drag(down.id) { c ->
+                        c.consume()
+                        moved = true
+                        last = FineSeek.position(anchor, (c.position.x - anchorX) / size.width.coerceAtLeast(1), duration)
+                        preview(last)
+                    }
+                    if (lifted && moved) seek(last) else preview(anchor)
+                } finally {
+                    scrub(null)
+                }
+                return@awaitEachGesture
             }
-            if (start == null) {
+            val begun = start
+            if (begun == null) {
                 val up = currentEvent.changes.firstOrNull { it.id == down.id }
                 if (up != null && !up.pressed && !up.isConsumed) {
                     up.consume()
@@ -206,19 +262,69 @@ fun Modifier.seekGestures(onPreview: (Float) -> Unit, onSeek: (Float) -> Unit): 
                 return@awaitEachGesture
             }
             if (sideways) {
-                var last = at(start.position.x)
+                var last = at(begun.position.x)
+                scrub(ScrubMode.NORMAL)
                 preview(last)
-                val lifted = drag(start.id) { c ->
-                    c.consume()
-                    last = at(c.position.x)
-                    preview(last)
+                try {
+                    val lifted = drag(begun.id) { c ->
+                        c.consume()
+                        last = at(c.position.x)
+                        preview(last)
+                    }
+                    if (lifted) seek(last)
+                } finally {
+                    scrub(null)
                 }
-                if (lifted) seek(last)
             } else {
-                drag(start.id) { it.consume() }
+                drag(begun.id) { it.consume() }
             }
         }
     }
+}
+
+/**
+ * The time at the left end under the seek bar: the playback position, or while a finger moves the thumb the position it
+ * points at (to a tenth of a second in a fine drag, which also says so).
+ */
+@Composable
+fun ScrubTime(
+    scrub: ScrubMode?,
+    thumb: Float,
+    positionMs: Long,
+    durationMs: Long,
+    style: androidx.compose.ui.text.TextStyle,
+    format: (Long) -> String = ::formatTime,
+) {
+    val at = (thumb * durationMs).toLong()
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            when (scrub) {
+                null -> format(positionMs)
+                ScrubMode.NORMAL -> format(at)
+                ScrubMode.FINE -> format(at) + ".${(at % 1000) / 100}"
+            },
+            color = if (scrub == null) Color.White.copy(alpha = 0.75f) else Color.White,
+            style = style,
+            modifier = Modifier.testTag("seek_time"),
+        )
+        if (scrub == ScrubMode.FINE) {
+            Text(
+                stringResource(R.string.player_seek_fine),
+                color = MaterialTheme.colorScheme.primary,
+                style = style,
+                modifier = Modifier.padding(start = 8.dp).testTag("seek_fine"),
+            )
+        }
+    }
+}
+
+/** The folder (album) name of the player: a tap shows the folder in the browser, a long press the album information. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+fun Modifier.folderNameGestures(onOpenFolder: () -> Unit, onAlbumInfo: () -> Unit): Modifier = composed {
+    val openLabel = stringResource(R.string.player_open_folder)
+    val infoLabel = stringResource(R.string.player_album_discovery)
+    combinedClickable(onClickLabel = openLabel, onLongClickLabel = infoLabel, onClick = onOpenFolder, onLongClick = onAlbumInfo)
+        .testTag("player_folder_name")
 }
 
 /** Shown under the lyrics: provenance label, AI action, error. */

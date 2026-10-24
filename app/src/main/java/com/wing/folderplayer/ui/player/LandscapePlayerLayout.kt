@@ -230,7 +230,7 @@ fun LandscapeLeftControlPanel(
                     text = uiState.currentFolderName,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
-                    modifier = Modifier.clickable { onAlbumClick() }
+                    modifier = Modifier.folderNameGestures(onOpenFolder = { viewModel.showCurrentFolder() }, onAlbumInfo = onAlbumClick)
                 )
                  // Audio Info
                 if (uiState.audioInfo.isNotEmpty()) {
@@ -248,11 +248,12 @@ fun LandscapeLeftControlPanel(
         // 3. Progress
         Column(modifier = Modifier.fillMaxWidth().fullPlayerContent(transition)) {
              var sliderPosition by remember { mutableStateOf(0f) }
+             var scrub by remember { mutableStateOf<ScrubMode?>(null) }
              val actualPosition = if (uiState.duration > 0) uiState.currentPosition.toFloat() / uiState.duration else 0f
              val bufferedFraction = if (uiState.duration > 0) uiState.bufferedPosition.toFloat() / uiState.duration else 0f
              
              LaunchedEffect(uiState.currentPosition) {
-                 sliderPosition = actualPosition
+                 if (scrub == null) sliderPosition = actualPosition
              }
              
              val infiniteTransition = rememberInfiniteTransition(label = "buffering")
@@ -292,11 +293,14 @@ fun LandscapeLeftControlPanel(
                         }
                         // (The callbacks are kept up to date: the duration is the current track's, not the first one's.)
                         .seekGestures(
+                            durationMs = uiState.duration,
+                            position = { sliderPosition },
                             onPreview = { sliderPosition = it },
                             onSeek = {
                                 sliderPosition = it
                                 viewModel.seekTo((it * uiState.duration).toLong())
                             },
+                            onScrub = { scrub = it },
                         )
                 ) {
                     val thumbSize = if (uiState.isBuffering) 16.dp else 12.dp
@@ -324,7 +328,7 @@ fun LandscapeLeftControlPanel(
                  modifier = Modifier.fillMaxWidth(),
                  horizontalArrangement = Arrangement.SpaceBetween
              ) {
-                 Text(formatTimeLs(uiState.currentPosition), color = Color.White.copy(alpha = 0.75f), style = MaterialTheme.typography.labelSmall)
+                 ScrubTime(scrub, sliderPosition, uiState.currentPosition, uiState.duration, MaterialTheme.typography.labelSmall, ::formatTimeLs)
                  Text(formatTimeLs(uiState.duration), color = Color.White.copy(alpha = 0.75f), style = MaterialTheme.typography.labelSmall)
              }
         }

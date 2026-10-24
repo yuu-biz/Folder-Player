@@ -28,6 +28,8 @@ class OriginBackUiTest : UiTestBase() {
     private val fx = Fx.FX
     private val browser: BrowserViewModel get() = onUi { ViewModelProvider(compose.activity)[BrowserViewModel::class.java] }
     private val bs get() = browser.uiState.value
+    private val player: com.wing.folderplayer.ui.player.PlayerViewModel get() = onUi { ViewModelProvider(compose.activity)[com.wing.folderplayer.ui.player.PlayerViewModel::class.java] }
+    private val ps get() = player.uiState.value
     private fun <T> onUi(block: () -> T): T { var r: Any? = null; compose.runOnUiThread { r = block() }; @Suppress("UNCHECKED_CAST") return r as T }
     private fun path() = bs.currentFolder?.path
     private fun shown(tag: String) = runCatching { node(tag).assertIsDisplayed(); true }.getOrDefault(false)
@@ -135,5 +137,20 @@ class OriginBackUiTest : UiTestBase() {
         until(5_000, "no match") { exists("filter_no_match") }
         click("filter_close")
         until(5_000, "unfiltered") { bs.filter == "" && shown("item_Album-B") && !exists("filter_field") }
+    }
+
+    /** The folder name in the full player shows the track's folder in the browser with the track in view; Back returns. */
+    @Test fun a63_folderNameInThePlayerOpensTheFolderOfTheTrack() {
+        toBrowser()
+        onUi { browser.loadFolder(SourceRef(local, "$fx/Album-B")) }; at("$fx/Album-B", "Album-B")
+        onUi { player.playFolder(SourceRef(local, "$fx/Album-A"), "$fx/Album-A/02 track.mp3") }
+        until(20_000, "playing") { ps.currentMediaId?.contains("02%20track") == true || ps.currentMediaId?.contains("02 track") == true }
+        toPlayer()
+        until(10_000, "folder name") { exists("player_folder_name") }
+        click("player_folder_name")
+        until(10_000, "browser at the track's folder") { !playerOpen() && path() == "$fx/Album-A" && !bs.isLoading }
+        until(5_000, "track in view") { shown("item_02 track.mp3") }
+        assertFalse("no album dialog", exists("album_info_text"))
+        pressBack(); at("$fx/Album-B", "back to where the user was")
     }
 }

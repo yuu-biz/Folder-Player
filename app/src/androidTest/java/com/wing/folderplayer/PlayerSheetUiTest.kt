@@ -380,6 +380,38 @@ class PlayerSheetUiTest : UiTestBase() {
         until(5_000, "seeked to the middle of the 30 s track (${ps.currentPosition} ms)") { playing("02%20track") && ps.currentPosition in 12_000..22_000 }
     }
 
+    /** A press held still on the seek bar starts a fine drag: from where the thumb was, half a minute per bar width. */
+    @Test fun s13_longPressOnTheSeekBarDragsFinely() {
+        playLong() // 10:00: one bar width is 30 s
+        toPlayer()
+        assertSettled(true, "open")
+        onUi { player.seekTo(300_000L); player.pauseLocal() }
+        until(5_000, "paused at 5:00 (${ps.currentPosition})") { !ps.isPlaying && ps.currentPosition in 299_000..301_500 }
+        compose.waitForIdle()
+        val bar = compose.onNodeWithTag("seek_bar", useUnmergedTree = true)
+        bar.performTouchInput { down(Offset(width * 0.9f, centerY)) }
+        // Held still past the long-press time (real time and the test clock).
+        Thread.sleep(900); compose.mainClock.advanceTimeBy(900); compose.waitForIdle()
+        until(3_000, "fine drag shown") { exists("seek_fine") }
+        bar.performTouchInput { moveBy(Offset(-width * 0.5f, 0f)); }
+        compose.waitForIdle()
+        bar.performTouchInput { up() }
+        compose.waitForIdle()
+        // Half a bar to the left: 15 s back from 5:00, not to 90 % of the track where the finger went down.
+        until(5_000, "fine seek to about 4:45 (${ps.currentPosition})") { ps.currentPosition in 282_000..288_000 }
+        assertTrue("fine label gone", !exists("seek_fine"))
+        assertSettled(true, "player stays open")
+
+        // Held still and let go: nothing is seeked.
+        val at = ps.currentPosition
+        bar.performTouchInput { down(Offset(width * 0.2f, centerY)) }
+        Thread.sleep(900); compose.mainClock.advanceTimeBy(900); compose.waitForIdle()
+        bar.performTouchInput { up() }
+        compose.waitForIdle()
+        Thread.sleep(500)
+        assertTrue("no seek (${ps.currentPosition} after $at)", abs(ps.currentPosition - at) < 1_500)
+    }
+
     @Test fun s08_repeatedAndReversedInputNeverLeavesItHalfWay() {
         playLong()
         val wasPlaying = ps.isPlaying

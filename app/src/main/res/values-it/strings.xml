@@ -373,4 +373,6 @@
     <string name="playback_log_clear">Cancella</string>
     <string name="playback_log_cleared">Registro di riproduzione cancellato</string>
     <string name="bookmark_drag">Trascina per riordinare</string>
+    <string name="player_open_folder">Mostra la cartella</string>
+    <string name="player_seek_fine">Regolazione fine</string>
 </resources>
