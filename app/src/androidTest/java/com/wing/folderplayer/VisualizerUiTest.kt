@@ -56,7 +56,11 @@ class VisualizerUiTest : UiTestBase() {
     }
 
     private fun noLyrics() {
-        play("$fx/Album-B/track.flac")
+        // Not the song restored from the last run: its lyrics are kept with it (and may come from the lyric API).
+        val restored = com.wing.folderplayer.data.prefs.PlaybackPreferences(Fx.ctx).getLastMediaId()
+        val song = listOf("$fx/Album-B/track.flac", "$fx/Album-C/track-with-embedded-art.mp3")
+            .first { com.wing.folderplayer.data.source.SourceRef(local, it).toUriString() != restored }
+        play(song)
         try { until(10_000, "lyrics looked up") { ps.lyrics.isEmpty() } } catch (e: AssertionError) { throw AssertionError("lyrics ${ps.lyrics.take(2)} from \"${ps.lyricsSource}\" api \"${com.wing.folderplayer.data.prefs.LyricPreferences(Fx.ctx).getLyricApiUrl()}\"", e) }
         until(5_000, "visualiser in place of the lyrics") { exists("audio_visualizer") && !exists("lyrics_list") }
         val block = FloatArray(2_048)
