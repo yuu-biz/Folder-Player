@@ -12,6 +12,7 @@ import com.wing.folderplayer.service.MusicService
 import com.wing.folderplayer.ui.player.PlayerViewModel
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -66,6 +67,18 @@ class VisualizerUiTest : UiTestBase() {
         val block = FloatArray(2_048)
         until(5_000, "samples from the sink") { AudioTap.read(block) && rms(block) > 0.001 }
         assertTrue("sound (rms ${rms(block)})", rms(block) > 0.001)
+
+        // A tap changes the style (kept), round to the one it was.
+        val prefs = com.wing.folderplayer.data.prefs.PlaybackPreferences(Fx.ctx)
+        val start = com.wing.folderplayer.ui.player.VisualizerStyle.of(prefs.getVisualizerStyle())
+        var style = start
+        repeat(com.wing.folderplayer.ui.player.VisualizerStyle.values().size) {
+            click("audio_visualizer")
+            style = style.next()
+            assertEquals("style kept", style.name, prefs.getVisualizerStyle())
+            assertTrue("its name shown", text("visualizer_style") == str(style.label))
+        }
+        assertEquals(start, style)
 
         onUi { player.pauseLocal() }
         until(5_000, "paused") { !ps.isPlaying }

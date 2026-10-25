@@ -96,6 +96,10 @@ class PlaybackPreferences(context: Context) {
     fun getBackgroundStyle(): String = prefs.getString("background_style", "GRADIENT") ?: "GRADIENT"
     fun saveBackgroundStyle(style: String) = prefs.edit { putString("background_style", style) }
 
+    /** The visualiser in place of missing lyrics: "WAVE" (default), "BARS" or "RING" (a tap on it changes it). */
+    fun getVisualizerStyle(): String = prefs.getString("visualizer_style", "WAVE") ?: "WAVE"
+    fun saveVisualizerStyle(style: String) = prefs.edit { putString("visualizer_style", style) }
+
     fun clearAll() {
         prefs.edit { clear() }
     }
