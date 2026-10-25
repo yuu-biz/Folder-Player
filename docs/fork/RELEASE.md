@@ -123,3 +123,5 @@ versionName `1.7.0`, versionCode `1070099`, which installs over 1.6.0.
 
 1.7.1 (several songs read at once, songs list, restyled visualiser): `v1.7.1` is versionName `1.7.1`, versionCode `1070199`,
 which installs over 1.7.0.
+
+1.7.2 (songs list narrowed to one folder): `v1.7.2` is versionName `1.7.2`, versionCode `1070299`, which installs over 1.7.1.
