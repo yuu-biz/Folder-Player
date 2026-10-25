@@ -140,6 +140,21 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.35 Songs list narrowed to one folder (1.7.2, 2026-10-26)
+
+The owner saw songs outside a bookmark in the songs list after "Read song lengths" of that bookmark. The scan stays
+inside the folder (`DurationRepositoryTest#aScanStaysInsideItsFolder`: it lists `Parent` and `Parent/CD1` only and reads
+only the song there); the list held every song whose length was read while its folder was on screen, and those read
+before 1.7.1. Nothing is dropped: the list can now be narrowed to one folder. API 34 emulator (`fp_api34`).
+
+| Check | Result |
+|---|---|
+| `assembleDebug assembleDebugAndroidTest lintDebug testDebugUnitTest` | lint 0 errors, 61 warnings (as before); JVM tests 323, 0 failures, 28 skipped. New: `SongListTest#inFolderKeepsTheFolderAndTheFoldersBelowIt` (a folder and below, not a sibling with the same start, the top folder = the whole source, another source, none = every song) |
+| Targeted device tests | `DurationRepositoryTest#aScanStaysInsideItsFolder` PASS; `SongsUiTest` s01, s02 PASS; s04 (a folder's ⋮ "Songs list of this folder": only its songs, the picker names it, kept on the source list with the count and the name and when the list opens again, "All folders" from the picker) PASS 6 times after a test fix (its first run read the text of the merged row); s05 (a bookmark's long press opens its list; a fresh copy not read yet: the empty list names the folder and reads it with "Read song lengths"; the picker shows the bookmark selected) PASS; s03 (313 songs in 309 folders, every folder) 1 failure of 8: Next reached the next song (`Cue/image.flac`, 738 KB, local), which stayed buffering for 15 s with no error; the 7 runs since passed, logcat of 4 of them kept (decoders reclaimed by Android's resource manager there too). Not explained; the same test failed once in 1.7.1 |
+| All instrumentation suites | stopped at the owner's request after 130 test processes, all passed (0 failed, 0 skipped), `DurationRepositoryTest` 14/14 among them; the rest (from `OriginBackUiTest` on, `SongsUiTest` too) did not run in this pass: its tests ran alone above |
+
+Not checked: a real phone, several folders at once (one folder at a time by design), TalkBack on the folder picker.
+
 ### 5.34 Songs list, several songs read at once, visualiser styles (1.7.1, 2026-10-26)
 
 Commits `d51f03c` (songs list, parallel scan with tags), `2106ed4` (visualiser), `b51c92d` (songs of deleted folders, visualiser

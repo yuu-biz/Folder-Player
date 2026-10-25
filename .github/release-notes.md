@@ -1,8 +1,19 @@
 Folder Player Fork {VERSION} — an unofficial personal fork of
 [Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000. It is not affiliated with the original
-project. This release follows 1.7.0.
+project. This release follows 1.7.1.
 
-## What's new in 1.7.1
+## What's new in 1.7.2
+
+- **Songs list of one folder**: the songs list can now show only the songs of one folder and the folders below it.
+  Pick it with the folder button under the sort buttons (all folders, a bookmark or a source), or open "Songs list of
+  this folder" from a folder's ⋮ menu or a bookmark's long-press menu. The choice is kept, and the source list shows
+  its name next to the number of songs. The songs read elsewhere stay in the app (nothing is deleted); "All folders"
+  shows them again. A folder whose songs were not read yet offers "Read song lengths" right there.
+
+  Why other songs were listed: a scan of a bookmark reads only that folder and the folders below it, but the list also
+  holds every song whose length was read while its folder was on screen (and those read before 1.7.1).
+
+## New in 1.7.1
 
 - **Song lengths read several at a time**: "Read song lengths" now reads a few songs of a source at once (4 from an SMB
   or WebDAV NAS, 2 over FTP, 6 from the phone) instead of one by one, so a library of thousands of songs is done much
