@@ -444,7 +444,7 @@ fun LandscapeLyricsPanel(
         }
     } else {
         // No lyrics: the music itself, drawn as it is heard.
-        AudioVisualizer(visible, uiState.isPlaying, MaterialTheme.colorScheme.primary, Modifier.fillMaxSize())
+        AudioVisualizer(visible, uiState.isPlaying, MaterialTheme.colorScheme.primary, Modifier.fillMaxSize(), cover = uiState.coverUri, coverFallback = uiState.coverFallback)
     }
     }
     LyricsFooter(uiState) { regen -> viewModel.requestAiLyrics(regen) }

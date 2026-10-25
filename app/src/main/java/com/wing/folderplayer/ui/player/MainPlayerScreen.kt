@@ -415,7 +415,7 @@ private fun PortraitPlayerLayout(
                         } else {
                             // No lyrics: the music itself, drawn as it is heard (only while the full player is on screen).
                             val visible by remember { derivedStateOf { transition.sheet.fraction > 0f } }
-                            AudioVisualizer(visible, uiState.isPlaying, MaterialTheme.colorScheme.primary, Modifier.fillMaxSize())
+                            AudioVisualizer(visible, uiState.isPlaying, MaterialTheme.colorScheme.primary, Modifier.fillMaxSize(), cover = uiState.coverUri, coverFallback = uiState.coverFallback)
                         }
                     }
                 }

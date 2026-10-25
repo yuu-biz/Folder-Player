@@ -4,6 +4,7 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.ln
 import kotlin.math.log10
+import kotlin.math.log2
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -12,10 +13,12 @@ import kotlin.math.sqrt
 
 /**
  * Frequency bands of a block of samples for the visualiser: a Hann-windowed FFT summed into [bands] bands spaced evenly
- * on a log scale from [LOW_HZ] up to [HIGH_HZ] (or half the rate), each as a level 0..1 over [FLOOR_DB] dB.
+ * on a log scale from [LOW_HZ] up to [HIGH_HZ] (or half the rate), each as a level 0..1 over [FLOOR_DB] dB. [tiltDbPerOctave]
+ * lifts the bands above 1 kHz (and lowers those below) by that much per octave: music has most of its energy in the bass,
+ * and without it the upper half of the picture hardly moves.
  * One instance per visualiser (it keeps its buffers); not thread-safe.
  */
-class Spectrum(private val size: Int, private val bands: Int) {
+class Spectrum(private val size: Int, private val bands: Int, private val tiltDbPerOctave: Float = 0f) {
     init { require(size >= 16 && size and (size - 1) == 0) { "size must be a power of two" } }
 
     private val re = FloatArray(size)
@@ -42,7 +45,7 @@ class Spectrum(private val size: Int, private val bands: Int) {
             for (i in i0 until i1) power = max(power, re[i] * re[i] + im[i] * im[i])
             // Amplitude relative to a full-scale sine through the window (about size / 4).
             val amp = sqrt(power) / (size / 4f)
-            val db = 20 * log10(max(amp, 1e-9f))
+            val db = 20 * log10(max(amp, 1e-9f)) + tiltDbPerOctave * log2(sqrt(f0 * f1) / 1_000f)
             levels[b] = ((db - FLOOR_DB) / -FLOOR_DB).coerceIn(0f, 1f).pow(1.4f)
         }
     }
