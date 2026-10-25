@@ -329,6 +329,9 @@
     <plurals name="browser_favorite_folders_count">
         <item quantity="other">%d 個資料夾</item>
     </plurals>
+    <plurals name="browser_songs_count">
+        <item quantity="other">%d 首歌曲</item>
+    </plurals>
     <plurals name="source_test_ok">
         <item quantity="other">已連線 – 根目錄有 %d 項</item>
     </plurals>
@@ -365,6 +368,16 @@
     <string name="browser_favorite_songs">收藏的歌曲</string>
     <string name="browser_favorite_folders">收藏的資料夾</string>
     <string name="sort_length">長度</string>
+    <string name="sort_title">標題</string>
+    <string name="sort_artist">演出者</string>
+    <string name="sort_album">專輯</string>
+    <string name="browser_songs">歌曲</string>
+    <string name="songs_empty">還沒有歌曲。讀取長度後的歌曲會顯示在這裡：在資料夾（⋮ 選單）或書籤上使用「讀取歌曲長度」。</string>
+    <string name="action_show_in_folder">在資料夾中顯示</string>
+    <string name="visualizer_style_wave">波浪</string>
+    <string name="visualizer_style_bars">長條</string>
+    <string name="visualizer_style_ring">環形</string>
+    <string name="visualizer_change">變更樣式</string>
     <string name="length_scan_folder">讀取歌曲長度（此資料夾及子資料夾）</string>
     <string name="length_scan_bookmarks">讀取書籤中的歌曲長度</string>
     <string name="length_scan_bookmark">讀取歌曲長度</string>

@@ -329,6 +329,9 @@
     <plurals name="browser_favorite_folders_count">
         <item quantity="other">%d 个文件夹</item>
     </plurals>
+    <plurals name="browser_songs_count">
+        <item quantity="other">%d 首歌曲</item>
+    </plurals>
     <plurals name="source_test_ok">
         <item quantity="other">已连接 – 根目录有 %d 项</item>
     </plurals>
@@ -365,6 +368,16 @@
     <string name="browser_favorite_songs">收藏的歌曲</string>
     <string name="browser_favorite_folders">收藏的文件夹</string>
     <string name="sort_length">时长</string>
+    <string name="sort_title">标题</string>
+    <string name="sort_artist">艺术家</string>
+    <string name="sort_album">专辑</string>
+    <string name="browser_songs">歌曲</string>
+    <string name="songs_empty">还没有歌曲。读取时长后的歌曲会显示在这里：在文件夹（⋮ 菜单）或书签上使用“读取歌曲时长”。</string>
+    <string name="action_show_in_folder">在文件夹中显示</string>
+    <string name="visualizer_style_wave">波浪</string>
+    <string name="visualizer_style_bars">柱状</string>
+    <string name="visualizer_style_ring">环形</string>
+    <string name="visualizer_change">更换样式</string>
     <string name="length_scan_folder">读取歌曲时长（此文件夹及子文件夹）</string>
     <string name="length_scan_bookmarks">读取书签中的歌曲时长</string>
     <string name="length_scan_bookmark">读取歌曲时长</string>

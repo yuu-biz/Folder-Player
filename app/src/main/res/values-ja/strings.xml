@@ -329,6 +329,9 @@
     <plurals name="browser_favorite_folders_count">
         <item quantity="other">%d フォルダ</item>
     </plurals>
+    <plurals name="browser_songs_count">
+        <item quantity="other">%d 曲</item>
+    </plurals>
     <plurals name="source_test_ok">
         <item quantity="other">接続しました – ルートに %d 項目</item>
     </plurals>
@@ -365,6 +368,16 @@
     <string name="browser_favorite_songs">お気に入りの曲</string>
     <string name="browser_favorite_folders">お気に入りのフォルダ</string>
     <string name="sort_length">長さ</string>
+    <string name="sort_title">タイトル</string>
+    <string name="sort_artist">アーティスト</string>
+    <string name="sort_album">アルバム</string>
+    <string name="browser_songs">曲一覧</string>
+    <string name="songs_empty">まだ曲がありません。長さを解析した曲がここに並びます。フォルダ（⋮ メニュー）やブックマークで「曲の長さを解析」を実行してください。</string>
+    <string name="action_show_in_folder">フォルダで表示</string>
+    <string name="visualizer_style_wave">ウェーブ</string>
+    <string name="visualizer_style_bars">バー</string>
+    <string name="visualizer_style_ring">リング</string>
+    <string name="visualizer_change">スタイルを変更</string>
     <string name="length_scan_folder">曲の長さを解析（このフォルダ以下）</string>
     <string name="length_scan_bookmarks">ブックマークの曲の長さを解析</string>
     <string name="length_scan_bookmark">曲の長さを解析</string>

@@ -339,6 +339,11 @@
         <item quantity="many">%d dossiers</item>
         <item quantity="other">%d dossiers</item>
     </plurals>
+    <plurals name="browser_songs_count">
+        <item quantity="one">%d morceau</item>
+        <item quantity="many">%d morceaux</item>
+        <item quantity="other">%d morceaux</item>
+    </plurals>
     <plurals name="source_test_ok">
         <item quantity="one">Connecté – la racine contient %d élément</item>
         <item quantity="many">Connecté – la racine contient %d éléments</item>
@@ -381,6 +386,16 @@
     <string name="browser_favorite_songs">Morceaux favoris</string>
     <string name="browser_favorite_folders">Dossiers favoris</string>
     <string name="sort_length">Durée</string>
+    <string name="sort_title">Titre</string>
+    <string name="sort_artist">Artiste</string>
+    <string name="sort_album">Album</string>
+    <string name="browser_songs">Morceaux</string>
+    <string name="songs_empty">Aucun morceau pour l\'instant. Les morceaux apparaissent ici une fois leur durée lue : « Lire les durées » sur un dossier (menu ⋮) ou sur vos signets.</string>
+    <string name="action_show_in_folder">Afficher dans le dossier</string>
+    <string name="visualizer_style_wave">Vague</string>
+    <string name="visualizer_style_bars">Barres</string>
+    <string name="visualizer_style_ring">Anneau</string>
+    <string name="visualizer_change">Changer de style</string>
     <string name="length_scan_folder">Lire les durées (ce dossier et en dessous)</string>
     <string name="length_scan_bookmarks">Lire les durées des signets</string>
     <string name="length_scan_bookmark">Lire les durées</string>

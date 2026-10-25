@@ -170,6 +170,9 @@ fun BrowserScreen(
             onToggleFavorite = { viewModel.toggleFavorite(selected); viewModel.closePlaylistDialog() },
             onToggleBookmark = if (selected.isDirectory) ({ viewModel.toggleBookmark(selected); viewModel.closePlaylistDialog() }) else null,
             onFileOp = if (!selected.isDirectory) viewModel::startFileOp else null,
+            // A song listed away from its folder (songs list, favourites, search results).
+            onShowInFolder = selected.ref.parent?.takeIf { !selected.isDirectory && (uiState.showingSongs || uiState.showingFavorites || uiState.search.active) }
+                ?.let { folder -> { viewModel.closePlaylistDialog(); viewModel.revealInFolder(folder, selected.ref) } },
             onDismiss = { viewModel.closePlaylistDialog() },
         )
     }
@@ -223,6 +226,7 @@ fun BrowserScreen(
                                 when {
                                     uiState.favoritesKind == FavoritesKind.SONGS -> stringResource(R.string.browser_favorite_songs)
                                     uiState.favoritesKind == FavoritesKind.FOLDERS -> stringResource(R.string.browser_favorite_folders)
+                                    uiState.showingSongs -> stringResource(R.string.browser_songs)
                                     uiState.currentFolder == null -> stringResource(R.string.browser_sources_title)
                                     else -> {
                                         val folder = uiState.currentFolder!!
@@ -294,7 +298,8 @@ fun BrowserScreen(
                                         Icon(Icons.Default.Search, contentDescription = stringResource(R.string.browser_search))
                                     }
                                 }
-                                IconButton(onClick = { viewModel.setViewMode(if (uiState.viewMode == "GRID") "LIST" else "GRID") }, modifier = Modifier.testTag("btn_view_mode")) {
+                                // The songs list is a list of rows (title, artist and album), never a grid.
+                                if (!uiState.showingSongs) IconButton(onClick = { viewModel.setViewMode(if (uiState.viewMode == "GRID") "LIST" else "GRID") }, modifier = Modifier.testTag("btn_view_mode")) {
                                     Icon(if (uiState.viewMode == "GRID") Icons.Default.ViewList else Icons.Default.GridView,
                                         contentDescription = stringResource(R.string.browser_toggle_view))
                                 }
@@ -322,6 +327,12 @@ fun BrowserScreen(
                                         leadingIcon = { Icon(Icons.Default.Timer, contentDescription = null) },
                                         onClick = { close(); viewModel.scanCurrentFolderLengths() },
                                         modifier = Modifier.testTag("menu_scan_lengths")
+                                    )
+                                    if (uiState.showingSongs && uiState.bookmarks.any { b -> uiState.availableSources.any { it.id == b.sourceId } }) DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.length_scan_bookmarks)) },
+                                        leadingIcon = { Icon(Icons.Default.Timer, contentDescription = null) },
+                                        onClick = { close(); viewModel.scanAllBookmarkLengths() },
+                                        modifier = Modifier.testTag("menu_scan_bookmark_lengths")
                                     )
                                     PlayerPaneMenuItem(playerPane, close)
                                     uiState.currentFolder?.let { folder ->
@@ -376,6 +387,27 @@ fun BrowserScreen(
                             fields = if (uiState.favoritesKind == FavoritesKind.SONGS) FavoriteSongsSortFields else FavoriteFoldersSortFields,
                         )
                         LengthFillStatus(uiState, onScan = null)
+                    } else if (uiState.showingSongs) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { if (uiState.filterOpen) viewModel.closeFilter() else viewModel.openFilter() },
+                                modifier = Modifier.padding(start = 4.dp).semantics { this.selected = uiState.filterOpen }.testTag("btn_filter")
+                            ) {
+                                Icon(
+                                    Icons.Default.FilterList,
+                                    contentDescription = stringResource(R.string.browser_filter),
+                                    tint = if (uiState.filterOpen) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+                                )
+                            }
+                            SortHeader(
+                                currentField = uiState.sortField,
+                                ascending = uiState.sortAscending,
+                                onSortClick = { viewModel.sortFiles(it) },
+                                modifier = Modifier.weight(1f),
+                                fields = SongsSortFields,
+                            )
+                        }
+                        if (uiState.filterOpen) FilterField(uiState.filter, onChange = { viewModel.setFilter(it) }, onClose = { viewModel.closeFilter() })
                     } else if (uiState.currentFolder != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(
@@ -425,6 +457,8 @@ fun BrowserScreen(
                                 onBookmarkReorder = { viewModel.reorderBookmarks(it) },
                                 onBookmarkScan = { viewModel.scanBookmarkLengths(it) },
                                 onFavoritesClick = { viewModel.showFavorites(it) },
+                                songCount = uiState.songCount,
+                                onSongsClick = { viewModel.showSongs() },
                                 onSourceClick = { viewModel.selectSource(it) },
                                 onEditSource = { sourceToEdit = it },
                                 onDeleteSource = { viewModel.removeSource(it.id) },
@@ -451,6 +485,7 @@ fun BrowserScreen(
                                 imageThumbnail = viewModel::imageThumbnail,
                                 duration = viewModel::trackDuration,
                                 showSourcePath = uiState.search.active || uiState.showingFavorites,
+                                songRows = uiState.showingSongs && !uiState.search.active,
                                 sortField = uiState.sortField,
                                 onFileClick = onClick,
                                 onFileLongClick = onLong,
@@ -465,6 +500,13 @@ fun BrowserScreen(
                                     }
                                 },
                                 listState = listState
+                            )
+                        }
+                        if (uiState.showingSongs && !uiState.isLoading && files.isEmpty()) {
+                            SongsEmptyState(
+                                filter = uiState.filter.trim().takeIf { uiState.files.isNotEmpty() },
+                                onScan = if (uiState.bookmarks.any { b -> uiState.availableSources.any { it.id == b.sourceId } }) ({ viewModel.scanAllBookmarkLengths() }) else null,
+                                modifier = Modifier.align(Alignment.Center),
                             )
                         }
                         // A folder that cannot be read says so (and can be tried again); an empty one says that it is empty.
@@ -665,6 +707,29 @@ private val FileSortFields = listOf("NAME" to R.string.sort_name, "DATE" to R.st
 private val FolderSortFields = FileSortFields + (com.wing.folderplayer.data.source.SORT_LENGTH to R.string.sort_length)
 private val FavoriteSongsSortFields = listOf(com.wing.folderplayer.data.favorites.FavoritesSort.ADDED to R.string.sort_added) + FolderSortFields
 private val FavoriteFoldersSortFields = listOf(com.wing.folderplayer.data.favorites.FavoritesSort.ADDED to R.string.sort_added) + FileSortFields
+private val SongsSortFields = com.wing.folderplayer.data.metadata.SongList.let {
+    listOf(it.TITLE to R.string.sort_title, it.ARTIST to R.string.sort_artist, it.ALBUM to R.string.sort_album, com.wing.folderplayer.data.source.SORT_LENGTH to R.string.sort_length, it.DATE to R.string.sort_date)
+}
+
+/**
+ * The songs list has none: nothing scanned yet ([onScan] reads the bookmarks; null without bookmarks), or [filter]
+ * matches none of them.
+ */
+@Composable
+private fun SongsEmptyState(filter: String?, onScan: (() -> Unit)?, modifier: Modifier = Modifier) {
+    Column(modifier.padding(horizontal = 32.dp, vertical = 24.dp).testTag("songs_empty"), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            if (filter != null) stringResource(R.string.browser_filter_no_match, filter) else stringResource(R.string.songs_empty),
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (filter == null && onScan != null) {
+            Spacer(Modifier.height(12.dp))
+            Button(onClick = onScan, modifier = Modifier.testTag("songs_scan_bookmarks")) { Text(stringResource(R.string.length_scan_bookmarks)) }
+        }
+    }
+}
 
 /** [fields]: the sort fields offered, with their labels (the favourites list adds "Added" in front). */
 @Composable
@@ -730,6 +795,9 @@ fun SourceList(
     favoriteSongs: Int,
     favoriteFolders: Int,
     onFavoritesClick: (FavoritesKind) -> Unit,
+    /** Songs the length index knows (the songs list), and opening that list. */
+    songCount: Int = 0,
+    onSongsClick: () -> Unit = {},
     bookmarks: List<Bookmark>,
     onBookmarkClick: (Bookmark) -> Unit,
     onBookmarkRemove: (Bookmark) -> Unit,
@@ -843,6 +911,14 @@ fun SourceList(
     LazyColumn(state = listState, modifier = Modifier.testTag("source_list")) {
         // Songs and folders are two lists (one fav.json): a song list to play from, a folder list to go to.
         item {
+            // Every song read by a scan (or seen in a list), as a music player lists its library.
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.browser_songs)) },
+                supportingContent = { Text(pluralStringResource(R.plurals.browser_songs_count, songCount, songCount)) },
+                leadingContent = { Icon(Icons.Default.LibraryMusic, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                modifier = Modifier.clickable { onSongsClick() }.testTag("entry_songs")
+            )
+            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             ListItem(
                 headlineContent = { Text(stringResource(R.string.browser_favorite_songs)) },
                 supportingContent = { Text(pluralStringResource(R.plurals.browser_favorite_songs_count, favoriteSongs, favoriteSongs)) },
@@ -1106,6 +1182,8 @@ fun FileList(
     imageThumbnail: (MusicFile) -> ArtworkResult,
     duration: suspend (MusicFile) -> Long?,
     showSourcePath: Boolean,
+    /** The songs list: title (or file name), artist and album, and the length kept with them. */
+    songRows: Boolean = false,
     /** Sort key: size or date is then shown beside the format, so a list sorted by it says why. */
     sortField: String = "NAME",
     onFileClick: (MusicFile) -> Unit,
@@ -1130,7 +1208,7 @@ fun FileList(
                     ListItem(
                         headlineContent = {
                             Text(
-                                file.name,
+                                if (songRows) com.wing.folderplayer.data.metadata.SongList.title(file) else file.name,
                                 color = when {
                                     playing -> MaterialTheme.colorScheme.primary
                                     parentOfPlaying -> MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
@@ -1144,6 +1222,12 @@ fun FileList(
                             )
                         },
                         supportingContent = when {
+                            songRows -> ({
+                                // Artist and album when the tags have them, the folder otherwise.
+                                val line = listOfNotNull(file.tags?.artist?.takeIf { it.isNotBlank() }, file.tags?.album?.takeIf { it.isNotBlank() })
+                                    .joinToString(" • ").ifEmpty { SourcePath.parent(file.path) ?: "/" }
+                                Text(line, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("info_${file.name}"))
+                            })
                             showSourcePath -> ({
                                 Text(SourcePath.parent(file.path) ?: "/", maxLines = 1, overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.testTag("info_${file.name}"))
@@ -1169,7 +1253,8 @@ fun FileList(
                         trailingContent = if (MediaTypes.isAudio(file.name)) ({
                             // Track length, read only while the row is on screen (and kept); shown when known, nothing before
                             // (no placeholder). Refresh (revision) looks again, e.g. after network lengths were switched on.
-                            val length by produceState<Long?>(null, file.sourceId, file.path, file.size, file.lastModified, LocalThumbnailRevision.current) {
+                            val length by produceState<Long?>(file.durationMs.takeIf { songRows }, file.sourceId, file.path, file.size, file.lastModified, LocalThumbnailRevision.current) {
+                                if (songRows && file.durationMs != null) return@produceState
                                 value = runCatching { duration(file) }.getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it else null }
                             }
                             length?.let {
@@ -1312,6 +1397,8 @@ private fun FileActionsSheet(
     onToggleBookmark: (() -> Unit)?,
     /** Files only: null = no rename / move / delete rows. */
     onFileOp: ((FileOp) -> Unit)?,
+    /** null = no "Show in folder" row. */
+    onShowInFolder: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -1339,6 +1426,11 @@ private fun FileActionsSheet(
                 headlineContent = { Text(stringResource(R.string.viewer_open_external)) },
                 leadingContent = { Icon(Icons.Default.OpenInNew, contentDescription = null) },
                 modifier = Modifier.clickable { onOpenExternal() }.testTag("action_open_external")
+            )
+            if (onShowInFolder != null) ListItem(
+                headlineContent = { Text(stringResource(R.string.action_show_in_folder)) },
+                leadingContent = { Icon(Icons.Default.FolderOpen, contentDescription = null) },
+                modifier = Modifier.clickable { onShowInFolder() }.testTag("action_show_in_folder")
             )
             // Playlists and favourites hold what can be played: folders, songs and CUE sheets.
             val playable = file.isDirectory || MediaTypes.isAudio(file.name) || MediaTypes.isCue(file.name)
