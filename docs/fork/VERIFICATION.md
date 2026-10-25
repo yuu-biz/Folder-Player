@@ -140,7 +140,7 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
-### 5.33 Song / folder favourites, folder link and fine seek, sort by length, visualiser (after 1.6.0, 2026-10-25)
+### 5.33 Song / folder favourites, folder link and fine seek, sort by length, visualiser (1.7.0, 2026-10-25)
 
 App code as of `bfd0c6c` plus the test fixes of the commit that adds this section. API 34 emulator (`fp_api34`), fixture servers up.
 

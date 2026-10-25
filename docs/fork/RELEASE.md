@@ -117,3 +117,6 @@ which installs over 1.3.2.
 versionName `1.5.0`, versionCode `1050099`, which installs over 1.4.0.
 
 1.6.0 (sorting of the favourites list): `v1.6.0` is versionName `1.6.0`, versionCode `1060099`, which installs over 1.5.0.
+
+1.7.0 (favourite songs and folders as two lists, folder link and fine seek in the player, sort by length, visualiser): `v1.7.0` is
+versionName `1.7.0`, versionCode `1070099`, which installs over 1.6.0.
