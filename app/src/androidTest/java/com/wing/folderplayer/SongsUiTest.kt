@@ -83,9 +83,9 @@ class SongsUiTest : UiTestBase() {
         sortBy(SongList.ALBUM, true)
         until(5_000, "album in track order") { albumTitles() == listOf("Tagged Title One", "Tagged Title Two") }
 
-        // The filter matches the tags: artist and album words, in any order.
+        // The filter matches the tags: words of the artist and the titles, in any order (Album C has the same artist).
         click("btn_filter")
-        compose.onNodeWithTag("filter_field").performTextReplacement("album a fixture")
+        compose.onNodeWithTag("filter_field").performTextReplacement("tagged fixture")
         compose.waitForIdle()
         until(5_000, "filtered") { bs.visibleFiles.isNotEmpty() && bs.visibleFiles.all { it.tags?.album == "Album A" } }
         assertTrue("title shown, not the file name", textExists("Tagged Title One"))
@@ -113,5 +113,43 @@ class SongsUiTest : UiTestBase() {
         until(10_000, "the songs list again, with its filter") { bs.showingSongs && !bs.isLoading && bs.filter == "tagged title two" && albumTitles() == listOf("Tagged Title Two") }
         pressBack()
         until(5_000, "source list") { bs.isRoot }
+    }
+
+    /**
+     * The whole fixture scanned: hundreds of songs over many folders. Playing from the list starts without listing every
+     * folder first; the queue is the whole list and the next song plays.
+     */
+    @Test fun s03_aListOfManyFoldersPlaysAtOnceAndGoesOn() {
+        val repo = DurationRepository.get(Fx.ctx)
+        val before = repo.scan.value.finished
+        assertTrue(repo.startScan(listOf(SourceRef(local, Fx.FX))))
+        until(180_000, "scan of the fixture") { !repo.scan.value.running && repo.scan.value.finished > before }
+        repo.dismissScanResult()
+        openSongs()
+        sortBy(SongList.TITLE, true)
+        val list = bs.visibleFiles
+        val folders = list.mapTo(HashSet()) { it.path.substringBeforeLast('/') }.size
+        assertTrue("many folders ($folders) and songs (${list.size})", folders > 12 && list.size > 100)
+        // A row whose name no other row has (many folders hold a "track.flac").
+        val names = list.groupingBy { it.name }.eachCount()
+        // It and the song after it plain FLAC or MP3 (the fixture also has broken and unsupported files).
+        fun plain(f: com.wing.folderplayer.data.source.MusicFile) = (f.name.endsWith(".flac") || f.name.endsWith(".mp3")) && "corrupt" !in f.path.lowercase()
+        val at = (0 until list.size - 1).first { names[list[it].name] == 1 && plain(list[it]) && plain(list[it + 1]) }
+        val song = list[at]
+        val started = System.currentTimeMillis()
+        click("item_${song.name}")
+        until(15_000, "playing ${song.name}") { player.uiState.value.isPlaying && SourceUris.parse(player.uiState.value.currentMediaId)?.path == song.path }
+        Fx.log("songs list of ${list.size} songs in $folders folders: playing after ${System.currentTimeMillis() - started} ms")
+        until(5_000, "queue") { player.uiState.value.activePlaylistItems.size == list.size }
+        val first = player.uiState.value.currentMediaId
+        onUi { player.next() }
+        try {
+            until(15_000, "the next song") { player.uiState.value.isPlaying && player.uiState.value.currentMediaId != first }
+        } catch (e: AssertionError) {
+            val s = player.uiState.value
+            throw AssertionError("playing ${s.isPlaying} buffering ${s.isBuffering} title ${s.currentTitle} id ${s.currentMediaId} error ${s.playbackError} expected ${list[at + 1].path}", e)
+        }
+        val next = SourceUris.parse(player.uiState.value.currentMediaId)?.path
+        assertEquals("next in the list", list[at + 1].path, next)
     }
 }

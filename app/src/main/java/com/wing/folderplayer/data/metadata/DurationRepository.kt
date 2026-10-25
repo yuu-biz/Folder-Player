@@ -360,6 +360,12 @@ class DurationRepository internal constructor(
         // Per source, the folders listed; and the keys of the songs in them (what is no longer there is dropped).
         val listed = HashMap<String, HashSet<String>>()
         val present = HashSet<String>()
+        // Per source: folders that are no longer there, and folders left unread (no permission, too deep); the roots
+        // that were walked to the end (a folder deleted below them is not listed by anyone: what is under them and was
+        // not seen goes, except below a folder left unread).
+        val gone = HashMap<String, HashSet<String>>()
+        val unread = HashMap<String, HashSet<String>>()
+        val whole = ArrayList<SourceRef>()
         // Per source: its readers, and the reads that failed since the last one that worked.
         val gates = ConcurrentHashMap<String, Semaphore>()
         val failures = ConcurrentHashMap<String, AtomicInteger>()
@@ -372,17 +378,20 @@ class DurationRepository internal constructor(
                 for (root in roots) {
                     val pending = ArrayDeque<Pair<SourceRef, Int>>().apply { add(root to 0) }
                     val seen = HashSet<String>()
+                    var cut = false
                     while (pending.isNotEmpty()) {
                         ensureActive()
-                        if (songs >= MAX_SCAN_SONGS || folders >= MAX_SCAN_FOLDERS) { _scan.update { it.copy(truncated = true) }; break }
+                        if (songs >= MAX_SCAN_SONGS || folders >= MAX_SCAN_FOLDERS) { _scan.update { it.copy(truncated = true) }; cut = true; break }
                         val (folder, depth) = pending.removeFirst()
                         if (folder.sourceId in down || !seen.add(folder.path)) continue
                         _scan.update { it.copy(current = SourcePath.name(folder.path).ifEmpty { SourceRegistry.get(folder.sourceId)?.name.orEmpty() }) }
                         val entries = try {
                             runInterruptible { listFolder(folder) }
                         } catch (e: com.wing.folderplayer.data.source.SourceException.NotFound) {
+                            gone.getOrPut(folder.sourceId) { HashSet() } += folder.path
                             _scan.update { it.copy(skippedFolders = it.skippedFolders + 1) }; continue
                         } catch (e: com.wing.folderplayer.data.source.SourceException.PermissionDenied) {
+                            unread.getOrPut(folder.sourceId) { HashSet() } += folder.path
                             _scan.update { it.copy(skippedFolders = it.skippedFolders + 1) }; continue
                         } catch (e: kotlinx.coroutines.CancellationException) {
                             throw e
@@ -396,7 +405,10 @@ class DurationRepository internal constructor(
                         listed.getOrPut(folder.sourceId) { HashSet() } += folder.path
                         _scan.update { it.copy(folders = folders) }
                         for (f in entries.sortedBy { it.name.lowercase() }) {
-                            if (f.isDirectory) { if (depth < MAX_SCAN_DEPTH) pending.add(f.ref to depth + 1); continue }
+                            if (f.isDirectory) {
+                                if (depth < MAX_SCAN_DEPTH) pending.add(f.ref to depth + 1) else unread.getOrPut(f.sourceId) { HashSet() } += f.path
+                                continue
+                            }
                             if (!MediaTypes.isAudio(f.name)) continue
                             songs++
                             present += key(f)
@@ -405,6 +417,7 @@ class DurationRepository internal constructor(
                             queue.send(f) // waits while the readers are behind: the listing keeps a little ahead
                         }
                     }
+                    if (!cut && root.sourceId !in down) whole += root
                 }
             } finally {
                 queue.close()
@@ -439,12 +452,28 @@ class DurationRepository internal constructor(
         }
         lister.join()
         readers.forEach { it.join() }
-        prune(listed, present)
+        prune(listed, present, gone, unread, whole)
     }
 
-    /** Drops the entries of files that are no longer in the folders listed (or have changed since). */
-    private fun prune(listed: Map<String, Set<String>>, present: Set<String>) {
-        if (listed.isEmpty()) return
+    /**
+     * Drops the entries of files that are no longer in the folders listed (or have changed since), those below a folder
+     * that is gone, and those below a root walked to the end that the walk did not see (unless below a folder left
+     * unread).
+     */
+    private fun prune(
+        listed: Map<String, Set<String>>,
+        present: Set<String>,
+        gone: Map<String, Set<String>> = emptyMap(),
+        unread: Map<String, Set<String>> = emptyMap(),
+        whole: List<SourceRef> = emptyList(),
+    ) {
+        if (listed.isEmpty() && gone.isEmpty()) return
+        fun under(folders: Collection<String>?, path: String) = folders != null && folders.any { SourcePath.isAncestorOrSelf(it, path) }
+        fun goes(p: KeyParts): Boolean {
+            if (SourcePath.parent(p.path) in listed[p.sourceId].orEmpty()) return true
+            if (under(gone[p.sourceId], p.path)) return true
+            return whole.any { it.sourceId == p.sourceId && SourcePath.isAncestorOrSelf(it.path, p.path) } && !under(unread[p.sourceId], p.path)
+        }
         val idx = index
         var removed = 0
         synchronized(idx) {
@@ -453,8 +482,7 @@ class DurationRepository internal constructor(
                 for (k in keys) {
                     if (k in present) continue
                     val p = parts(k) ?: continue
-                    val folders = listed[p.sourceId] ?: continue
-                    if (SourcePath.parent(p.path) !in folders) continue
+                    if (!goes(p)) continue
                     if (map === idx.known) removeKnown(idx, k) else map.remove(k)
                     removed++
                 }

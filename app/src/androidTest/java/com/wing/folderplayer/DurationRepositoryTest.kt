@@ -281,6 +281,43 @@ class DurationRepositoryTest {
         assertEquals("read once", 1, opens.get())
     }
 
+    /** A folder deleted below a scanned root (nobody lists it any more) or gone itself loses its songs; an unreadable one keeps them. */
+    @Test fun aScanDropsTheSongsOfFoldersThatAreGoneButNotOfUnreadableOnes() = runBlocking {
+        val parent = SourceRef(local, "${Fx.FX}/Parent")
+        val cd1 = file("${Fx.FX}/Parent/CD1/track.flac")
+        var hideCd1 = false
+        var denied = false
+        val repo = DurationRepository(Fx.ctx, dir, listFolder = { ref ->
+            when {
+                denied && ref.path.endsWith("/CD1") -> throw SourceException.PermissionDenied()
+                ref.path.endsWith("/Gone") -> throw SourceException.NotFound()
+                else -> SourceRegistry.fileSystem(ref).list(ref.path).filter { !(hideCd1 && it.name == "CD1") }
+            }
+        }) { f -> if (f.name == "ghost.flac") FailingReaderOfNothing else real(f) }
+        assertTrue(repo.duration(cd1) != null)
+        val ghost = MusicFile("ghost.flac", "${Fx.FX}/Gone/Deeper/ghost.flac", false, 10, 1L, local)
+        assertNull(repo.duration(ghost)) // unparsable, but kept
+
+        // CD1 cannot be read: what is known in it stays.
+        denied = true
+        var before = repo.scan.value.finished
+        assertTrue(repo.startScan(listOf(parent, SourceRef(local, "${Fx.FX}/Gone"))))
+        waitScan(repo, before)
+        assertTrue("kept below an unreadable folder", repo.songs().any { it.path == cd1.path })
+
+        // CD1 deleted: the walk of Parent does not see it; Gone answers "not found".
+        denied = false
+        hideCd1 = true
+        before = repo.scan.value.finished
+        assertTrue(repo.startScan(listOf(parent, SourceRef(local, "${Fx.FX}/Gone"))))
+        waitScan(repo, before)
+        assertTrue("dropped below a deleted folder", repo.songs().none { it.path == cd1.path })
+        val opens = AtomicInteger()
+        val fresh = DurationRepository(Fx.ctx, dir) { opens.incrementAndGet(); FailingReaderOfNothing }
+        assertNull(fresh.duration(ghost))
+        assertEquals("the ghost's entry went with its folder: read again", 1, opens.get())
+    }
+
     private object FailingReaderOfNothing : RandomAccessReader {
         private val bytes = ByteArray(10) { 'x'.code.toByte() }
         override val size: Long get() = bytes.size.toLong()

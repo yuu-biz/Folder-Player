@@ -5,8 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.withInfiniteAnimationFrameNanos
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -40,7 +39,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
@@ -94,6 +96,8 @@ fun AudioVisualizer(
     modifier: Modifier = Modifier,
     cover: Any? = null,
     coverFallback: ByteArray? = null,
+    /** A double tap (the lyrics area grows and shrinks with it); null: a tap changes the style at once. */
+    onDoubleTap: (() -> Unit)? = null,
 ) {
     DisposableEffect(visible) {
         if (visible) AudioTap.attach()
@@ -156,18 +160,28 @@ fun AudioVisualizer(
     }
     val change = stringResource(R.string.visualizer_change)
     val styleName = stringResource(style.label)
+    val doubleTap by rememberUpdatedState(onDoubleTap)
+    val nextStyle = {
+        style = style.next()
+        prefs.saveVisualizerStyle(style.name)
+        labelShown = true
+    }
     Box(modifier) {
         Canvas(
             Modifier.fillMaxSize()
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClickLabel = change, role = Role.Button) {
-                    style = style.next()
-                    prefs.saveVisualizerStyle(style.name)
-                    labelShown = true
+                .pointerInput(onDoubleTap != null) {
+                    detectTapGestures(onTap = { nextStyle() }, onDoubleTap = if (onDoubleTap != null) ({ _ -> doubleTap?.invoke() }) else null)
                 }
-                .semantics { contentDescription = styleName }
+                .semantics {
+                    contentDescription = styleName
+                    role = Role.Button
+                    onClick(label = change) { nextStyle(); true }
+                }
                 .testTag("audio_visualizer")
         ) {
             frame // redrawn with each frame
+            // Laid out at no size (a pane being resized, the sheet moving): a gradient of radius 0 would throw.
+            if (size.minDimension <= 0f) return@Canvas
             when (style) {
                 VisualizerStyle.WAVE -> drawWave(smooth, c1, c2, paths)
                 VisualizerStyle.BARS -> drawBars(smooth, peaks, c1, c2)

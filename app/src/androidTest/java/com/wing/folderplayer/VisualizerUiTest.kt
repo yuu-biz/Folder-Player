@@ -10,6 +10,8 @@ import com.wing.folderplayer.data.source.SourceRegistry
 import com.wing.folderplayer.playback.AudioTap
 import com.wing.folderplayer.service.MusicService
 import com.wing.folderplayer.ui.player.PlayerViewModel
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performSemanticsAction
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -72,10 +74,13 @@ class VisualizerUiTest : UiTestBase() {
         val prefs = com.wing.folderplayer.data.prefs.PlaybackPreferences(Fx.ctx)
         val start = com.wing.folderplayer.ui.player.VisualizerStyle.of(prefs.getVisualizerStyle())
         var style = start
-        repeat(com.wing.folderplayer.ui.player.VisualizerStyle.values().size) {
-            click("audio_visualizer")
+        repeat(com.wing.folderplayer.ui.player.VisualizerStyle.values().size) { k ->
+            // A tap (it waits to be sure that it is not a double tap), then the accessibility action.
+            if (k == 0) click("audio_visualizer")
+            else compose.onNodeWithTag("audio_visualizer").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
             style = style.next()
-            assertEquals("style kept", style.name, prefs.getVisualizerStyle())
+            val expected = style.name
+            until(3_000, "style $expected kept") { prefs.getVisualizerStyle() == expected }
             assertTrue("its name shown", text("visualizer_style") == str(style.label))
         }
         assertEquals(start, style)
