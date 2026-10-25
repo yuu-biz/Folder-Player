@@ -347,6 +347,10 @@
         <item quantity="one">%d folder</item>
         <item quantity="other">%d folders</item>
     </plurals>
+    <plurals name="browser_songs_count">
+        <item quantity="one">%d song</item>
+        <item quantity="other">%d songs</item>
+    </plurals>
     <plurals name="source_test_ok">
         <item quantity="one">Connected – root lists %d entry</item>
         <item quantity="other">Connected – root lists %d entries</item>
@@ -386,6 +390,16 @@
     <string name="browser_favorite_songs">Favorite songs</string>
     <string name="browser_favorite_folders">Favorite folders</string>
     <string name="sort_length">Length</string>
+    <string name="sort_title">Title</string>
+    <string name="sort_artist">Artist</string>
+    <string name="sort_album">Album</string>
+    <string name="browser_songs">Songs</string>
+    <string name="songs_empty">No songs yet. Songs appear here once their lengths are read: use \"Read song lengths\" on a folder (⋮ menu) or on your bookmarks.</string>
+    <string name="action_show_in_folder">Show in folder</string>
+    <string name="visualizer_style_wave">Wave</string>
+    <string name="visualizer_style_bars">Bars</string>
+    <string name="visualizer_style_ring">Ring</string>
+    <string name="visualizer_change">Change the style</string>
     <string name="length_scan_folder">Read song lengths (this folder and below)</string>
     <string name="length_scan_bookmarks">Read song lengths of the bookmarks</string>
     <string name="length_scan_bookmark">Read song lengths</string>

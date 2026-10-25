@@ -208,6 +208,79 @@ class DurationRepositoryTest {
         assertAbout(30_000, fresh.cached(mp3))
     }
 
+    /** A scan reads a few files of a source at the same time, never more than the source allows. */
+    @Test fun scanReadsSeveralFilesAtOnceButNoMoreThanAllowed() = runBlocking {
+        val active = AtomicInteger()
+        val most = AtomicInteger()
+        val opens = AtomicInteger()
+        val repo = DurationRepository(Fx.ctx, dir, scanParallel = { 3 }) { f ->
+            val n = active.incrementAndGet()
+            most.accumulateAndGet(n) { a, b -> maxOf(a, b) }
+            // The first ones take long, so that the readers are seen side by side.
+            if (opens.incrementAndGet() <= 12) Thread.sleep(150)
+            active.decrementAndGet()
+            real(f)
+        }
+        val before = repo.scan.value.finished
+        assertTrue(repo.startScan(listOf(SourceRef(local, Fx.FX))))
+        val p = waitScan(repo, before)
+        assertTrue("songs read ($p)", p.read > 10)
+        assertEquals("three readers at once", 3, most.get())
+    }
+
+    /** A source whose files cannot be read is left after a few failures, also when several readers fail together. */
+    @Test fun aSourceThatFailsIsLeftAlsoWithReadersSideBySide() = runBlocking {
+        val opens = AtomicInteger()
+        val repo = DurationRepository(Fx.ctx, dir, scanParallel = { 4 }) { opens.incrementAndGet(); throw IOException("connection reset") }
+        val before = repo.scan.value.finished
+        assertTrue(repo.startScan(listOf(SourceRef(local, Fx.FX))))
+        val p = waitScan(repo, before)
+        assertEquals("nothing read ($p)", 0, p.read)
+        assertEquals("every song counted as not read", p.songs, p.notRead)
+        // The fixture holds over 300 songs in over 20 folders: once left, the source is not listed further either.
+        assertTrue("left after a few tries: ${opens.get()} opened, $p", opens.get() in 3..8 && p.songs < 40 && p.folders < 10)
+    }
+
+    /** Tags are read with the lengths and kept; a length kept without them (1.7.0) is read again by a scan for them. */
+    @Test fun tagsAreKeptAndAnOlderIndexIsReadAgainForThem() = runBlocking {
+        val f = mp3
+        File(dir, "duration-index-v2.json").writeText("""{"version":2,"known":{"${f.sourceId}|${f.path}|${f.size}|${f.lastModified}":30000}}""")
+        val opens = AtomicInteger()
+        val repo = repo(opens, 0) { real(it) }
+        assertAbout(30_000, repo.cached(f))
+        val before = repo.scan.value.finished
+        assertTrue(repo.startScan(listOf(SourceRef(local, "${Fx.FX}/Album-A"))))
+        val p = waitScan(repo, before)
+        assertEquals("both songs read: the flac for its length, the mp3 for its tags ($p)", 2, p.read)
+        val song = repo.songs().first { it.path == f.path }
+        assertEquals(com.wing.folderplayer.data.source.TrackTags("Tagged Title Two", "Fixture Artist", "Album A", 2), song.tags)
+        assertAbout(30_000, song.durationMs)
+        // On disk with the tags: a second scan and another instance read nothing.
+        val again = repo.scan.value.finished
+        assertTrue(repo.startScan(listOf(SourceRef(local, "${Fx.FX}/Album-A"))))
+        assertEquals(0, waitScan(repo, again).read)
+        val fresh = DurationRepository(Fx.ctx, dir) { error("must not read ${it.name}") }
+        assertEquals("Tagged Title One", fresh.songs().first { it.name.startsWith("01") }.tags?.title)
+    }
+
+    /** The browser listing a folder drops what is gone from it; a moved file is listed once, where it was seen last. */
+    @Test fun aListedFolderDropsWhatIsGoneAndAMovedFileIsListedOnce() = runBlocking {
+        val opens = AtomicInteger()
+        val repo = repo(opens, 0) { real(it) }
+        assertAbout(30_000, repo.duration(mp3))
+        val moved = mp3.copy(path = "${Fx.FX}/Elsewhere/02 track.mp3")
+        assertAbout(30_000, repo.cached(moved))
+        assertEquals("one entry", listOf(moved.path), repo.songs().filter { it.name == mp3.name }.map { it.path })
+        // Album-A listed without the mp3 (it is in the other folder now): its old entry goes.
+        val album = SourceRef(local, "${Fx.FX}/Album-A")
+        repo.onFolderListed(album, listOf(file("${Fx.FX}/Album-A/01 曲 #1+%.flac")))
+        assertEquals(listOf(moved.path), repo.songs().filter { it.name == mp3.name }.map { it.path })
+        // And the other folder listed without it: gone from the list.
+        repo.onFolderListed(SourceRef(local, "${Fx.FX}/Elsewhere"), emptyList())
+        assertTrue(repo.songs().none { it.name == mp3.name })
+        assertEquals("read once", 1, opens.get())
+    }
+
     private object FailingReaderOfNothing : RandomAccessReader {
         private val bytes = ByteArray(10) { 'x'.code.toByte() }
         override val size: Long get() = bytes.size.toLong()

@@ -339,6 +339,11 @@
         <item quantity="many">%d cartelle</item>
         <item quantity="other">%d cartelle</item>
     </plurals>
+    <plurals name="browser_songs_count">
+        <item quantity="one">%d brano</item>
+        <item quantity="many">%d brani</item>
+        <item quantity="other">%d brani</item>
+    </plurals>
     <plurals name="source_test_ok">
         <item quantity="one">Connesso – la radice contiene %d elemento</item>
         <item quantity="many">Connesso – la radice contiene %d elementi</item>
@@ -381,6 +386,16 @@
     <string name="browser_favorite_songs">Brani preferiti</string>
     <string name="browser_favorite_folders">Cartelle preferite</string>
     <string name="sort_length">Durata</string>
+    <string name="sort_title">Titolo</string>
+    <string name="sort_artist">Artista</string>
+    <string name="sort_album">Album</string>
+    <string name="browser_songs">Brani</string>
+    <string name="songs_empty">Ancora nessun brano. I brani compaiono qui quando la loro durata è stata letta: «Leggi le durate» su una cartella (menu ⋮) o sui segnalibri.</string>
+    <string name="action_show_in_folder">Mostra nella cartella</string>
+    <string name="visualizer_style_wave">Onda</string>
+    <string name="visualizer_style_bars">Barre</string>
+    <string name="visualizer_style_ring">Anello</string>
+    <string name="visualizer_change">Cambia stile</string>
     <string name="length_scan_folder">Leggi le durate (questa cartella e sottocartelle)</string>
     <string name="length_scan_bookmarks">Leggi le durate dei segnalibri</string>
     <string name="length_scan_bookmark">Leggi le durate</string>

@@ -8,6 +8,7 @@ import android.content.ComponentName
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
@@ -440,6 +441,42 @@ class PlayerViewModel : ViewModel() {
         }
     }
 
+    /** Covers found for items of a long queue that started without theirs (only the screen shows them; by media id). */
+    private val lateCovers = HashMap<String, String>()
+    private var completeJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * A long queue from many folders starts with the covers and lyric files of the first songs only
+     * ([PlayerRepository.mediaItemsFor]): the song playing and the next ones get theirs now, before they play. The song
+     * playing is not replaced (that would restart it): its cover goes to the screen only.
+     */
+    private fun completeUpcoming() {
+        val p = player ?: return
+        completeJob?.cancel()
+        completeJob = viewModelScope.launch(exceptionHandler) {
+            val current = p.currentMediaItemIndex
+            var i = current
+            for (step in 0..PlayerRepository.UPCOMING) {
+                if (i == C.INDEX_UNSET || i >= p.mediaItemCount) break
+                val item = p.getMediaItemAt(i)
+                val done = repo().completed(item)
+                if (done != null && i < p.mediaItemCount && p.getMediaItemAt(i).mediaId == item.mediaId) {
+                    if (i == current) {
+                        done.mediaMetadata.artworkUri?.let { cover ->
+                            lateCovers[item.mediaId] = cover.toString()
+                            if (_uiState.value.currentMediaId == item.mediaId && p.mediaMetadata.artworkUri == null) {
+                                _uiState.value = _uiState.value.copy(coverUri = cover.toString(), coverFallback = p.mediaMetadata.artworkData)
+                            }
+                        }
+                    } else {
+                        p.replaceMediaItem(i, done)
+                    }
+                }
+                i = p.currentTimeline.takeIf { !it.isEmpty }?.getNextWindowIndex(i, Player.REPEAT_MODE_OFF, p.shuffleModeEnabled) ?: C.INDEX_UNSET
+            }
+        }
+    }
+
     private fun setupPlayerListener() {
         player?.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -457,6 +494,7 @@ class PlayerViewModel : ViewModel() {
                 aiLyricsJob?.cancel()
                 _uiState.value = _uiState.value.copy(lyricsRequestRunning = false, lyricsError = null)
                 updateMetadata()
+                completeUpcoming()
 
                 if (mediaItem == null && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
                     checkAndPlayNextFolder()
@@ -687,8 +725,8 @@ class PlayerViewModel : ViewModel() {
             currentTitle = cleanTitle,
             currentArtist = currentArtistImmediate,
             currentFolderName = folderName,
-            coverUri = metadata.artworkUri?.toString() ?: metadata.artworkData,
-            coverFallback = if (metadata.artworkUri != null) metadata.artworkData else null,
+            coverUri = metadata.artworkUri?.toString() ?: lateCovers[targetMediaId] ?: metadata.artworkData,
+            coverFallback = if (metadata.artworkUri != null || lateCovers[targetMediaId] != null) metadata.artworkData else null,
             audioInfo = audioInfo,
             isPlaying = p.isPlaying,
             currentMediaId = targetMediaId,
@@ -1219,7 +1257,7 @@ class PlayerViewModel : ViewModel() {
         pendingPlayIntent = firstFile.ref.toUriString()
         playJob = viewModelScope.launch(exceptionHandler) {
             awaitPlayer()
-            val mediaItems = repo().mediaItemsFor(files)
+            val mediaItems = repo().mediaItemsFor(files, around = startIndex)
             if (!isCurrent(generation)) return@launch
             currentFolder = firstFile.ref.parent
             player?.setMediaItems(mediaItems)

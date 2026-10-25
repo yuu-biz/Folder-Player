@@ -71,7 +71,6 @@ class SourcePreferences(context: Context) {
         prefs.edit { putString("sort_field_$key", field); putBoolean("sort_asc_$key", ascending) }
     }
 
-    /** The order of the favourites list: when added (oldest first) until the user picks another. */
     /** The order of a favourites list; until the songs have one of their own (1.7.0) they take the one both lists had. */
     fun getFavoritesSort(kind: com.wing.folderplayer.data.favorites.FavoritesKind): SortOption {
         val p = sortKeyPrefix(kind)
@@ -87,6 +86,13 @@ class SourcePreferences(context: Context) {
     // The folders keep the key of the single list there was before 1.7.0.
     private fun sortKeyPrefix(kind: com.wing.folderplayer.data.favorites.FavoritesKind) =
         if (kind == com.wing.folderplayer.data.favorites.FavoritesKind.FOLDERS) "favorites_sort" else "favorite_songs_sort"
+
+    /** The order of the songs list (by title until the user picks another). */
+    fun getSongsSort(): SortOption = SortOption(prefs.getString("songs_sort_field", null) ?: "TITLE", prefs.getBoolean("songs_sort_asc", true))
+
+    fun saveSongsSort(field: String, ascending: Boolean) {
+        prefs.edit { putString("songs_sort_field", field); putBoolean("songs_sort_asc", ascending) }
+    }
 
     data class SortOption(val field: String, val ascending: Boolean)
 

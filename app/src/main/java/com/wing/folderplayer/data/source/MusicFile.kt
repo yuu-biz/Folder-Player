@@ -15,11 +15,18 @@ data class MusicFile(
     val createdAt: Long = 0,
     /** Track length in ms when known (from the length cache, filled for sorting by length); null: not known or not a song. */
     val durationMs: Long? = null,
+    /** Title, artist and album from the file's tags when the length index has them (the songs list); null: not read. */
+    val tags: TrackTags? = null,
 ) {
     /** What "sort by creation date" uses: the creation time, or the modification time where there is none. */
     val createdOrModified: Long get() = if (createdAt > 0) createdAt else lastModified
     val ref: SourceRef get() = SourceRef(sourceId, path)
     val extension: String get() = SourcePath.extension(name)
+}
+
+/** Tags of a song, kept with its length (see DurationRepository); blank where the file has none. */
+data class TrackTags(val title: String = "", val artist: String = "", val album: String = "", val track: Int = 0) {
+    companion object { val NONE = TrackTags() }
 }
 
 /**

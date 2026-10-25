@@ -51,11 +51,19 @@ class PlayerRepository(private val context: Context) {
         return music.map { buildMediaItem(it, cover, findLyric(it, entries)) }
     }
 
-    /** Items for files that may come from different folders; covers are resolved once per parent folder. */
-    suspend fun mediaItemsFor(files: List<MusicFile>): List<MediaItem> {
+    /**
+     * Items for files that may come from different folders; covers are resolved once per parent folder. A queue from
+     * many folders (the songs list: hundreds of them on a NAS) would list every folder before the first song plays:
+     * then only the folders of the songs from [around] on are listed, the others are marked [EXTRA_COVER_PENDING] and
+     * completed when their turn comes ([completed]).
+     */
+    suspend fun mediaItemsFor(files: List<MusicFile>, around: Int = 0): List<MediaItem> {
         val covers = HashMap<String, String?>()
         val listings = HashMap<String, List<MusicFile>?>()
-        return files.map { f ->
+        val folders = files.mapTo(HashSet()) { SourcePath.parent(it.path) to it.sourceId }.size
+        val listed = if (folders <= MAX_FOLDERS_LISTED) files.indices else around.coerceAtLeast(0)..around + UPCOMING
+        return files.mapIndexed { i, f ->
+            if (i !in listed) return@mapIndexed buildMediaItem(f, null, null, coverPending = true)
             val parent = f.ref.parent ?: SourceRef(f.sourceId, SourcePath.ROOT)
             val key = parent.toUriString()
             val listing = listings.getOrPut(key) { runCatching { list(parent) }.getOrNull() }
@@ -64,13 +72,25 @@ class PlayerRepository(private val context: Context) {
         }
     }
 
+    /** [item] with the cover of its folder and its lyric file, when it was left without them ([mediaItemsFor]); else null. */
+    suspend fun completed(item: MediaItem): MediaItem? {
+        val extras = item.mediaMetadata.extras ?: return null
+        if (!extras.getBoolean(EXTRA_COVER_PENDING)) return null
+        val ref = SourceUris.parse(item.mediaId) ?: return null
+        val parent = ref.parent ?: SourceRef(ref.sourceId, SourcePath.ROOT)
+        val listing = runCatching { list(parent) }.getOrNull() ?: return null
+        val file = listing.firstOrNull { !it.isDirectory && it.path == ref.path }
+            ?: MusicFile(SourcePath.name(ref.path), ref.path, false, extras.getLong("file_size"), 0, ref.sourceId)
+        return buildMediaItem(file, coverFor(parent, listing), findLyric(file, listing))
+    }
+
     fun findLyric(audio: MusicFile, siblings: List<MusicFile>): MusicFile? {
         val base = SourcePath.baseName(audio.name)
         return siblings.firstOrNull { !it.isDirectory && MediaTypes.isLyric(it.name) && SourcePath.baseName(it.name) == base }
             ?: siblings.firstOrNull { !it.isDirectory && MediaTypes.isLyric(it.name) && SourcePath.baseName(it.name).equals(base, true) }
     }
 
-    fun buildMediaItem(file: MusicFile, coverUri: String?, lrc: MusicFile?): MediaItem {
+    fun buildMediaItem(file: MusicFile, coverUri: String?, lrc: MusicFile?, coverPending: Boolean = false): MediaItem {
         val ref = file.ref
         val uri = ref.toUriString()
         val ext = file.extension
@@ -80,6 +100,7 @@ class PlayerRepository(private val context: Context) {
             putLong("file_size", file.size)
             putString("file_ext", ext)
             lrc?.let { putString(EXTRA_LRC_PATH, it.path) }
+            if (coverPending) putBoolean(EXTRA_COVER_PENDING, true)
         }
         val display = SourcePath.baseName(file.name)
         val md = MediaMetadata.Builder()
@@ -141,6 +162,11 @@ class PlayerRepository(private val context: Context) {
         const val EXTRA_LRC_PATH = "lrc_path"
         const val EXTRA_CUE_PATH = "cue_path"
         const val EXTRA_IS_CUE_TRACK = "is_cue_track"
+        /** The folder of this item was not listed yet: no cover, no lyric file (see [mediaItemsFor]). */
+        const val EXTRA_COVER_PENDING = "cover_pending"
+        /** A queue from more folders than this lists only the folders of the next songs ([UPCOMING]) at first. */
+        const val MAX_FOLDERS_LISTED = 12
+        const val UPCOMING = 3
 
         /** Formats decoded natively are exposed to Media3 as WAV by NativePcmDataSource. */
         fun mimeFor(ext: String): String? = when (ext) {
