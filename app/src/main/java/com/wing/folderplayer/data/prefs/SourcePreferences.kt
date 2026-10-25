@@ -94,6 +94,13 @@ class SourcePreferences(context: Context) {
         prefs.edit { putString("songs_sort_field", field); putBoolean("songs_sort_asc", ascending) }
     }
 
+    /** The folder the songs list shows the songs of (and of the folders below it); null: every song. */
+    fun getSongsFolder(): SourceRef? = com.wing.folderplayer.data.source.SourceUris.parse(prefs.getString("songs_folder", null))
+
+    fun saveSongsFolder(folder: SourceRef?) {
+        prefs.edit { if (folder == null) remove("songs_folder") else putString("songs_folder", folder.toUriString()) }
+    }
+
     data class SortOption(val field: String, val ascending: Boolean)
 
     /**

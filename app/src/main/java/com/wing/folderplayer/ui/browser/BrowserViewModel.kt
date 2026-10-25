@@ -80,6 +80,8 @@ data class BrowserUiState(
     val showingSongs: Boolean = false,
     /** Songs in that list (shown on the source list). */
     val songCount: Int = 0,
+    /** The folder that list is narrowed to, with the folders below it (kept, see [SourcePreferences.getSongsFolder]); null: every song. */
+    val songsFolder: SourceRef? = null,
     val files: List<MusicFile> = emptyList(),
     val isLoading: Boolean = false,
     val currentlyPlayingMediaId: String? = null,
@@ -163,6 +165,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     /** Scroll position of each favourites list, kept for the way back from a favourite. */
     private val favoritesScroll = HashMap<FavoritesKind, Pair<Int, Int>>()
     private var songsScroll = 0 to 0
+    /** Counts the songs for the source list (declared before init: its collectors start it). */
+    private var countJob: Job? = null
     private var searchJob: Job? = null
 
     /** Last [BrowserUiState.scrollTrigger] the list has scrolled for (kept here: same lifetime as the counter). */
@@ -180,7 +184,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         bookmarksRepository = BookmarksRepository(File(application.filesDir, "favorites/bookmarks.json"))
 
         viewModelScope.launch {
-            SourceRegistry.sources.collect { list -> _uiState.value = _uiState.value.copy(availableSources = list) }
+            SourceRegistry.sources.collect { list ->
+                _uiState.value = _uiState.value.copy(availableSources = list, songsFolder = songsFolder())
+                countSongs()
+            }
         }
         viewModelScope.launch {
             favoritesRepository.items.collect { list ->
@@ -195,8 +202,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             // Lengths and tags were kept or entries dropped: the songs list (and its count) follows.
             durations.revision.collect {
-                val count = withContext(Dispatchers.Default) { durations.songs().size }
-                _uiState.value = _uiState.value.copy(songCount = count)
+                countSongs()
                 if (_uiState.value.showingSongs) renderSongs(restoreScroll = false)
             }
         }
@@ -881,7 +887,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Builds the songs list from the length index, in its order. [restoreScroll]: Back to it (the place it was left at);
+     * Builds the songs list from the length index (below the folder it is narrowed to, [setSongsFolder]), in its order. [restoreScroll]: Back to it (the place it was left at);
      * [top]: from its first row (entered, or sorted again); otherwise it stays where it is (the index changed).
      */
     private fun renderSongs(restoreScroll: Boolean, top: Boolean = false, filter: String? = null) {
@@ -893,8 +899,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             lengthJob?.cancel()
             _uiState.value = _uiState.value.copy(showingSongs = true, favoritesKind = null, currentFolder = null, lengthFill = null, filter = filter.orEmpty(), filterOpen = !filter.isNullOrEmpty())
         }
+        val folder = songsFolder()
         songsJob = viewModelScope.launch(exceptionHandler) {
-            val songs = withContext(Dispatchers.Default) { com.wing.folderplayer.data.metadata.SongList.sort(durations.songs(), sort.field, sort.ascending) }
+            val songs = withContext(Dispatchers.Default) {
+                val list = com.wing.folderplayer.data.metadata.SongList
+                list.sort(list.inFolder(durations.songs(), folder), sort.field, sort.ascending)
+            }
             val now = _uiState.value
             if (!now.showingSongs) return@launch // left meanwhile
             val f = now.filter
@@ -904,7 +914,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 else -> null
             }
             _uiState.value = now.copy(
-                showingSongs = true, favoritesKind = null, currentFolder = null, files = songs, isLoading = false,
+                showingSongs = true, favoritesKind = null, currentFolder = null, files = songs, isLoading = false, songsFolder = folder,
                 sortField = sort.field, sortAscending = sort.ascending, viewMode = "LIST", lengthFill = null,
                 filter = f, filterOpen = f.isNotEmpty() || now.filterOpen,
                 scrollToIndex = scroll?.first ?: now.scrollToIndex,
@@ -913,6 +923,35 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             )
         }
     }
+
+    /** The folder the songs list is narrowed to; null: every song (also when its source is gone). */
+    private fun songsFolder(): SourceRef? = sourcePreferences.getSongsFolder()?.takeIf { SourceRegistry.get(it.sourceId) != null }
+
+    private fun countSongs() {
+        countJob?.cancel()
+        countJob = viewModelScope.launch {
+            val folder = songsFolder()
+            val count = withContext(Dispatchers.Default) { com.wing.folderplayer.data.metadata.SongList.inFolder(durations.songs(), folder).size }
+            _uiState.value = _uiState.value.copy(songCount = count, songsFolder = folder)
+        }
+    }
+
+    /** Narrows the songs list to [folder] and the folders below it (null: every song); kept for the next time. */
+    fun setSongsFolder(folder: SourceRef?) {
+        sourcePreferences.saveSongsFolder(folder)
+        _uiState.value = _uiState.value.copy(songsFolder = songsFolder())
+        countSongs()
+        if (_uiState.value.showingSongs) renderSongs(restoreScroll = false, top = true)
+    }
+
+    /** The songs list of [folder] and the folders below it (a folder's menu, a bookmark's menu). */
+    fun showSongsIn(folder: SourceRef) {
+        setSongsFolder(folder)
+        showSongs()
+    }
+
+    /** Reads the song lengths of the folder the songs list is narrowed to. */
+    fun scanSongsFolderLengths() { songsFolder()?.let { scanLengths(listOf(it)) } }
 
     // ---------------- lengths ----------------
 

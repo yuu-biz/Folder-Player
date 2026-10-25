@@ -4,9 +4,11 @@ import com.wing.folderplayer.data.search.NameFilter
 import com.wing.folderplayer.data.source.MusicFile
 import com.wing.folderplayer.data.source.SORT_LENGTH
 import com.wing.folderplayer.data.source.SourcePath
+import com.wing.folderplayer.data.source.SourceRef
 
 /**
- * The songs list: every song the length index knows ([DurationRepository.songs]), as a music player lists its library.
+ * The songs list: every song the length index knows ([DurationRepository.songs]), as a music player lists its library,
+ * or those below one folder ([inFolder]).
  * Sorted by title, artist, album, length or modification time; a song without tags goes by its file name, and blank
  * artists / albums come last in either direction.
  */
@@ -40,6 +42,10 @@ object SongList {
         val (with, without) = songs.partition { !key(it).isNullOrBlank() }
         return with.sortedWith(primary.then(then)) + without.sortedWith(compareBy<MusicFile>({ title(it).lowercase() }, { it.path }))
     }
+
+    /** The songs in [folder] and the folders below it; null: all of them. */
+    fun inFolder(songs: List<MusicFile>, folder: SourceRef?): List<MusicFile> =
+        if (folder == null) songs else songs.filter { it.sourceId == folder.sourceId && SourcePath.isAncestorOrSelf(folder.path, it.path) }
 
     /** Every word of [filter] in the title, artist, album or file name (as the folder filter: case, width, kana ignored). */
     fun filter(songs: List<MusicFile>, filter: String): List<MusicFile> {

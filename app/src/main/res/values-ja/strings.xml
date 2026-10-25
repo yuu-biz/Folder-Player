@@ -381,6 +381,9 @@
     <string name="length_scan_folder">曲の長さを解析（このフォルダ以下）</string>
     <string name="length_scan_bookmarks">ブックマークの曲の長さを解析</string>
     <string name="length_scan_bookmark">曲の長さを解析</string>
+    <string name="songs_folder_all">すべてのフォルダ</string>
+    <string name="songs_in_folder">このフォルダ以下の曲一覧</string>
+    <string name="songs_folder_empty">%1$s 以下にはまだ解析済みの曲がありません。</string>
     <string name="length_scan_busy">曲の長さはすでに解析中です</string>
     <string name="length_scan_counts">フォルダ %1$d・曲 %2$d（新たに %3$d）</string>
     <string name="length_scan_running">曲の長さを解析中: %s</string>

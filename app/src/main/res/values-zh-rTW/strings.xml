@@ -381,6 +381,9 @@
     <string name="length_scan_folder">讀取歌曲長度（此資料夾及子資料夾）</string>
     <string name="length_scan_bookmarks">讀取書籤中的歌曲長度</string>
     <string name="length_scan_bookmark">讀取歌曲長度</string>
+    <string name="songs_folder_all">所有資料夾</string>
+    <string name="songs_in_folder">此資料夾的歌曲</string>
+    <string name="songs_folder_empty">%1$s 中還沒有已讀取的歌曲。</string>
     <string name="length_scan_busy">已在讀取歌曲長度</string>
     <string name="length_scan_counts">資料夾：%1$d，歌曲：%2$d，本次讀取：%3$d</string>
     <string name="length_scan_running">正在讀取歌曲長度：%s</string>
