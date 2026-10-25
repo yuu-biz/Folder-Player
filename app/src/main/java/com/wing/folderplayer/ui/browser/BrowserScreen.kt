@@ -328,6 +328,18 @@ fun BrowserScreen(
                                         onClick = { close(); viewModel.scanCurrentFolderLengths() },
                                         modifier = Modifier.testTag("menu_scan_lengths")
                                     )
+                                    if (uiState.currentFolder != null) DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.songs_in_folder)) },
+                                        leadingIcon = { Icon(Icons.Default.LibraryMusic, contentDescription = null) },
+                                        onClick = { close(); viewModel.showSongsIn(uiState.currentFolder!!) },
+                                        modifier = Modifier.testTag("menu_songs_in_folder")
+                                    )
+                                    if (uiState.showingSongs && uiState.songsFolder != null) DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.length_scan_folder)) },
+                                        leadingIcon = { Icon(Icons.Default.Timer, contentDescription = null) },
+                                        onClick = { close(); viewModel.scanSongsFolderLengths() },
+                                        modifier = Modifier.testTag("menu_scan_songs_folder")
+                                    )
                                     if (uiState.showingSongs && uiState.bookmarks.any { b -> uiState.availableSources.any { it.id == b.sourceId } }) DropdownMenuItem(
                                         text = { Text(stringResource(R.string.length_scan_bookmarks)) },
                                         leadingIcon = { Icon(Icons.Default.Timer, contentDescription = null) },
@@ -407,6 +419,7 @@ fun BrowserScreen(
                                 fields = SongsSortFields,
                             )
                         }
+                        SongsFolderPicker(uiState, onPick = { viewModel.setSongsFolder(it) })
                         if (uiState.filterOpen) FilterField(uiState.filter, onChange = { viewModel.setFilter(it) }, onClose = { viewModel.closeFilter() })
                     } else if (uiState.currentFolder != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -456,8 +469,10 @@ fun BrowserScreen(
                                 onBookmarkMove = { b, delta -> viewModel.moveBookmark(b, delta) },
                                 onBookmarkReorder = { viewModel.reorderBookmarks(it) },
                                 onBookmarkScan = { viewModel.scanBookmarkLengths(it) },
+                                onBookmarkSongs = { viewModel.showSongsIn(it.ref) },
                                 onFavoritesClick = { viewModel.showFavorites(it) },
                                 songCount = uiState.songCount,
+                                songsFolder = uiState.songsFolder?.let { songsFolderLabel(it, uiState.bookmarks, uiState.availableSources) },
                                 onSongsClick = { viewModel.showSongs() },
                                 onSourceClick = { viewModel.selectSource(it) },
                                 onEditSource = { sourceToEdit = it },
@@ -505,7 +520,12 @@ fun BrowserScreen(
                         if (uiState.showingSongs && !uiState.isLoading && files.isEmpty()) {
                             SongsEmptyState(
                                 filter = uiState.filter.trim().takeIf { uiState.files.isNotEmpty() },
-                                onScan = if (uiState.bookmarks.any { b -> uiState.availableSources.any { it.id == b.sourceId } }) ({ viewModel.scanAllBookmarkLengths() }) else null,
+                                folder = uiState.songsFolder?.let { songsFolderLabel(it, uiState.bookmarks, uiState.availableSources) },
+                                onScan = when {
+                                    uiState.songsFolder != null -> ({ viewModel.scanSongsFolderLengths() })
+                                    uiState.bookmarks.any { b -> uiState.availableSources.any { it.id == b.sourceId } } -> ({ viewModel.scanAllBookmarkLengths() })
+                                    else -> null
+                                },
                                 modifier = Modifier.align(Alignment.Center),
                             )
                         }
@@ -712,21 +732,83 @@ private val SongsSortFields = com.wing.folderplayer.data.metadata.SongList.let {
 }
 
 /**
- * The songs list has none: nothing scanned yet ([onScan] reads the bookmarks; null without bookmarks), or [filter]
- * matches none of them.
+ * The songs list has none: nothing scanned yet ([onScan] reads the bookmarks, or the [folder] the list is narrowed to;
+ * null without either), or [filter] matches none of them.
  */
 @Composable
-private fun SongsEmptyState(filter: String?, onScan: (() -> Unit)?, modifier: Modifier = Modifier) {
+private fun SongsEmptyState(filter: String?, folder: String?, onScan: (() -> Unit)?, modifier: Modifier = Modifier) {
     Column(modifier.padding(horizontal = 32.dp, vertical = 24.dp).testTag("songs_empty"), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            if (filter != null) stringResource(R.string.browser_filter_no_match, filter) else stringResource(R.string.songs_empty),
+            when {
+                filter != null -> stringResource(R.string.browser_filter_no_match, filter)
+                folder != null -> stringResource(R.string.songs_folder_empty, folder)
+                else -> stringResource(R.string.songs_empty)
+            },
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (filter == null && onScan != null) {
             Spacer(Modifier.height(12.dp))
-            Button(onClick = onScan, modifier = Modifier.testTag("songs_scan_bookmarks")) { Text(stringResource(R.string.length_scan_bookmarks)) }
+            if (folder != null) Button(onClick = onScan, modifier = Modifier.testTag("songs_scan_folder")) { Text(stringResource(R.string.length_scan_folder)) }
+            else Button(onClick = onScan, modifier = Modifier.testTag("songs_scan_bookmarks")) { Text(stringResource(R.string.length_scan_bookmarks)) }
+        }
+    }
+}
+
+/** How the songs list names [folder]: as its bookmark, as its source for a source's top folder, else "source › folder". */
+private fun songsFolderLabel(folder: SourceRef, bookmarks: List<Bookmark>, sources: List<SourceConfig>): String {
+    bookmarks.firstOrNull { it.sourceId == folder.sourceId && it.path == folder.path }?.let { return it.name.ifEmpty { SourcePath.name(it.path) } }
+    val source = sources.firstOrNull { it.id == folder.sourceId }?.name.orEmpty()
+    return if (folder.path == SourcePath.ROOT) source else "$source › ${SourcePath.name(folder.path)}"
+}
+
+/**
+ * The folder the songs list shows the songs of (with the folders below it): every folder, a bookmarked folder or a
+ * source; any other folder is picked from its own menu ("Songs list of this folder") and is offered here while it is
+ * the one picked.
+ */
+@Composable
+private fun SongsFolderPicker(state: BrowserUiState, onPick: (SourceRef?) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val current = state.songsFolder
+    val bookmarks = state.bookmarks.filter { b -> state.availableSources.any { it.id == b.sourceId } }
+    Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box {
+            Surface(
+                onClick = { open = true },
+                shape = RoundedCornerShape(8.dp),
+                color = if (current != null) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                contentColor = if (current != null) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("songs_folder"),
+            ) {
+                Row(Modifier.heightIn(min = 40.dp).padding(start = 10.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(if (current != null) Icons.Default.FolderOpen else Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text(
+                        current?.let { songsFolderLabel(it, state.bookmarks, state.availableSources) } ?: stringResource(R.string.songs_folder_all),
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 8.dp).widthIn(max = 260.dp).testTag("songs_folder_label"),
+                    )
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                }
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                @Composable
+                fun option(folder: SourceRef?, label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tag: String) = DropdownMenuItem(
+                    text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    leadingIcon = { Icon(icon, contentDescription = null) },
+                    trailingIcon = { if (folder == current) Icon(Icons.Default.Check, contentDescription = null) },
+                    onClick = { open = false; if (folder != current) onPick(folder) },
+                    modifier = Modifier.semantics { selected = folder == current }.testTag(tag),
+                )
+                option(null, stringResource(R.string.songs_folder_all), Icons.Default.LibraryMusic, "songs_folder_all")
+                val listed = bookmarks.map { it.ref } + state.availableSources.map { SourceRef(it.id, SourcePath.ROOT) }
+                if (current != null && current !in listed) option(current, songsFolderLabel(current, state.bookmarks, state.availableSources), Icons.Default.FolderOpen, "songs_folder_current")
+                bookmarks.forEach { b -> option(b.ref, b.name.ifEmpty { SourcePath.name(b.path) }, Icons.Default.Bookmark, "songs_folder_bookmark_${b.name}") }
+                state.availableSources.forEach { s -> option(SourceRef(s.id, SourcePath.ROOT), s.name, sourceIcon(s.type), "songs_folder_source_${s.id}") }
+            }
         }
     }
 }
@@ -797,6 +879,8 @@ fun SourceList(
     onFavoritesClick: (FavoritesKind) -> Unit,
     /** Songs the length index knows (the songs list), and opening that list. */
     songCount: Int = 0,
+    /** The name of the folder the songs list is narrowed to (null: every song). */
+    songsFolder: String? = null,
     onSongsClick: () -> Unit = {},
     bookmarks: List<Bookmark>,
     onBookmarkClick: (Bookmark) -> Unit,
@@ -808,6 +892,8 @@ fun SourceList(
     onBookmarkReorder: (List<String>) -> Unit,
     /** Reads the song lengths in the bookmarked folder and below. */
     onBookmarkScan: (Bookmark) -> Unit,
+    /** The songs list of the bookmarked folder and below. */
+    onBookmarkSongs: (Bookmark) -> Unit = {},
     onSourceClick: (SourceConfig) -> Unit,
     onEditSource: (SourceConfig) -> Unit,
     onDeleteSource: (SourceConfig) -> Unit,
@@ -914,7 +1000,10 @@ fun SourceList(
             // Every song read by a scan (or seen in a list), as a music player lists its library.
             ListItem(
                 headlineContent = { Text(stringResource(R.string.browser_songs)) },
-                supportingContent = { Text(pluralStringResource(R.plurals.browser_songs_count, songCount, songCount)) },
+                supportingContent = {
+                    val count = pluralStringResource(R.plurals.browser_songs_count, songCount, songCount)
+                    Text(if (songsFolder != null) "$count · $songsFolder" else count, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("entry_songs_count"))
+                },
                 leadingContent = { Icon(Icons.Default.LibraryMusic, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                 modifier = Modifier.clickable { onSongsClick() }.testTag("entry_songs")
             )
@@ -993,6 +1082,12 @@ fun SourceList(
                                 leadingIcon = { Icon(Icons.Default.ArrowDownward, contentDescription = null) },
                                 onClick = { onBookmarkMove(bookmark, +1); showMenu = false },
                                 modifier = Modifier.testTag("bookmark_move_down")
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.songs_in_folder)) },
+                                leadingIcon = { Icon(Icons.Default.LibraryMusic, contentDescription = null) },
+                                onClick = { onBookmarkSongs(bookmark); showMenu = false },
+                                modifier = Modifier.testTag("bookmark_songs")
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.length_scan_bookmark)) },

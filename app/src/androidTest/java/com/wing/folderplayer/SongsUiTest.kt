@@ -14,6 +14,7 @@ import com.wing.folderplayer.data.source.SourceUris
 import com.wing.folderplayer.service.MusicService
 import com.wing.folderplayer.ui.browser.BrowserViewModel
 import com.wing.folderplayer.ui.player.PlayerViewModel
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTextReplacement
 import org.junit.After
@@ -26,7 +27,8 @@ import org.junit.runner.RunWith
 /**
  * The songs list: every song whose length was read (here: a scan of Album-A), with its title, artist and album from the
  * tags, sorted by title, artist, album or length, filtered by any of them; a tap plays the list from that song, the
- * long-press sheet shows the song in its folder and Back returns to the list.
+ * long-press sheet shows the song in its folder and Back returns to the list. The list can be narrowed to the songs of
+ * one folder (and below it), from the list itself, a folder's menu or a bookmark's menu; that is kept.
  */
 @RunWith(AndroidJUnit4::class)
 class SongsUiTest : UiTestBase() {
@@ -39,7 +41,10 @@ class SongsUiTest : UiTestBase() {
     /** The Album-A songs of the list on screen, by title, in their order (other suites may have scanned more). */
     private fun albumTitles() = bs.visibleFiles.filter { it.path.startsWith("$album/") }.map { SongList.title(it) }
 
+    private val copyDir = "${Fx.FX}/SongsFolderCopy"
+
     @Before fun scanAlbum() {
+        com.wing.folderplayer.data.prefs.SourcePreferences(Fx.ctx).saveSongsFolder(null)
         val repo = DurationRepository.get(Fx.ctx)
         val before = repo.scan.value.finished
         assertTrue(repo.startScan(listOf(SourceRef(local, album))))
@@ -53,8 +58,10 @@ class SongsUiTest : UiTestBase() {
                 MusicService.current?.let { it.becomingNoisyReceiver.onReceive(it, Intent(AudioManager.ACTION_AUDIO_BECOMING_NOISY)) }
             }
         }
-        // The default order for the next run.
+        // The default order and every folder for the next run.
         runCatching { com.wing.folderplayer.data.prefs.SourcePreferences(Fx.ctx).saveSongsSort(SongList.TITLE, true) }
+        runCatching { onUi { browser.setSongsFolder(null); browser.bookmarksRepository.remove(SourceRef(local, copyDir)) } }
+        runCatching { Fx.shell("rm -r /storage/emulated/0$copyDir") }
     }
 
     private fun openSongs() {
@@ -151,5 +158,68 @@ class SongsUiTest : UiTestBase() {
         }
         val next = SourceUris.parse(player.uiState.value.currentMediaId)?.path
         assertEquals("next in the list", list[at + 1].path, next)
+    }
+
+    private fun scan(path: String) {
+        val repo = DurationRepository.get(Fx.ctx)
+        val before = repo.scan.value.finished
+        assertTrue(repo.startScan(listOf(SourceRef(local, path))))
+        until(30_000, "scan of $path") { !repo.scan.value.running && repo.scan.value.finished > before }
+        repo.dismissScanResult()
+    }
+
+    private fun allBelow(path: String) = bs.visibleFiles.isNotEmpty() && bs.visibleFiles.all { it.sourceId == local && it.path.startsWith("$path/") }
+
+    /** A folder's menu narrows the list to its songs; that stays (also on the source list) until "All folders" is picked. */
+    @Test fun s04_narrowedToAFolderFromItsMenuAndKept() {
+        val parent = "${Fx.FX}/Parent"
+        scan(parent) // a song outside Album-A
+        openSongs()
+        until(5_000, "every folder") { bs.songsFolder == null && bs.visibleFiles.any { it.path.startsWith("$parent/") } }
+
+        onUi { browser.loadFolder(SourceRef(local, album)) }
+        until(10_000, "Album-A") { bs.currentFolder?.path == album && !bs.isLoading }
+        click("btn_overflow")
+        click("menu_songs_in_folder")
+        until(10_000, "the songs of Album-A only") { bs.showingSongs && !bs.isLoading && allBelow(album) && albumTitles().size == 2 }
+        assertTrue("the picker names the folder: ${text("songs_folder_label")}", text("songs_folder_label").contains("Album-A"))
+
+        // Kept: the source list counts the songs of the folder and names it; the list opens narrowed.
+        onUi { browser.exitSource() }
+        until(5_000, "source list") { exists("entry_songs") && bs.songCount == 2 }
+        assertTrue("entry names the folder: ${text("entry_songs_count")}", text("entry_songs_count").let { it.startsWith(Fx.ctx.resources.getQuantityString(R.plurals.browser_songs_count, 2, 2)) && it.endsWith("Album-A") })
+        click("entry_songs")
+        until(10_000, "still narrowed") { bs.showingSongs && !bs.isLoading && allBelow(album) }
+
+        // Every folder again, from the picker.
+        click("songs_folder")
+        click("songs_folder_all")
+        until(10_000, "every folder") { bs.songsFolder == null && !bs.isLoading && bs.visibleFiles.any { it.path.startsWith("$parent/") } && albumTitles().size == 2 }
+        assertTrue(text("songs_folder_label") == Fx.ctx.getString(R.string.songs_folder_all))
+    }
+
+    /**
+     * A bookmark's menu opens the list of its folder; a folder none of whose songs were read says so and reads them from
+     * there; the picker offers the bookmark, checked.
+     */
+    @Test fun s05_aBookmarkedFolderNotReadYetIsReadFromTheList() {
+        // A fresh copy: a file the index does not know (new time).
+        Fx.shell("mkdir -p /storage/emulated/0$copyDir")
+        Fx.shell("cp /storage/emulated/0${Fx.FX}/Parent/CD1/track.flac /storage/emulated/0$copyDir/copied.flac")
+        until(5_000, "copied") { Fx.localFile("$copyDir/copied.flac").length() > 0 }
+        toBrowser()
+        onUi { browser.bookmarksRepository.add(SourceRef(local, copyDir), "SongsFolderCopy"); browser.exitSource() }
+        until(5_000, "bookmark") { exists("bookmark_SongsFolderCopy") }
+        longClick("bookmark_SongsFolderCopy")
+        click("bookmark_songs")
+        until(10_000, "nothing read there") { bs.showingSongs && !bs.isLoading && bs.songsFolder?.path == copyDir && exists("songs_empty") }
+        assertTrue("the picker names the bookmark", text("songs_folder_label") == "SongsFolderCopy")
+        click("songs_scan_folder")
+        until(30_000, "read from the list") { bs.visibleFiles.map { it.path } == listOf("$copyDir/copied.flac") && !DurationRepository.get(Fx.ctx).scan.value.running }
+
+        click("songs_folder")
+        until(5_000, "menu") { exists("songs_folder_bookmark_SongsFolderCopy") }
+        compose.onNodeWithTag("songs_folder_bookmark_SongsFolderCopy").assertIsSelected()
+        pressBack()
     }
 }

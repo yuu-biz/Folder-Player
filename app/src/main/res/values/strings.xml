@@ -403,6 +403,9 @@
     <string name="length_scan_folder">Read song lengths (this folder and below)</string>
     <string name="length_scan_bookmarks">Read song lengths of the bookmarks</string>
     <string name="length_scan_bookmark">Read song lengths</string>
+    <string name="songs_folder_all">All folders</string>
+    <string name="songs_in_folder">Songs list of this folder</string>
+    <string name="songs_folder_empty">No songs of %1$s read yet.</string>
     <string name="length_scan_busy">Song lengths are already being read</string>
     <string name="length_scan_counts">folders: %1$d, songs: %2$d, read now: %3$d</string>
     <string name="length_scan_running">Reading song lengths: %s</string>

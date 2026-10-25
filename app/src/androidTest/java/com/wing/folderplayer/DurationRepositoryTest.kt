@@ -208,6 +208,23 @@ class DurationRepositoryTest {
         assertAbout(30_000, fresh.cached(mp3))
     }
 
+    /** A scan of a folder (a bookmark's) lists and reads that folder and the folders below it, nothing beside or above it. */
+    @Test fun aScanStaysInsideItsFolder() = runBlocking {
+        val listed = java.util.Collections.synchronizedList(ArrayList<String>())
+        val read = java.util.Collections.synchronizedList(ArrayList<String>())
+        val repo = DurationRepository(Fx.ctx, dir, listFolder = { ref -> listed += ref.path; SourceRegistry.fileSystem(ref).list(ref.path) }) { f ->
+            read += f.path
+            real(f)
+        }
+        val parent = "${Fx.FX}/Parent"
+        val before = repo.scan.value.finished
+        assertTrue(repo.startScan(listOf(SourceRef(local, parent))))
+        val p = waitScan(repo, before)
+        assertEquals("Parent and CD1 ($p)", listOf(parent, "$parent/CD1"), listed.toList())
+        assertEquals(listOf("$parent/CD1/track.flac"), read.toList())
+        assertEquals(listOf("$parent/CD1/track.flac"), repo.songs().map { it.path })
+    }
+
     /** A scan reads a few files of a source at the same time, never more than the source allows. */
     @Test fun scanReadsSeveralFilesAtOnceButNoMoreThanAllowed() = runBlocking {
         val active = AtomicInteger()

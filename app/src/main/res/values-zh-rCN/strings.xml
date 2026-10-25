@@ -381,6 +381,9 @@
     <string name="length_scan_folder">读取歌曲时长（此文件夹及子文件夹）</string>
     <string name="length_scan_bookmarks">读取书签中的歌曲时长</string>
     <string name="length_scan_bookmark">读取歌曲时长</string>
+    <string name="songs_folder_all">所有文件夹</string>
+    <string name="songs_in_folder">此文件夹的歌曲</string>
+    <string name="songs_folder_empty">%1$s 中还没有已读取的歌曲。</string>
     <string name="length_scan_busy">已在读取歌曲时长</string>
     <string name="length_scan_counts">文件夹：%1$d，歌曲：%2$d，本次读取：%3$d</string>
     <string name="length_scan_running">正在读取歌曲时长：%s</string>

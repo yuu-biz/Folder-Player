@@ -399,6 +399,9 @@
     <string name="length_scan_folder">Lire les durées (ce dossier et en dessous)</string>
     <string name="length_scan_bookmarks">Lire les durées des signets</string>
     <string name="length_scan_bookmark">Lire les durées</string>
+    <string name="songs_folder_all">Tous les dossiers</string>
+    <string name="songs_in_folder">Morceaux de ce dossier</string>
+    <string name="songs_folder_empty">Aucun morceau de %1$s lu pour l’instant.</string>
     <string name="length_scan_busy">Les durées sont déjà en cours de lecture</string>
     <string name="length_scan_counts">dossiers : %1$d, morceaux : %2$d, lus maintenant : %3$d</string>
     <string name="length_scan_running">Lecture des durées : %s</string>

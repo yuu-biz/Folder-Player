@@ -2,6 +2,7 @@ package com.wing.folderplayer.data.metadata
 
 import com.wing.folderplayer.data.source.MusicFile
 import com.wing.folderplayer.data.source.SORT_LENGTH
+import com.wing.folderplayer.data.source.SourceRef
 import com.wing.folderplayer.data.source.TrackTags
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -52,5 +53,17 @@ class SongListTest {
         assertEquals("file name", listOf("untagged song"), names(SongList.filter(listOf(a1, a2, b1, plain), "UNTAGGED")))
         assertEquals("every word", emptyList<String>(), names(SongList.filter(listOf(a1, a2, b1, plain), "zed beta")))
         assertEquals(4, SongList.filter(listOf(a1, a2, b1, plain), "  ").size)
+    }
+
+    @Test fun inFolderKeepsTheFolderAndTheFoldersBelowIt() {
+        val deeper = song("/A/CD2/z.flac", 1)
+        val sibling = song("/AB/w.flac", 1) // starts like /A, is not below it
+        val other = song("/A/v.flac", 1).copy(sourceId = "t")
+        val songs = listOf(a1, a2, deeper, sibling, b1, other)
+        assertEquals(listOf(a1, a2, deeper), SongList.inFolder(songs, SourceRef("s", "/A")))
+        assertEquals(listOf(deeper), SongList.inFolder(songs, SourceRef("s", "/A/CD2")))
+        assertEquals("the top folder: the whole source", listOf(a1, a2, deeper, sibling, b1), SongList.inFolder(songs, SourceRef("s", "/")))
+        assertEquals("no folder: every song", songs, SongList.inFolder(songs, null))
+        assertEquals(emptyList<MusicFile>(), SongList.inFolder(songs, SourceRef("s", "/Nothing")))
     }
 }
