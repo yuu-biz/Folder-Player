@@ -17,6 +17,10 @@
    of the signing certificate read from the APK itself. A tag with a pre-release label (`v0.5.1-rc1`) is marked as
    a pre-release, also once published.
 
+The notes come from `.github/release-notes.md`. They hold only what is new in that version: replace its "What's new in"
+section for each release (do not keep the earlier versions' sections; each release has its own notes, and the full lists
+are linked under "More": `FEATURES.md`, `KNOWN_ISSUES.md`). The SHA-256 lines are appended by the workflow.
+
 The draft stays unpublished — visible only to collaborators of the repository — unless the repository variable
 `FP_PUBLISH_RELEASES` is `true` (Settings → Secrets and variables → Actions → Variables, or
 `gh variable set FP_PUBLISH_RELEASES --body true`). Without it, check the draft (download the APK, compare
