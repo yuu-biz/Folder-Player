@@ -1,6 +1,6 @@
 # Known issues
 
-## Limitations (current: 1.6.0)
+## Limitations (current: 1.7.0)
 
 What a user can run into, in one place. The sections below give the history of each point and what was fixed when.
 

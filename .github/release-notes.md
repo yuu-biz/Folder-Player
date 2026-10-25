@@ -1,8 +1,26 @@
 Folder Player Fork {VERSION} — an unofficial personal fork of
 [Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000. It is not affiliated with the original
-project. This release follows 1.5.0.
+project. This release follows 1.6.0.
 
-## What's new in 1.6.0
+## What's new in 1.7.0
+
+- **Favourite songs and favourite folders, apart**: the source list now has two entries, "Favorite songs" and
+  "Favorite folders", each with its own order. The heart at the top right of the full player adds or removes the song
+  that is playing. `fav.json` keeps its format, so a device with an older version still syncs it (and shows one list).
+- **To the song's folder**: a tap on the folder name in the full player opens that folder in the browser with the song
+  in view; Back returns to where you were. The album info (NFO / AI) moved to a long press on the name.
+- **Fine seeking**: hold the seek bar still until it vibrates, then drag: the whole bar width is 30 seconds (a quarter of
+  a short track), and the time shows tenths of a second. Letting go without moving does not seek.
+- **Sort by length**: songs can be sorted by their length (folders stay by name). Lengths the app does not know yet are
+  read for the folder on screen, one file at a time, and the list re-sorts once when they are in. For a whole tree,
+  "Read song lengths" in a folder's ⋮ menu, in a bookmark's long-press menu or for all bookmarks in the source list's ⋮
+  menu reads them in the background with progress and a Cancel button; a stopped scan continues where it left off. The
+  lengths are kept on the device: a file moved elsewhere is found again by name, size and date without reading it, and
+  files that are gone are dropped at the next scan.
+- **The music, drawn**: where a song has no lyrics, the full player shows the music that is playing as frequency bars and
+  a waveform, in time with what you hear (it holds still when paused). Nothing is recorded; no microphone permission.
+
+## New in 1.6.0
 
 - **Sort the favourites**: the favourites list now has sort buttons like a folder: Added (when you added each one, as
   before), Name, Modified, Created and Size; tap again to reverse. The choice is kept. For favourites added with an
@@ -95,10 +113,10 @@ editor, favourites shared through one `fav.json` on a NAS, and bookmarks for fol
 - **Large screens and foldables**: on a tablet, an unfolded foldable or a wide window the browser and the player sit
   side by side, and Settings has two panes. The layout follows the window, so folding, rotating or resizing keeps
   playback and your place in the browser.
-- **Search, filter, favourites and playlists**: search below the current folder, a name filter for the folder on screen, favourites (optional `fav.json` that several devices can share), bookmarks for folders (renamed and ordered as you like), playlists with drag reordering, track lengths in the list.
+- **Search, filter, favourites and playlists**: search below the current folder, a name filter for the folder on screen, favourite songs and folders (optional `fav.json` that several devices can share), bookmarks for folders (renamed and ordered as you like), playlists with drag reordering, track lengths in the list.
 - **Cover artwork**: folder image first, then the embedded picture, in the player, notification and lock screen for
   every source; grid or list with thumbnails (thumbnails of network sources are opt-in and Wi-Fi only).
-- **Sorting**: by name, modified time, created time or size, remembered per folder. "Created" is the time a local file
+- **Sorting**: by name, modified time, created time, size or (songs) length, remembered per folder. "Created" is the time a local file
   was added to the media library, the share's creation time on SMB, and the modified time elsewhere.
 - **Lyrics and album info**: LRC files, embedded lyrics, CUE sheets, `Info.nfo` album info. Optional AI album info,
   lyrics and translation (off by default; you provide your own OpenAI-compatible endpoint and key).
@@ -126,6 +144,7 @@ Details: [docs/fork/FEATURES.md]({REPO}/blob/{VERSION_TAG}/docs/fork/FEATURES.md
   then made again). The network account is an estimate, not the bytes on the wire. The cache and the account were tested with
   a Samba server in Docker, not with a real NAS, and the saving on a large real library was not measured.
 - Settings shows no mini player.
+- Folders are not sorted by the total length of their songs. A scan of a large library on a NAS reads one file at a time and can take long. The visualiser stays a flat line during a DLNA cast (the music plays elsewhere).
 - Rename, move and delete work on files, not folders, and a move stays within the source. In the phone's own storage most
   files cannot be changed by the app; use a SAF folder there. Playlists and favourites keep the old path of a
   renamed or moved song.
