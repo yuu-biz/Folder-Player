@@ -140,6 +140,21 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.34 Songs list, several songs read at once, visualiser styles (1.7.1, 2026-10-26)
+
+Commits `d51f03c` (songs list, parallel scan with tags), `2106ed4` (visualiser), `b51c92d` (songs of deleted folders, visualiser
+double tap and zero size). API 34 emulator (`fp_api34`), fixture servers up.
+
+| Check | Result |
+|---|---|
+| `assembleDebug assembleDebugAndroidTest lintDebug testDebugUnitTest` | lint 0 errors, 61 warnings (as before); JVM tests 322, 0 failures, 28 skipped (fixture-server tests without their properties), on `2106ed4` and again on the fix. New: `SongListTest` 6 (title / artist / album / length / date orders, blank artists and albums last, filter over tags and name), `VisualizerColorsTest` 5. One run of the fix had `CastSessionOrderTest` time out on a local socket while the emulator was busy; it passed alone (18/18) and in the next full JVM run |
+| All instrumentation suites on `2106ed4` (146 test processes) | 143 passed, 3 failed: `SongsUiTest#s01` (its filter "album a fixture" also matched Album C once the whole fixture was scanned: the test now filters "tagged fixture"), `NavigationUiTest#n02` ("still playing" a second after Back from the player) and `LengthSortUiTest#l02` (`IllegalStateException: Recording currently in progress` from Android's renderer, the after-effect of an exception in an earlier draw that was not logged). The Windows host was short of memory during this run (the Windows side of the job was stopped for memory; the WSL job finished on its own). After an emulator restart `n02` passed 3 times and `l02` 5 times, also right after `s01`; neither failure was reproduced or explained |
+| Device tests of the fix (`b51c92d`) | `DurationRepositoryTest` 13/13 (new: three readers at once and never more; a failing source left after a few reads with four readers; tags kept, a 1.7.0 index read again for them; a listed folder drops a moved file's old entry, a moved file listed once; a deleted, a missing and an unreadable folder), `SongsUiTest` s01, s02, s03, `VisualizerUiTest` v01 (tap and accessibility action change the style, kept), `LengthSortUiTest` l01, l02: all PASS. `s03` (313 songs in 309 folders: playing about 2 s after the tap, the queue is the whole list, Next plays the next one) failed once in that run ("timed out waiting for the next song"; before the fix it failed because the list held songs of a folder deleted by `CreatedSortTest`); it passed 4 times since, also right after `s02` |
+| Seen on screen (app launched normally, adb taps; a Compose test holds the frame loop, so test screenshots are flat) | a music-like demo tone with a three-colour cover: Wave, Bars and Ring in the cover's colours, moving with the sound; the songs list by artist with titles, artist • album and lengths |
+
+Not checked: a real phone or NAS (scan speed with 4 readers over SMB, the CPU cost of the visualiser), API 26 / 33 / 36,
+TalkBack on the new controls, a library of thousands of real songs.
+
 ### 5.33 Song / folder favourites, folder link and fine seek, sort by length, visualiser (1.7.0, 2026-10-25)
 
 App code as of `bfd0c6c` plus the test fixes of the commit that adds this section. API 34 emulator (`fp_api34`), fixture servers up.

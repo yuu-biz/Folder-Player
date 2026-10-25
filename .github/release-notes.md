@@ -1,8 +1,25 @@
 Folder Player Fork {VERSION} — an unofficial personal fork of
 [Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000. It is not affiliated with the original
-project. This release follows 1.6.0.
+project. This release follows 1.7.0.
 
-## What's new in 1.7.0
+## What's new in 1.7.1
+
+- **Song lengths read several at a time**: "Read song lengths" now reads a few songs of a source at once (4 from an SMB
+  or WebDAV NAS, 2 over FTP, 6 from the phone) instead of one by one, so a library of thousands of songs is done much
+  sooner. It also reads each song's title, artist, album and track number in the same pass. The first scan after 1.7.0
+  reads the songs it already knew once more, for these tags.
+- **Songs list**: "Songs" at the top of the source list shows every song whose length was read, like the song list of
+  a music player: title, artist • album and length on each row; sort by Title, Artist, Album (in track order), Length or
+  Modified; the filter finds any word of the title, artist, album or file name. A tap plays the list from that song; the
+  long-press menu has "Show in folder" (also in the favourites and search results). It is built from what the app has
+  read, not from Android's media library: read the song lengths of your bookmarks (or of a folder) to fill it. Playing
+  a list of many folders starts at once; the covers of the next songs are looked up as they come.
+- **A new look for the visualiser**: the music drawn where a song has no lyrics now takes the colours of the cover and
+  comes in three styles; tap it to switch (the choice is kept), double-tap it to make it larger: Wave (a smooth glowing shape that breathes with the
+  music), Bars (bars with a reflection and falling peak caps) and Ring (spokes around a circle that swells with the
+  bass). The levels rise fast and fall slowly, and the treble moves too.
+
+## New in 1.7.0
 
 - **Favourite songs and favourite folders, apart**: the source list now has two entries, "Favorite songs" and
   "Favorite folders", each with its own order. The heart at the top right of the full player adds or removes the song
@@ -113,7 +130,7 @@ editor, favourites shared through one `fav.json` on a NAS, and bookmarks for fol
 - **Large screens and foldables**: on a tablet, an unfolded foldable or a wide window the browser and the player sit
   side by side, and Settings has two panes. The layout follows the window, so folding, rotating or resizing keeps
   playback and your place in the browser.
-- **Search, filter, favourites and playlists**: search below the current folder, a name filter for the folder on screen, favourite songs and folders (optional `fav.json` that several devices can share), bookmarks for folders (renamed and ordered as you like), playlists with drag reordering, track lengths in the list.
+- **Search, filter, favourites and playlists**: search below the current folder, a name filter for the folder on screen, a songs list of everything read (title, artist, album), favourite songs and folders (optional `fav.json` that several devices can share), bookmarks for folders (renamed and ordered as you like), playlists with drag reordering, track lengths in the list.
 - **Cover artwork**: folder image first, then the embedded picture, in the player, notification and lock screen for
   every source; grid or list with thumbnails (thumbnails of network sources are opt-in and Wi-Fi only).
 - **Sorting**: by name, modified time, created time, size or (songs) length, remembered per folder. "Created" is the time a local file
@@ -144,7 +161,7 @@ Details: [docs/fork/FEATURES.md]({REPO}/blob/{VERSION_TAG}/docs/fork/FEATURES.md
   then made again). The network account is an estimate, not the bytes on the wire. The cache and the account were tested with
   a Samba server in Docker, not with a real NAS, and the saving on a large real library was not measured.
 - Settings shows no mini player.
-- Folders are not sorted by the total length of their songs. A scan of a large library on a NAS reads one file at a time and can take long. The visualiser stays a flat line during a DLNA cast (the music plays elsewhere).
+- Folders are not sorted by the total length of their songs. A scan of a large library on a NAS still takes a while (its speed on a real NAS was not measured). The songs list holds only songs whose length was read; WMA, APE, DSF and DFF show their file name. The visualiser stays a flat line during a DLNA cast (the music plays elsewhere).
 - Rename, move and delete work on files, not folders, and a move stays within the source. In the phone's own storage most
   files cannot be changed by the app; use a SAF folder there. Playlists and favourites keep the old path of a
   renamed or moved song.
