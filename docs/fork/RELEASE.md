@@ -129,3 +129,6 @@ versionName `1.7.0`, versionCode `1070099`, which installs over 1.6.0.
 which installs over 1.7.0.
 
 1.7.2 (songs list narrowed to one folder): `v1.7.2` is versionName `1.7.2`, versionCode `1070299`, which installs over 1.7.1.
+
+1.8.0 (play next / add to queue, speed and left / right swap, cover swipe, songs list of several folders, SMB stall and
+playback log): `v1.8.0` is versionName `1.8.0`, versionCode `1080099`, which installs over 1.7.2.

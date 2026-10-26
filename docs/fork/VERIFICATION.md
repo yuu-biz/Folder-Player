@@ -140,6 +140,23 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.36 Queue, speed and left / right, cover swipe, several folders, SMB stall and playback log (1.8.0, 2026-10-26)
+
+The owner shared a playback log of a stop on 1.7.2 (an MP3 on an SMB share went silent; nothing logged until the
+process was killed 26 minutes later, see KNOWN_ISSUES "Playback that stops by itself") and asked for "Add to queue",
+playback speed, left / right swap, a swipe in the player to change tracks and the songs list of several folders.
+API 34 emulator (`fp_api34`) and the Docker fixture servers.
+
+| Check | Result |
+|---|---|
+| `SmbStallTest` (JVM, Samba fixture paused with `docker pause` in the middle of a read, `-Dfp.smb.pause`) | before the fix: read 30 s (mapped as a protocol error, connection kept), first open 60 s, second 30 s, 35 ms after unpause; the assertion "first open < 45 s" FAILED (60 042 ms). A first fix that closed the connection politely: read 75 s. Fixed (forced close): read 30 s, each open 30 s, 10 ms after unpause, PASS |
+| JVM | `SongListTest` (several folders, also of two sources, a song below two of them listed once), `PlaybackLogTest` (exit detail with signal and memory), `ChannelSwapAudioProcessorTest` (16-bit and float frames swapped, a cut-off frame passed on), `SmbProtocolTest` PASS |
+| Targeted device tests | `PlaylistQueueTest` 2/2 (play next after the track playing, add to the end, a folder's songs, "Default" follows, the next track is the one put next; a queue from a user playlist becomes "Default" and the playlist keeps its entries); `PlaybackOptionsTest` (2×: 8 s of position in 4 s, swap on, both kept, back to 1×); `PlayerSheetUiTest` 14/14 with s14 (a short slow swipe does nothing, left = next, right = previous, the player stays open); `SongsUiTest` 6/6 with s06 (two bookmarks ticked together, one unticked, both again named in the picker, "All folders") after a test fix (the test's Back went to the activity behind the menu; a real Back key closes the menu); `PlaybackLogServiceTest` 2/2 (`HEARTBEAT READY playing=true long.flac at 1s buffered=82s`, `LOAD_ERROR … NotFound … gone.mp3`) after a test fix (the failed file left playWhenReady on, so the next test's play logged nothing); `NetworkPlaybackTest` 2/2 (tricky names play and seek on every source of the fixture, FTP without REST), `BrowserUiTest` 6/6, `LibraryUiTest` a20, b20 |
+| Final pass (`run-suites.sh`, one process per test, on commit 79bf293) | `NativeDecodeTest PlaybackServiceTest NotificationSwitchTest PlayerSkipTest PlayRequestRaceTest OriginBackUiTest VisualizerUiTest PlaybackOptionsTest PlaylistQueueTest PlayerSheetUiTest SongsUiTest NavigationUiTest`: 72 test processes, all passed (0 failed, 0 skipped); `lintDebug` 0 errors, 61 warnings (as before); `testDebugUnitTest` with the fixture servers 327 tests, 0 failures, 1 skipped. Not run in this pass (no change in their code paths; the owner prefers shorter checks): `LocalAccessTest MigrationTest SourceRegistryTest RetryExportTest SourceUiTest SyncTagsUiTest SafTest AiNfoUiTest FontUiTest LicensesUiTest CastCleanupTest NativeIoErrorTest JapaneseUiTest OpenPlayerColdStartTest DurationRepositoryTest ViewerUiTest ImageCacheUiTest FavoritesSortUiTest LengthSortUiTest SleepTimerLifecycleTest`; `NetworkPlaybackTest`, `BrowserUiTest` and `LibraryUiTest` a20 / b20 ran above |
+
+Not checked: a real phone and a real NAS (the stall was simulated by pausing the Samba container; a Wi-Fi that drops
+fails faster, at the connect), the time stretching heard at 0.5× / 2× on a phone, TalkBack on the new controls.
+
 ### 5.35 Songs list narrowed to one folder (1.7.2, 2026-10-26)
 
 The owner saw songs outside a bookmark in the songs list after "Read song lengths" of that bookmark. The scan stays

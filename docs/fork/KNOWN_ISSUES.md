@@ -1,6 +1,6 @@
 # Known issues
 
-## Limitations (current: 1.7.2)
+## Limitations (current: 1.8.0)
 
 What a user can run into, in one place. The sections below give the history of each point and what was fixed when.
 
@@ -31,6 +31,14 @@ What a user can run into, in one place. The sections below give the history of e
   process ends.
 - **Restore**: after playing a list built from search results, favourites or a shuffle across folders, the next start
   restores the folder of the first song of that list, at the position of the song that played last.
+- **Queue** (1.8.0): songs added with "Play next" / "Add to queue" are in the queue and in "Default" (when the queue came
+  from it), but a restart restores the folder of the song that played, as above, not the queue. With shuffle on, the
+  player places added songs among the shuffled ones, so "Play next" is not always next. A CUE sheet cannot be added
+  (play it). A folder adds its own songs, not those of the folders below it.
+- **Speed and left / right** (1.8.0): kept for the next start; the pitch stays the same (Media3's time stretching, which
+  can sound rough at 0.5× and 2×). A DLNA cast plays at normal speed and unswapped (the renderer plays the file).
+- **Cover swipe** (1.8.0): only on the cover of the full player (portrait and landscape), not on the mini player, whose
+  sideways swipe still ends the session.
 - **Android 8–9**: auto-save of network tracks and saving `Info.nfo` into shared storage need the storage write
   permission, which the app does not ask for (off by default; Android 10+ is not affected).
 - **Large folders**: playing a folder of several thousand songs writes the playlist on the main thread (a short stall);
@@ -53,10 +61,12 @@ What a user can run into, in one place. The sections below give the history of e
 - **Waveform**: since 1.5.0 a measurement that has started finishes and is kept even when the player is closed. Not timed on a phone or a real NAS (see "Waveform on the seek bar").
 - **Visualiser** (in place of missing lyrics): during a DLNA cast the music plays elsewhere and the picture stays a flat line; it follows the playback speed's media time, drawn against the wall clock between the sink's position reports (at most a quarter of a second). Not timed on a phone (CPU of the FFT at the frame rate). The colours come from the cover once it is loaded; a cover of a far song of a long queue (songs list) may come a moment after the song starts. In portrait the area is short (about 75 dp on a phone): a double tap makes it larger. Seen once in the emulator suites (1.7.1, while the host was short of memory): a rendering error ("Recording currently in progress") in a browser test; not reproduced in five runs since and not explained (no log kept).
 - **Song lengths**: folders are not sorted by the total length of their songs (only songs are). A scan reads every song it does not know yet, several at once since 1.7.1 (4 per SMB / WebDAV source, 2 for FTP, 6 locally); a large library on a NAS still takes a while, and the speed on a real NAS was not measured. The first scan after 1.7.0 reads the songs it knew once more, for their tags. A file that cannot be read now is tried again by the next scan. Lengths and tags are kept for up to 30 000 files.
-- **Songs list** (1.7.1): only songs whose length was read are listed (scan a folder or the bookmarks first); it is built from the app's own index, not Android's media library. WMA, APE, DSF and DFF show their file name (their tags are not read). A copy of a file (same name, size and time) in another folder is listed once. It also holds the songs whose length was read while their folder was on screen, not only those of a scan; since 1.7.2 it can be narrowed to one folder (one at a time, not several bookmarks together). Playing from a list of many folders: the next songs get their folder cover and lyric file at each change of track; a song reached by a jump (or shuffle) shows its cover on screen, not in the notification. Seen twice in the emulator (1.7.1 and 1.7.2, of about a dozen runs of `SongsUiTest#s03`): Next from a song of the songs list reached the next song, which then stayed buffering for 15 s on a local file (not playing, no error); not reproduced since and not explained. The emulator's log shows Android reclaiming audio decoders ("Released by resource manager") in passing runs too.
+- **Songs list** (1.7.1): only songs whose length was read are listed (scan a folder or the bookmarks first); it is built from the app's own index, not Android's media library. WMA, APE, DSF and DFF show their file name (their tags are not read). A copy of a file (same name, size and time) in another folder is listed once. It also holds the songs whose length was read while their folder was on screen, not only those of a scan; since 1.7.2 it can be narrowed to one folder, since 1.8.0 to several (bookmarks and sources ticked together in the folder button; a folder's own "Songs list of this folder" replaces them with that one folder). Playing from a list of many folders: the next songs get their folder cover and lyric file at each change of track; a song reached by a jump (or shuffle) shows its cover on screen, not in the notification. Seen twice in the emulator (1.7.1 and 1.7.2, of about a dozen runs of `SongsUiTest#s03`): Next from a song of the songs list reached the next song, which then stayed buffering for 15 s on a local file (not playing, no error); not reproduced since and not explained. The emulator's log shows Android reclaiming audio decoders ("Released by resource manager") in passing runs too.
 - **Favourites**: since 1.7.0 the source list shows favourite songs and favourite folders as two lists; `fav.json` is unchanged, so an older app on another device still syncs it (and shows one list).
-- **Playback that stops by itself**: reported once, cause not known yet. Since 1.5.0 Settings → Playback → Playback log
-  records what started, paused or stopped playback and why; share it right after a stop (see "Playback that stops by itself").
+- **Playback that stops by itself**: a log of one (1.7.2, a song on an SMB share) points to a NAS or Wi-Fi that stopped
+  answering, with no line logged while the player retried by itself; since 1.8.0 a dead SMB connection is dropped after
+  a read times out and the log shows buffering, load errors, a heartbeat and memory warnings (see "Playback that stops
+  by itself"). Share the log right after a stop.
 - **Not checked**: TalkBack sessions, HyperOS devices, a background network retry on a real phone with the screen off (a
   refused foreground start is caught and logged, see below). Low priority (owner's decision, 2026-10-24): a real NAS
   (Synology, QNAP, Windows), SMB search and mDNS on a real LAN, and DLNA with a real TV or speaker; the owner uses the
@@ -232,6 +242,33 @@ In 1.5.0:
 Still open: the retry status is not shown in the player (only in the log); retries inside ExoPlayer
 (`LoadErrorHandlingPolicy`), which would keep the foreground notification, are not done; the cause of the reported stops
 is not known until a log of one is read.
+
+**A log of a stop (1.7.2, 2026-10-26, Xiaomi phone on Android 16, a 30-minute MP3 on an SMB share).** The song started at
+05:46:18; the log then holds nothing until `PROCESS_EXIT reason=SIGNALED importance=125` at 06:12:25 (the process was
+killed by a signal while it was still a foreground service, so the player still meant to play), and the app was opened
+12 s later. The position restored at the next start was 1458 s; the app saves it every 5 s while the music moves, so
+the music stopped moving at about 06:10, two minutes before the kill, with no pause, error or end logged. The owner had
+only opened the app when it was killed. Reading of it:
+
+- With the Samba fixture paused in the middle of a song (`SmbStallTest`, the TCP connection stays open, as with a NAS or
+  Wi-Fi that stops answering): the read fails after 30 s (the SMB timeout), and every new open of the file then took
+  60 s, because the dead connection was tried first (the timed-out read was mapped as a protocol error, so the
+  connection was kept) and a new one only after that. ExoPlayer retries a failed load by itself (at least 3 times, 1–5 s
+  apart) before it reports an error, and none of that was logged: about 4 minutes of silence before the first `ERROR`
+  line (computed from the measured open times and ExoPlayer's retry count, not timed end to end), longer than the two
+  minutes the music had stopped for. A NAS or Wi-Fi that stopped answering for a while fits
+  the log; what the kill at 06:12:25 was (HyperOS, or the system when the app came to the front) is not known.
+- 1.8.0: a read that times out (a transport error) drops the connection at once, without the goodbyes (close, tree
+  disconnect, logoff) it would wait for in vain, so the read fails after 30 s and the next open connects again at once
+  (30 s instead of 60 s when the server still does not answer, at once when it answers again; `SmbStallTest`). A first
+  version that closed it politely made the failed read itself take 75 s; the test checks both times. The log now
+  shows what was missing: `BUFFERING` when the player has waited for data for 3 s and when it goes on (with the
+  position and how much is buffered), `LOAD_ERROR` for every load error the player retries by itself (the exception,
+  the file and position, how long the load ran and what it read), a `HEARTBEAT` every 5 minutes while playback is
+  wanted (state, position, buffered), `MEMORY` when the system asks the app to free memory, and with `PROCESS_EXIT`
+  the signal or exit code and the memory the process used (`status`, `pss`, `rss`).
+- If it happens again on a NAS: share the log; HyperOS settings that keep a player alive are "Autostart" on and Battery
+  saver "No restrictions" for the app, and locking it in the recent apps.
 
 ## Image cache and network use (1.2.0)
 
