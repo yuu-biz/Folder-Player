@@ -404,7 +404,7 @@
     <plurals name="length_fill_unknown">
         <item quantity="other">長さ未取得の曲が %d 曲あります（末尾に表示）</item>
     </plurals>
-    <string name="player_options">再生速度と左右</string>
+    <string name="player_options">再生速度と左右入れ替え</string>
     <string name="player_speed">速度: %1$s</string>
     <string name="player_swap_channels">左右を入れ替える</string>
     <string name="player_swap_channels_hint">左チャンネルを右から、右チャンネルを左から鳴らします。</string>
