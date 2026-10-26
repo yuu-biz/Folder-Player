@@ -80,6 +80,8 @@ fun BrowserScreen(
     onCuePlay: (SourceRef) -> Unit,
     allPlaylists: List<com.wing.folderplayer.data.playlist.Playlist> = emptyList(),
     onAddToPlaylist: (String, List<MusicFile>) -> Unit = { _, _ -> },
+    /** Adds a song or a folder's songs to the queue (next: right after the track playing); gets the number added. */
+    onAddToQueue: (MusicFile, Boolean, (Int) -> Unit) -> Unit = { _, _, _ -> },
     onOpenSettings: () -> Unit,
     /** False while something in front of the browser (the full player) owns Back. */
     backEnabled: Boolean = true,
@@ -167,6 +169,12 @@ fun BrowserScreen(
             onOpen = if (ViewerTypes.isViewable(selected.name)) ({ viewModel.openViewer(selected) }) else null,
             onOpenExternal = if (ViewerTypes.isViewable(selected.name)) ({ viewModel.closePlaylistDialog(); externalOpener.open(selected) }) else null,
             onAddToPlaylist = { showPlaylistPicker = true },
+            onQueue = if (selected.isDirectory || MediaTypes.isAudio(selected.name)) ({ next ->
+                viewModel.closePlaylistDialog()
+                onAddToQueue(selected, next) { added ->
+                    if (added > 0) viewModel.showMessage(context.getString(if (next) R.string.queue_added_next else R.string.queue_added_end, selected.name))
+                }
+            }) else null,
             onToggleFavorite = { viewModel.toggleFavorite(selected); viewModel.closePlaylistDialog() },
             onToggleBookmark = if (selected.isDirectory) ({ viewModel.toggleBookmark(selected); viewModel.closePlaylistDialog() }) else null,
             onFileOp = if (!selected.isDirectory) viewModel::startFileOp else null,
@@ -334,7 +342,7 @@ fun BrowserScreen(
                                         onClick = { close(); viewModel.showSongsIn(uiState.currentFolder!!) },
                                         modifier = Modifier.testTag("menu_songs_in_folder")
                                     )
-                                    if (uiState.showingSongs && uiState.songsFolder != null) DropdownMenuItem(
+                                    if (uiState.showingSongs && uiState.songsFolders.isNotEmpty()) DropdownMenuItem(
                                         text = { Text(stringResource(R.string.length_scan_folder)) },
                                         leadingIcon = { Icon(Icons.Default.Timer, contentDescription = null) },
                                         onClick = { close(); viewModel.scanSongsFolderLengths() },
@@ -419,7 +427,7 @@ fun BrowserScreen(
                                 fields = SongsSortFields,
                             )
                         }
-                        SongsFolderPicker(uiState, onPick = { viewModel.setSongsFolder(it) })
+                        SongsFolderPicker(uiState, onAll = { viewModel.setSongsFolders(emptyList()) }, onToggle = { viewModel.toggleSongsFolder(it) })
                         if (uiState.filterOpen) FilterField(uiState.filter, onChange = { viewModel.setFilter(it) }, onClose = { viewModel.closeFilter() })
                     } else if (uiState.currentFolder != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -472,7 +480,7 @@ fun BrowserScreen(
                                 onBookmarkSongs = { viewModel.showSongsIn(it.ref) },
                                 onFavoritesClick = { viewModel.showFavorites(it) },
                                 songCount = uiState.songCount,
-                                songsFolder = uiState.songsFolder?.let { songsFolderLabel(it, uiState.bookmarks, uiState.availableSources) },
+                                songsFolder = songsFoldersLabel(uiState.songsFolders, uiState.bookmarks, uiState.availableSources),
                                 onSongsClick = { viewModel.showSongs() },
                                 onSourceClick = { viewModel.selectSource(it) },
                                 onEditSource = { sourceToEdit = it },
@@ -520,9 +528,9 @@ fun BrowserScreen(
                         if (uiState.showingSongs && !uiState.isLoading && files.isEmpty()) {
                             SongsEmptyState(
                                 filter = uiState.filter.trim().takeIf { uiState.files.isNotEmpty() },
-                                folder = uiState.songsFolder?.let { songsFolderLabel(it, uiState.bookmarks, uiState.availableSources) },
+                                folder = songsFoldersLabel(uiState.songsFolders, uiState.bookmarks, uiState.availableSources),
                                 onScan = when {
-                                    uiState.songsFolder != null -> ({ viewModel.scanSongsFolderLengths() })
+                                    uiState.songsFolders.isNotEmpty() -> ({ viewModel.scanSongsFolderLengths() })
                                     uiState.bookmarks.any { b -> uiState.availableSources.any { it.id == b.sourceId } } -> ({ viewModel.scanAllBookmarkLengths() })
                                     else -> null
                                 },
@@ -763,29 +771,34 @@ private fun songsFolderLabel(folder: SourceRef, bookmarks: List<Bookmark>, sourc
     return if (folder.path == SourcePath.ROOT) source else "$source › ${SourcePath.name(folder.path)}"
 }
 
+/** The folders the songs list is narrowed to, by name, comma-separated; null: every folder. */
+private fun songsFoldersLabel(folders: List<SourceRef>, bookmarks: List<Bookmark>, sources: List<SourceConfig>): String? =
+    folders.takeIf { it.isNotEmpty() }?.joinToString(", ") { songsFolderLabel(it, bookmarks, sources) }
+
 /**
- * The folder the songs list shows the songs of (with the folders below it): every folder, a bookmarked folder or a
- * source; any other folder is picked from its own menu ("Songs list of this folder") and is offered here while it is
- * the one picked.
+ * The folders the songs list shows the songs of (with the folders below them): every folder, or any of the bookmarked
+ * folders and sources together (the menu stays open while they are ticked; Back or a tap beside it closes it). Any
+ * other folder is picked from its own menu ("Songs list of this folder") and is offered here while it is picked.
  */
 @Composable
-private fun SongsFolderPicker(state: BrowserUiState, onPick: (SourceRef?) -> Unit) {
+private fun SongsFolderPicker(state: BrowserUiState, onAll: () -> Unit, onToggle: (SourceRef) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    val current = state.songsFolder
+    val current = state.songsFolders
+    val narrowed = current.isNotEmpty()
     val bookmarks = state.bookmarks.filter { b -> state.availableSources.any { it.id == b.sourceId } }
     Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Box {
             Surface(
                 onClick = { open = true },
                 shape = RoundedCornerShape(8.dp),
-                color = if (current != null) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                contentColor = if (current != null) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (narrowed) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                contentColor = if (narrowed) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.testTag("songs_folder"),
             ) {
                 Row(Modifier.heightIn(min = 40.dp).padding(start = 10.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(if (current != null) Icons.Default.FolderOpen else Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(if (narrowed) Icons.Default.FolderOpen else Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text(
-                        current?.let { songsFolderLabel(it, state.bookmarks, state.availableSources) } ?: stringResource(R.string.songs_folder_all),
+                        songsFoldersLabel(current, state.bookmarks, state.availableSources) ?: stringResource(R.string.songs_folder_all),
                         style = MaterialTheme.typography.labelLarge,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -795,17 +808,29 @@ private fun SongsFolderPicker(state: BrowserUiState, onPick: (SourceRef?) -> Uni
                 }
             }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                @Composable
-                fun option(folder: SourceRef?, label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tag: String) = DropdownMenuItem(
-                    text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    leadingIcon = { Icon(icon, contentDescription = null) },
-                    trailingIcon = { if (folder == current) Icon(Icons.Default.Check, contentDescription = null) },
-                    onClick = { open = false; if (folder != current) onPick(folder) },
-                    modifier = Modifier.semantics { selected = folder == current }.testTag(tag),
+                // "All folders" closes the menu; a folder is ticked or unticked and the menu stays for the next one.
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.songs_folder_all), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    leadingIcon = { Icon(Icons.Default.LibraryMusic, contentDescription = null) },
+                    trailingIcon = { if (!narrowed) Icon(Icons.Default.Check, contentDescription = null) },
+                    onClick = { open = false; if (narrowed) onAll() },
+                    modifier = Modifier.semantics { selected = !narrowed }.testTag("songs_folder_all"),
                 )
-                option(null, stringResource(R.string.songs_folder_all), Icons.Default.LibraryMusic, "songs_folder_all")
+                @Composable
+                fun option(folder: SourceRef, label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tag: String) {
+                    val ticked = folder in current
+                    DropdownMenuItem(
+                        text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        leadingIcon = { Icon(icon, contentDescription = null) },
+                        trailingIcon = { Icon(if (ticked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank, contentDescription = null) },
+                        onClick = { onToggle(folder) },
+                        modifier = Modifier.semantics { selected = ticked }.testTag(tag),
+                    )
+                }
                 val listed = bookmarks.map { it.ref } + state.availableSources.map { SourceRef(it.id, SourcePath.ROOT) }
-                if (current != null && current !in listed) option(current, songsFolderLabel(current, state.bookmarks, state.availableSources), Icons.Default.FolderOpen, "songs_folder_current")
+                current.filter { it !in listed }.forEachIndexed { i, folder ->
+                    option(folder, songsFolderLabel(folder, state.bookmarks, state.availableSources), Icons.Default.FolderOpen, if (i == 0) "songs_folder_current" else "songs_folder_current_$i")
+                }
                 bookmarks.forEach { b -> option(b.ref, b.name.ifEmpty { SourcePath.name(b.path) }, Icons.Default.Bookmark, "songs_folder_bookmark_${b.name}") }
                 state.availableSources.forEach { s -> option(SourceRef(s.id, SourcePath.ROOT), s.name, sourceIcon(s.type), "songs_folder_source_${s.id}") }
             }
@@ -1487,6 +1512,8 @@ private fun FileActionsSheet(
     onOpen: (() -> Unit)?,
     onOpenExternal: (() -> Unit)?,
     onAddToPlaylist: () -> Unit,
+    /** Songs and folders: null = no queue rows. */
+    onQueue: ((next: Boolean) -> Unit)?,
     onToggleFavorite: () -> Unit,
     /** Folders only: null = no bookmark row. */
     onToggleBookmark: (() -> Unit)?,
@@ -1529,6 +1556,18 @@ private fun FileActionsSheet(
             )
             // Playlists and favourites hold what can be played: folders, songs and CUE sheets.
             val playable = file.isDirectory || MediaTypes.isAudio(file.name) || MediaTypes.isCue(file.name)
+            if (onQueue != null) {
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.action_play_next)) },
+                    leadingContent = { Icon(Icons.Default.QueuePlayNext, contentDescription = null) },
+                    modifier = Modifier.clickable { onQueue(true) }.testTag("action_play_next")
+                )
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.action_add_to_queue)) },
+                    leadingContent = { Icon(Icons.Default.AddToQueue, contentDescription = null) },
+                    modifier = Modifier.clickable { onQueue(false) }.testTag("action_add_queue")
+                )
+            }
             if (playable) ListItem(
                 headlineContent = { Text(stringResource(R.string.browser_add_to_playlist)) },
                 leadingContent = { Icon(Icons.Default.PlaylistAdd, contentDescription = null) },

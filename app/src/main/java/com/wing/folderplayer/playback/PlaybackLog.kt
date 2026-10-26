@@ -22,12 +22,17 @@ import java.util.concurrent.Executors
 enum class PlaybackEventKind {
     SERVICE_START, SERVICE_STOP, PROCESS_EXIT, PLAY, PAUSE, SUPPRESSED, STATE, TRACK, COMMAND, NOISY, SLEEP_TIMER, ERROR,
     RETRY, RETRY_RECOVERED, RETRY_GAVE_UP, RETRY_CANCELLED,
+    BUFFERING, LOAD_ERROR, HEARTBEAT, MEMORY,
 }
 
 data class PlaybackEvent(val time: Long, val kind: PlaybackEventKind, val detail: String)
 
 /** A process end Android recorded ([ApplicationExitInfo]), with its reason already named. */
-data class ProcessExit(val timestamp: Long, val reason: String, val description: String?, val importance: Int)
+/** [status]: the signal or exit code; [pssKb] / [rssKb]: the memory the process used at the end (0: not known). */
+data class ProcessExit(
+    val timestamp: Long, val reason: String, val description: String?, val importance: Int,
+    val status: Int = 0, val pssKb: Long = 0, val rssKb: Long = 0,
+)
 
 /** The log as text: one event per line, `yyyy-MM-dd HH:mm:ss.SSS KIND detail`, in the device's local time. */
 object PlaybackLogFormat {
@@ -60,7 +65,8 @@ object PlaybackLogFormat {
     fun newExits(exits: List<ProcessExit>, lastLogged: Long): List<ProcessExit> =
         exits.filter { it.timestamp > lastLogged }.sortedBy { it.timestamp }
 
-    fun exitDetail(exit: ProcessExit) = "reason=${exit.reason} importance=${exit.importance} desc=${exit.description.orEmpty()}"
+    fun exitDetail(exit: ProcessExit) =
+        "reason=${exit.reason} status=${exit.status} importance=${exit.importance} pss=${exit.pssKb / 1024}MB rss=${exit.rssKb / 1024}MB desc=${exit.description.orEmpty()}"
 
     /** Error texts can quote a URL; the log is meant to be shared, so `user:password@` never goes into it. */
     fun withoutUserInfo(text: String): String = USER_INFO.replace(text, "$1")
@@ -178,7 +184,7 @@ object PlaybackLog {
                     val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                     val exits = app.getSystemService(ActivityManager::class.java)
                         .getHistoricalProcessExitReasons(app.packageName, 0, 10)
-                        .map { ProcessExit(it.timestamp, PlaybackLogFormat.exitReasonName(it.reason), it.description, it.importance) }
+                        .map { ProcessExit(it.timestamp, PlaybackLogFormat.exitReasonName(it.reason), it.description, it.importance, it.status, it.pss, it.rss) }
                     val new = PlaybackLogFormat.newExits(exits, prefs.getLong(KEY_LAST_EXIT, 0L))
                     new.forEach { log.appendSafely(PlaybackEvent(it.timestamp, PlaybackEventKind.PROCESS_EXIT, PlaybackLogFormat.exitDetail(it))) }
                     new.lastOrNull()?.let { prefs.edit { putLong(KEY_LAST_EXIT, it.timestamp) } }

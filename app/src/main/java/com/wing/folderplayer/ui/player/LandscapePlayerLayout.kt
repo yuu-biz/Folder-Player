@@ -210,7 +210,7 @@ fun LandscapeLeftControlPanel(
                     .coverChange(uiState.coverUri to uiState.coverFallback) { direction }
                     .sharedCover(transition, cornerPx = { with(density) { 12.dp.toPx() } }, elevationPx = { with(density) { 12.dp.toPx() } })
             ) {
-                FullCover(uiState, transition, Modifier.fillMaxSize())
+                FullCover(uiState, transition, Modifier.fillMaxSize().swipeToSkip(onNext = { viewModel.next() }, onPrevious = { viewModel.previous() }))
             }
         }
 

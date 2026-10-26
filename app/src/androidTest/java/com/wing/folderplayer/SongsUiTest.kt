@@ -28,7 +28,7 @@ import org.junit.runner.RunWith
  * The songs list: every song whose length was read (here: a scan of Album-A), with its title, artist and album from the
  * tags, sorted by title, artist, album or length, filtered by any of them; a tap plays the list from that song, the
  * long-press sheet shows the song in its folder and Back returns to the list. The list can be narrowed to the songs of
- * one folder (and below it), from the list itself, a folder's menu or a bookmark's menu; that is kept.
+ * one folder or several (and below them), from the list itself, a folder's menu or a bookmark's menu; that is kept.
  */
 @RunWith(AndroidJUnit4::class)
 class SongsUiTest : UiTestBase() {
@@ -44,7 +44,7 @@ class SongsUiTest : UiTestBase() {
     private val copyDir = "${Fx.FX}/SongsFolderCopy"
 
     @Before fun scanAlbum() {
-        com.wing.folderplayer.data.prefs.SourcePreferences(Fx.ctx).saveSongsFolder(null)
+        com.wing.folderplayer.data.prefs.SourcePreferences(Fx.ctx).saveSongsFolders(emptyList())
         val repo = DurationRepository.get(Fx.ctx)
         val before = repo.scan.value.finished
         assertTrue(repo.startScan(listOf(SourceRef(local, album))))
@@ -60,7 +60,7 @@ class SongsUiTest : UiTestBase() {
         }
         // The default order and every folder for the next run.
         runCatching { com.wing.folderplayer.data.prefs.SourcePreferences(Fx.ctx).saveSongsSort(SongList.TITLE, true) }
-        runCatching { onUi { browser.setSongsFolder(null); browser.bookmarksRepository.remove(SourceRef(local, copyDir)) } }
+        runCatching { onUi { browser.setSongsFolders(emptyList()); listOf(copyDir, album, "${Fx.FX}/Parent").forEach { browser.bookmarksRepository.remove(SourceRef(local, it)) } } }
         runCatching { Fx.shell("rm -r /storage/emulated/0$copyDir") }
     }
 
@@ -168,6 +168,12 @@ class SongsUiTest : UiTestBase() {
         repo.dismissScanResult()
     }
 
+    /** A real Back key: it reaches the folder menu's popup window (pressBack() goes to the activity, behind the menu). */
+    private fun closeMenu() {
+        androidx.test.uiautomator.UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+        compose.waitForIdle()
+    }
+
     private fun allBelow(path: String) = bs.visibleFiles.isNotEmpty() && bs.visibleFiles.all { it.sourceId == local && it.path.startsWith("$path/") }
 
     /** A folder's menu narrows the list to its songs; that stays (also on the source list) until "All folders" is picked. */
@@ -175,7 +181,7 @@ class SongsUiTest : UiTestBase() {
         val parent = "${Fx.FX}/Parent"
         scan(parent) // a song outside Album-A
         openSongs()
-        until(5_000, "every folder") { bs.songsFolder == null && bs.visibleFiles.any { it.path.startsWith("$parent/") } }
+        until(5_000, "every folder") { bs.songsFolders.isEmpty() && bs.visibleFiles.any { it.path.startsWith("$parent/") } }
 
         onUi { browser.loadFolder(SourceRef(local, album)) }
         until(10_000, "Album-A") { bs.currentFolder?.path == album && !bs.isLoading }
@@ -194,7 +200,7 @@ class SongsUiTest : UiTestBase() {
         // Every folder again, from the picker.
         click("songs_folder")
         click("songs_folder_all")
-        until(10_000, "every folder") { bs.songsFolder == null && !bs.isLoading && bs.visibleFiles.any { it.path.startsWith("$parent/") } && albumTitles().size == 2 }
+        until(10_000, "every folder") { bs.songsFolders.isEmpty() && !bs.isLoading && bs.visibleFiles.any { it.path.startsWith("$parent/") } && albumTitles().size == 2 }
         assertTrue(text("songs_folder_label") == Fx.ctx.getString(R.string.songs_folder_all))
     }
 
@@ -212,7 +218,7 @@ class SongsUiTest : UiTestBase() {
         until(5_000, "bookmark") { exists("bookmark_SongsFolderCopy") }
         longClick("bookmark_SongsFolderCopy")
         click("bookmark_songs")
-        until(10_000, "nothing read there") { bs.showingSongs && !bs.isLoading && bs.songsFolder?.path == copyDir && exists("songs_empty") }
+        until(10_000, "nothing read there") { bs.showingSongs && !bs.isLoading && bs.songsFolders.map { it.path } == listOf(copyDir) && exists("songs_empty") }
         assertTrue("the picker names the bookmark", text("songs_folder_label") == "SongsFolderCopy")
         click("songs_scan_folder")
         until(30_000, "read from the list") { bs.visibleFiles.map { it.path } == listOf("$copyDir/copied.flac") && !DurationRepository.get(Fx.ctx).scan.value.running }
@@ -221,5 +227,44 @@ class SongsUiTest : UiTestBase() {
         until(5_000, "menu") { exists("songs_folder_bookmark_SongsFolderCopy") }
         compose.onNodeWithTag("songs_folder_bookmark_SongsFolderCopy").assertIsSelected()
         pressBack()
+    }
+
+    /** Two bookmarks picked together (1.8.0): the songs of both, named in the picker; one taken out again; then every folder. */
+    @Test fun s06_twoBookmarksTogether() {
+        val parent = "${Fx.FX}/Parent"
+        scan(parent)
+        toBrowser()
+        onUi {
+            browser.bookmarksRepository.add(SourceRef(local, album), "SongsA")
+            browser.bookmarksRepository.add(SourceRef(local, parent), "SongsP")
+        }
+        openSongs()
+        click("songs_folder")
+        click("songs_folder_bookmark_SongsA")
+        until(10_000, "Album-A only") { bs.songsFolders.map { it.path } == listOf(album) && !bs.isLoading && allBelow(album) }
+        // The menu stays open for more folders.
+        click("songs_folder_bookmark_SongsP")
+        until(10_000, "both folders") {
+            bs.songsFolders.map { it.path }.toSet() == setOf(album, parent) && !bs.isLoading &&
+                bs.visibleFiles.all { it.path.startsWith("$album/") || it.path.startsWith("$parent/") } &&
+                albumTitles().size == 2 && bs.visibleFiles.any { it.path.startsWith("$parent/") }
+        }
+        compose.onNodeWithTag("songs_folder_bookmark_SongsA").assertIsSelected()
+        compose.onNodeWithTag("songs_folder_bookmark_SongsP").assertIsSelected()
+        click("songs_folder_bookmark_SongsA")
+        until(10_000, "Parent only") { bs.songsFolders.map { it.path } == listOf(parent) && !bs.isLoading && allBelow(parent) }
+        closeMenu()
+        until(5_000, "menu closed") { !exists("songs_folder_all") }
+        assertTrue("the picker names the bookmark: ${text("songs_folder_label")}", text("songs_folder_label") == "SongsP")
+
+        click("songs_folder")
+        click("songs_folder_bookmark_SongsA")
+        until(10_000, "both again") { bs.songsFolders.size == 2 && !bs.isLoading }
+        closeMenu()
+        until(5_000, "menu closed") { !exists("songs_folder_all") }
+        assertTrue("both named: ${text("songs_folder_label")}", text("songs_folder_label").let { "SongsA" in it && "SongsP" in it })
+        click("songs_folder")
+        click("songs_folder_all")
+        until(10_000, "every folder") { bs.songsFolders.isEmpty() && !bs.isLoading }
     }
 }

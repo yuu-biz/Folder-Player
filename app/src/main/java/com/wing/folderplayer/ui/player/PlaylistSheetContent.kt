@@ -2,6 +2,7 @@ package com.wing.folderplayer.ui.player
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -15,6 +16,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 
@@ -222,6 +224,7 @@ fun PlaylistSheetContent(
             }
 
             Row {
+                PlaybackOptionsButton(uiState, viewModel)
                 IconButton(onClick = { showTimerDialog = true }) {
                     Icon(
                         imageVector = Icons.Default.AccessAlarm,
@@ -374,3 +377,101 @@ fun TimerDialog(
         textContentColor = Color.White
     )
 }
+
+/** The button beside the sleep timer that opens [PlaybackOptionsDialog]; lit while the speed is not 1× or left / right are swapped. */
+@Composable
+fun PlaybackOptionsButton(uiState: PlayerUiState, viewModel: PlayerViewModel) {
+    var show by remember { mutableStateOf(false) }
+    if (show) {
+        PlaybackOptionsDialog(
+            speed = uiState.playbackSpeed,
+            swapChannels = uiState.swapChannels,
+            onSpeed = viewModel::setPlaybackSpeed,
+            onSwapChannels = viewModel::setSwapChannels,
+            onDismiss = { show = false },
+        )
+    }
+    val changed = uiState.playbackSpeed != 1f || uiState.swapChannels
+    IconButton(onClick = { show = true }, modifier = Modifier.testTag("player_options")) {
+        Icon(
+            imageVector = Icons.Default.Speed,
+            contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_options),
+            tint = if (changed) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+/** Playback speed (0.5× – 2×, the pitch kept) and left / right swapped; both apply at once and are kept. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PlaybackOptionsDialog(
+    speed: Float,
+    swapChannels: Boolean,
+    onSpeed: (Float) -> Unit,
+    onSwapChannels: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // The slider moves in steps of 0.05; the player follows when the finger lifts (each change rebuilds its audio).
+    var shown by remember(speed) { mutableStateOf(speed) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_options)) },
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                Text(
+                    androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_speed, speedLabel(shown)),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.testTag("player_speed_value"),
+                )
+                Slider(
+                    value = shown,
+                    onValueChange = { shown = (Math.round(it * 20) / 20f) },
+                    onValueChangeFinished = { onSpeed(shown) },
+                    valueRange = PlayerViewModel.MIN_SPEED..PlayerViewModel.MAX_SPEED,
+                    steps = ((PlayerViewModel.MAX_SPEED - PlayerViewModel.MIN_SPEED) * 20).toInt() - 1,
+                    modifier = Modifier.testTag("player_speed_slider"),
+                )
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    for (preset in listOf(0.75f, 1f, 1.25f, 1.5f, 2f)) {
+                        FilterChip(
+                            selected = shown == preset,
+                            onClick = { shown = preset; onSpeed(preset) },
+                            label = { Text(speedLabel(preset)) },
+                            modifier = Modifier.testTag("player_speed_${speedLabel(preset)}"),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable { onSwapChannels(!swapChannels) }.testTag("player_swap_channels"),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_swap_channels), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_swap_channels_hint),
+                            style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f),
+                        )
+                    }
+                    Switch(checked = swapChannels, onCheckedChange = null)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.common_ok)) }
+        },
+        containerColor = Color(0xFF1E1E1E),
+        titleContentColor = Color.White,
+        textContentColor = Color.White
+    )
+}
+
+/** "1.25×": two decimals at most, no trailing zeros. */
+fun speedLabel(speed: Float): String =
+    java.math.BigDecimal(speed.toDouble()).setScale(2, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString().let {
+        if ('.' in it) "$it×" else "$it.0×"
+    }

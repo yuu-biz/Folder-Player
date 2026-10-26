@@ -97,6 +97,12 @@ class PlaybackPreferences(context: Context) {
     fun saveBackgroundStyle(style: String) = prefs.edit { putString("background_style", style) }
 
     /** The visualiser in place of missing lyrics: "WAVE" (default), "BARS" or "RING" (a tap on it changes it). */
+    // Playback speed (1.0 = normal, the pitch is kept) and left / right swapped (1.8.0); the service applies both when it starts.
+    fun getPlaybackSpeed(): Float = prefs.getFloat("playback_speed", 1f)
+    fun savePlaybackSpeed(speed: Float) = prefs.edit { putFloat("playback_speed", speed) }
+    fun getSwapChannels(): Boolean = prefs.getBoolean("swap_channels", false)
+    fun saveSwapChannels(on: Boolean) = prefs.edit { putBoolean("swap_channels", on) }
+
     fun getVisualizerStyle(): String = prefs.getString("visualizer_style", "WAVE") ?: "WAVE"
     fun saveVisualizerStyle(style: String) = prefs.edit { putString("visualizer_style", style) }
 

@@ -94,11 +94,20 @@ class SourcePreferences(context: Context) {
         prefs.edit { putString("songs_sort_field", field); putBoolean("songs_sort_asc", ascending) }
     }
 
-    /** The folder the songs list shows the songs of (and of the folders below it); null: every song. */
-    fun getSongsFolder(): SourceRef? = com.wing.folderplayer.data.source.SourceUris.parse(prefs.getString("songs_folder", null))
+    /**
+     * The folders the songs list shows the songs of (and of the folders below them); empty: every song. One per line;
+     * 1.7.2 kept one folder under "songs_folder", which is read until the list is saved again.
+     */
+    fun getSongsFolders(): List<SourceRef> {
+        val lines = prefs.getString("songs_folders", null) ?: prefs.getString("songs_folder", null) ?: return emptyList()
+        return lines.split('\n').mapNotNull { com.wing.folderplayer.data.source.SourceUris.parse(it) }.distinct()
+    }
 
-    fun saveSongsFolder(folder: SourceRef?) {
-        prefs.edit { if (folder == null) remove("songs_folder") else putString("songs_folder", folder.toUriString()) }
+    fun saveSongsFolders(folders: List<SourceRef>) {
+        prefs.edit {
+            remove("songs_folder")
+            if (folders.isEmpty()) remove("songs_folders") else putString("songs_folders", folders.distinct().joinToString("\n") { it.toUriString() })
+        }
     }
 
     data class SortOption(val field: String, val ascending: Boolean)

@@ -81,6 +81,9 @@ data class PlayerUiState(
     val coverDisplaySize: String = "STANDARD", // STANDARD or LARGE
     val autoNextFolder: Boolean = false,
     val backgroundStyle: String = "GRADIENT",
+    /** Playback speed (1.0 = normal; the pitch is kept) and left / right swapped (1.8.0). */
+    val playbackSpeed: Float = 1f,
+    val swapChannels: Boolean = false,
 
     // Buffering state
     val isBuffering: Boolean = false,
@@ -300,6 +303,8 @@ class PlayerViewModel : ViewModel() {
             coverDisplaySize = size,
             autoNextFolder = autoNext,
             backgroundStyle = playbackPreferences?.getBackgroundStyle() ?: "GRADIENT",
+            playbackSpeed = playbackPreferences?.getPlaybackSpeed() ?: 1f,
+            swapChannels = playbackPreferences?.getSwapChannels() ?: false,
         )
 
         val sessionToken = SessionToken(context, ComponentName(context, MusicService::class.java))
@@ -852,6 +857,20 @@ class PlayerViewModel : ViewModel() {
             p.repeatMode = nextMode
             _uiState.value = _uiState.value.copy(repeatMode = p.repeatMode)
         }
+    }
+
+    /** Kept for the next start; the service applies the saved speed when it starts. */
+    fun setPlaybackSpeed(speed: Float) {
+        val s = speed.coerceIn(MIN_SPEED, MAX_SPEED)
+        _uiState.value = _uiState.value.copy(playbackSpeed = s)
+        playbackPreferences?.savePlaybackSpeed(s)
+        player?.setPlaybackSpeed(s)
+    }
+
+    fun setSwapChannels(on: Boolean) {
+        _uiState.value = _uiState.value.copy(swapChannels = on)
+        playbackPreferences?.saveSwapChannels(on)
+        com.wing.folderplayer.playback.ChannelSwapAudioProcessor.enabled = on
     }
 
     fun toggleAutoNextFolder() {
@@ -1662,6 +1681,56 @@ class PlayerViewModel : ViewModel() {
         refreshPlaylists()
     }
 
+    /**
+     * Adds a song, or the songs of a folder (in name order), to the queue: right after the track playing ([next]) or at
+     * its end; the track playing goes on. With nothing queued they start playing instead. When the queue was built from
+     * "Default" (a folder, the songs list, search results…) that list gets them as well, at the same place; a queue built
+     * from one of the user's playlists becomes "Default" with them, so that playlist itself is not changed. [onAdded]
+     * gets the number of songs added (0: none, e.g. a folder without songs).
+     */
+    fun addToQueue(file: MusicFile, next: Boolean, onAdded: (Int) -> Unit = {}) {
+        viewModelScope.launch(exceptionHandler) {
+            val p = awaitPlayer() ?: return@launch onAdded(0)
+            if (p.mediaItemCount == 0) {
+                if (file.isDirectory) playFolder(file.ref) else playCustomList(listOf(file), 0)
+                onAdded(1)
+                return@launch
+            }
+            val items = if (file.isDirectory) repo().getMediaItemsInFolder(file.ref) else repo().mediaItemsFor(listOf(file))
+            if (items.isEmpty()) return@launch onAdded(0)
+            val at = if (next) (p.currentMediaItemIndex + 1).coerceIn(0, p.mediaItemCount) else p.mediaItemCount
+            val listId = queuePlaylistId
+            val listItems = listId?.let { playlistManager?.getPlaylist(it)?.items }
+            val follows = listId != null && listItems != null && queueFollows(listId, listItems)
+            p.addMediaItems(at, items)
+            if (follows) {
+                val added = items.mapNotNull { playlistItemOf(it) }
+                val updated = listItems!!.toMutableList().apply { addAll(at.coerceAtMost(size), added) }
+                playlistManager?.savePlaylist(Playlist("default", "Default", updated))
+                queuePlaylistId = "default"
+                if (listId != "default" || _uiState.value.activePlaylistId != "default") {
+                    playbackPreferences?.saveActivePlaylistId("default")
+                    _uiState.value = _uiState.value.copy(activePlaylistId = "default", activePlaylistName = "Default")
+                }
+                refreshPlaylists()
+            }
+            updatePlaybackState()
+            onAdded(items.size)
+        }
+    }
+
+    /** The playlist entry of a queue item (null: not a source file). */
+    private fun playlistItemOf(item: MediaItem): PlaylistItem? {
+        val ref = SourceUris.parse(item.mediaId) ?: return null
+        return PlaylistItem(
+            path = ref.path,
+            title = item.mediaMetadata.displayTitle?.toString() ?: SourcePath.baseName(ref.name),
+            artist = item.mediaMetadata.artist?.toString() ?: "",
+            sourceId = ref.sourceId,
+            artworkUri = item.mediaMetadata.artworkUri?.toString(),
+        )
+    }
+
     fun addFilesToPlaylist(targetPlaylistId: String, files: List<MusicFile>) {
         viewModelScope.launch(exceptionHandler) {
             val allItems = mutableListOf<PlaylistItem>()
@@ -1697,6 +1766,9 @@ class PlayerViewModel : ViewModel() {
     }
 
     companion object {
+        const val MIN_SPEED = 0.5f
+        const val MAX_SPEED = 2f
+
         /** Instrumentation tests only: delays handling the controller connection by this many ms. */
         @androidx.annotation.VisibleForTesting
         @Volatile internal var controllerConnectDelayMsForTest = 0L

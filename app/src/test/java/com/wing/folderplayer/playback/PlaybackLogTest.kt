@@ -86,12 +86,12 @@ class PlaybackLogTest {
     @Test fun onlyExitsAfterTheLastLoggedOneOldestFirst() {
         val newestFirst = listOf(
             ProcessExit(300, "LOW_MEMORY", null, 125),
-            ProcessExit(200, "SIGNALED", "kill", 400),
+            ProcessExit(200, "SIGNALED", "kill", 400, status = 9, pssKb = 81_920, rssKb = 163_840),
             ProcessExit(100, "USER_REQUESTED", null, 100),
         )
         assertEquals(listOf(200L, 300L), PlaybackLogFormat.newExits(newestFirst, lastLogged = 150).map { it.timestamp })
         assertEquals(emptyList<ProcessExit>(), PlaybackLogFormat.newExits(newestFirst, lastLogged = 300))
-        assertEquals("reason=SIGNALED importance=400 desc=kill", PlaybackLogFormat.exitDetail(newestFirst[1]))
+        assertEquals("reason=SIGNALED status=9 importance=400 pss=80MB rss=160MB desc=kill", PlaybackLogFormat.exitDetail(newestFirst[1]))
     }
 
     @Test fun credentialsInUrlsAreDropped() {

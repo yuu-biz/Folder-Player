@@ -55,15 +55,17 @@ class SongListTest {
         assertEquals(4, SongList.filter(listOf(a1, a2, b1, plain), "  ").size)
     }
 
-    @Test fun inFolderKeepsTheFolderAndTheFoldersBelowIt() {
+    @Test fun inFoldersKeepsTheFoldersAndTheFoldersBelowThem() {
         val deeper = song("/A/CD2/z.flac", 1)
         val sibling = song("/AB/w.flac", 1) // starts like /A, is not below it
         val other = song("/A/v.flac", 1).copy(sourceId = "t")
         val songs = listOf(a1, a2, deeper, sibling, b1, other)
-        assertEquals(listOf(a1, a2, deeper), SongList.inFolder(songs, SourceRef("s", "/A")))
-        assertEquals(listOf(deeper), SongList.inFolder(songs, SourceRef("s", "/A/CD2")))
-        assertEquals("the top folder: the whole source", listOf(a1, a2, deeper, sibling, b1), SongList.inFolder(songs, SourceRef("s", "/")))
-        assertEquals("no folder: every song", songs, SongList.inFolder(songs, null))
-        assertEquals(emptyList<MusicFile>(), SongList.inFolder(songs, SourceRef("s", "/Nothing")))
+        assertEquals(listOf(a1, a2, deeper), SongList.inFolders(songs, listOf(SourceRef("s", "/A"))))
+        assertEquals(listOf(deeper), SongList.inFolders(songs, listOf(SourceRef("s", "/A/CD2"))))
+        assertEquals("the top folder: the whole source", listOf(a1, a2, deeper, sibling, b1), SongList.inFolders(songs, listOf(SourceRef("s", "/"))))
+        assertEquals("no folder: every song", songs, SongList.inFolders(songs, emptyList()))
+        assertEquals(emptyList<MusicFile>(), SongList.inFolders(songs, listOf(SourceRef("s", "/Nothing"))))
+        // 1.8.0: several folders, also of different sources; a song below two of them (/A and /A/CD2) is listed once.
+        assertEquals(listOf(a1, a2, deeper, b1, other), SongList.inFolders(songs, listOf(SourceRef("s", "/A"), SourceRef("s", "/A/CD2"), b1.ref.parent!!, SourceRef("t", "/"))))
     }
 }
