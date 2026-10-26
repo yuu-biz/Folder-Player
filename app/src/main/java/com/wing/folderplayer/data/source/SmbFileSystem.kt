@@ -106,6 +106,17 @@ class SmbConnectionManager(
         share = null; session = null; connection = null; client = null
     }
 
+    /**
+     * A connection that stopped answering, closed at once: [closeQuietly] says goodbye first (close of the open files,
+     * tree disconnect, logoff) and waits for each answer, which made a failed read take 75 s instead of 30 s.
+     */
+    @Synchronized
+    fun dropDead() {
+        runCatching { connection?.close(true) }
+        runCatching { client?.close() }
+        share = null; session = null; connection = null; client = null
+    }
+
     override fun close() = closeQuietly()
 }
 
@@ -127,6 +138,9 @@ internal object SmbErrors {
                 }
                 is UnknownHostException, is ConnectException, is NoRouteToHostException, is SocketTimeoutException ->
                     return SourceException.Unreachable("$what: ${t.javaClass.simpleName}", t)
+                // A request without an answer within the timeout (a server or Wi-Fi that stopped answering), wrapped by SMBJ.
+                is TransportException -> return SourceException.Unreachable("$what: transport ${t.message}", t)
+                is java.util.concurrent.TimeoutException -> return SourceException.Unreachable("$what: timeout", t)
             }
             t = t.cause
         }
@@ -154,7 +168,7 @@ class SmbFileSystem(override val config: SourceConfig, credentials: CredentialSt
                 // A dropped TCP connection surfaces as transport error: reconnect once.
                 if (mapped is SourceException.Unreachable && attempt == 0) {
                     attempt++
-                    manager.closeQuietly()
+                    manager.dropDead()
                     continue
                 }
                 throw mapped
@@ -202,6 +216,13 @@ class SmbFileSystem(override val config: SourceConfig, credentials: CredentialSt
         EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE),
     )
 
+    /**
+     * A read that got no answer leaves a connection that still looks open: the next open would wait on it for the whole
+     * timeout before connecting again (60 s instead of 30 s per retry of the player, `SmbStallTest`). It is dropped.
+     */
+    private fun readFailed(e: Exception): java.io.IOException =
+        SmbErrors.map(e, "read").also { if (it is SourceException.Unreachable) manager.dropDead() }
+
     override fun openRead(path: String, offset: Long, length: Long): SourceInput {
         val file = withShare("open") { openFile(it, path) }
         val size = try { file.fileInformation.standardInformation.endOfFile } catch (e: Exception) { file.close(); throw SmbErrors.map(e, "stat") }
@@ -222,7 +243,7 @@ class SmbFileSystem(override val config: SourceConfig, credentials: CredentialSt
         private fun fill(): Boolean {
             if (remaining <= 0) return false
             val want = minOf(buf.size.toLong(), remaining).toInt()
-            val n = try { file.read(buf, position, 0, want) } catch (e: Exception) { throw SmbErrors.map(e, "read") }
+            val n = try { file.read(buf, position, 0, want) } catch (e: Exception) { throw readFailed(e) }
             manager.touch()
             if (n <= 0) throw SourceException.PrematureEof(length, length - remaining)
             position += n
@@ -265,7 +286,7 @@ class SmbFileSystem(override val config: SourceConfig, credentials: CredentialSt
             override val size: Long = size
             override fun read(position: Long, buffer: ByteArray, offset: Int, len: Int): Int {
                 if (position >= size) return -1
-                val n = try { file.read(buffer, position, offset, len) } catch (e: Exception) { throw SmbErrors.map(e, "read") }
+                val n = try { file.read(buffer, position, offset, len) } catch (e: Exception) { throw readFailed(e) }
                 manager.touch()
                 return if (n <= 0) -1 else n
             }
