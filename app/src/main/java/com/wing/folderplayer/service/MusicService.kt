@@ -20,6 +20,7 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.wing.folderplayer.BuildConfig
 import com.wing.folderplayer.MainActivity
+import com.wing.folderplayer.data.prefs.PlaybackPreferences
 import com.wing.folderplayer.data.source.SourceRegistry
 import com.wing.folderplayer.data.source.SourceUris
 import com.wing.folderplayer.playback.NetworkRetryController
@@ -50,6 +51,7 @@ class MusicService : MediaLibraryService() {
     private lateinit var retry: NetworkRetryController
     private var exporter: PlaybackExportManager? = null
     private lateinit var sleepTimer: SleepTimer
+    private lateinit var diagnostics: com.wing.folderplayer.playback.PlaybackDiagnostics
 
     /** Sleep timer commands (START / CANCEL / GET) from the app's screens, on top of the default commands. */
     private inner class SessionCallback : MediaLibrarySession.Callback {
@@ -155,10 +157,17 @@ class MusicService : MediaLibraryService() {
             )
             .build()
 
-        // The audio sink is tapped for the full player's visualiser (see AudioTap); MediaCodec and FFmpeg renderers share it.
+        // The audio sink is tapped for the full player's visualiser (see AudioTap) and swaps left / right when asked (before
+        // the speed change); MediaCodec and FFmpeg renderers share it.
         val renderersFactory = object : androidx.media3.exoplayer.DefaultRenderersFactory(this) {
-            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): androidx.media3.exoplayer.audio.AudioSink? =
-                super.buildAudioSink(context, enableFloatOutput, enableAudioTrackPlaybackParams)?.let { com.wing.folderplayer.playback.TappingAudioSink(it) }
+            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): androidx.media3.exoplayer.audio.AudioSink =
+                com.wing.folderplayer.playback.TappingAudioSink(
+                    androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+                        .setEnableFloatOutput(enableFloatOutput)
+                        .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                        .setAudioProcessors(arrayOf(com.wing.folderplayer.playback.ChannelSwapAudioProcessor()))
+                        .build(),
+                )
         }
             .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
 
@@ -179,6 +188,10 @@ class MusicService : MediaLibraryService() {
             .build()
 
         player.volume = 1.0f
+        PlaybackPreferences(applicationContext).let { prefs ->
+            player.setPlaybackSpeed(prefs.getPlaybackSpeed())
+            com.wing.folderplayer.playback.ChannelSwapAudioProcessor.enabled = prefs.getSwapChannels()
+        }
 
         // Also the playback log: what started, paused or stopped playback and why.
         player.addListener(object : Player.Listener {
@@ -220,6 +233,7 @@ class MusicService : MediaLibraryService() {
             }
         })
 
+        diagnostics = com.wing.folderplayer.playback.PlaybackDiagnostics(player, ::where).also { it.attach() }
         retry = NetworkRetryController(player, keepAwake = ::keepAwakeForRetry).also { it.attach() }
         exporter = PlaybackExportManager(applicationContext, player).also { it.attach() }
 
@@ -279,6 +293,13 @@ class MusicService : MediaLibraryService() {
         }
     }
 
+    // Memory pressure before a kill (lmkd or a vendor killer); UI_HIDDEN only means the activity left the screen.
+    @Suppress("DEPRECATION")
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level != TRIM_MEMORY_UI_HIDDEN) PlaybackLog.record(PlaybackEventKind.MEMORY, "trim level $level ${where()}")
+    }
+
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
         return mediaSession
     }
@@ -286,12 +307,14 @@ class MusicService : MediaLibraryService() {
     /** For instrumentation tests (main thread): controllers bound to the session, e.g. the app's own one per activity. */
     internal val connectedControllerCount: Int get() = mediaSession.connectedControllers.size
     internal val isPlayingForTest: Boolean get() = player.isPlaying
+    internal val playbackSpeedForTest: Float get() = player.playbackParameters.speed
 
     override fun onDestroy() {
         if (current === this) current = null
         pendingNotification?.let { notificationHandler.removeCallbacks(it) }
         unregisterReceiver(becomingNoisyReceiver)
         sleepTimer.detach()
+        diagnostics.detach()
         retry.detach()
         keepAwakeForRetry(false)
         exporter?.detach()

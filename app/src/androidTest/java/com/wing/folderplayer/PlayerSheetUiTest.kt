@@ -380,6 +380,37 @@ class PlayerSheetUiTest : UiTestBase() {
         until(5_000, "seeked to the middle of the 30 s track (${ps.currentPosition} ms)") { playing("02%20track") && ps.currentPosition in 12_000..22_000 }
     }
 
+    /**
+     * 1.8.0: a sideways swipe over the full player's cover: to the left the next track, to the right the previous one;
+     * a short, slow one does nothing, and the player stays open.
+     */
+    @Test fun s14_sidewaysSwipeOverTheCoverSkips() {
+        toBrowser()
+        onUi { player.playFolder(SourceRef(local, "$fx/Album-A"), null) }
+        until(15_000, "playing") { playing("Album-A") }
+        until(5_000, "mini player") { exists("mini_player") }
+        click("mini_player")
+        assertSettled(true, "open")
+        val first = ps.currentMediaId
+        fun swipeBy(fraction: Float, ms: Long) {
+            compose.onNodeWithTag("player_cover_swipe", useUnmergedTree = true).performTouchInput {
+                down(Offset(width * 0.5f, height * 0.5f))
+                moveInSteps(Offset(width * fraction, 0f), ms, 20)
+                up()
+            }
+            compose.waitForIdle()
+        }
+        swipeBy(-0.08f, 600)
+        Thread.sleep(1_000)
+        assertEquals("a short swipe does nothing", first, ps.currentMediaId)
+        swipeBy(-0.5f, 300)
+        until(10_000, "next track") { ps.currentMediaId != null && ps.currentMediaId != first }
+        assertSettled(true, "open after the swipe")
+        swipeBy(0.5f, 300)
+        until(10_000, "previous track") { ps.currentMediaId == first }
+        assertSettled(true, "open after the swipe back")
+    }
+
     /** A press held still on the seek bar starts a fine drag: from where the thumb was, half a minute per bar width. */
     @Test fun s13_longPressOnTheSeekBarDragsFinely() {
         playLong() // 10:00: one bar width is 30 s

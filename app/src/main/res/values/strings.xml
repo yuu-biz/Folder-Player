@@ -430,4 +430,12 @@
         <item quantity="one">%d song without a known length (listed last)</item>
         <item quantity="other">%d songs without a known length (listed last)</item>
     </plurals>
+    <string name="player_options">Speed and channels</string>
+    <string name="player_speed">Speed: %1$s</string>
+    <string name="player_swap_channels">Swap left and right</string>
+    <string name="player_swap_channels_hint">The left channel plays on the right and the right channel on the left.</string>
+    <string name="action_play_next">Play next</string>
+    <string name="action_add_to_queue">Add to queue</string>
+    <string name="queue_added_next">Plays next: %1$s</string>
+    <string name="queue_added_end">Added to the queue: %1$s</string>
 </resources>

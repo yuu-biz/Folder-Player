@@ -264,7 +264,7 @@ private fun PortraitPlayerLayout(
                                 else Modifier
                             )
                     ) {
-                        FullCover(uiState, transition, Modifier.fillMaxSize())
+                        FullCover(uiState, transition, Modifier.fillMaxSize().swipeToSkip(onNext = { viewModel.next() }, onPrevious = { viewModel.previous() }))
                     }
                 }
 
@@ -775,6 +775,7 @@ private fun PortraitPlayerLayout(
                         }
                         
                         Row {
+                            PlaybackOptionsButton(uiState, viewModel)
                             IconButton(onClick = { showTimerDialog = true }) {
                                 Icon(
                                     imageVector = Icons.Default.AccessAlarm,

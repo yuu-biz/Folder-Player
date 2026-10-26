@@ -29,6 +29,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
+import androidx.compose.ui.platform.testTag
+import kotlinx.coroutines.launch
+import kotlin.math.sign
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 
@@ -94,4 +103,42 @@ fun PlayPauseIcon(isPlaying: Boolean, contentDescription: (playing: Boolean) -> 
     ) { playing ->
         Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = contentDescription(playing), tint = tint, modifier = modifier)
     }
+}
+
+/**
+ * A sideways swipe over the full player's cover: to the left the next track, to the right the previous one (1.8.0).
+ * The cover follows the finger a little and springs back; a swipe counts when it went a fifth of the cover's width or
+ * was flung. Vertical drags stay with the player (the slop decides the direction before this takes the move).
+ */
+fun Modifier.swipeToSkip(onNext: () -> Unit, onPrevious: () -> Unit): Modifier = composed {
+    val next = rememberUpdatedState(onNext)
+    val previous = rememberUpdatedState(onPrevious)
+    val offset = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    this
+        .graphicsLayer { translationX = offset.value }
+        .pointerInput(Unit) {
+            val tracker = VelocityTracker()
+            val flingSpeed = 1_000.dp.toPx()
+            detectHorizontalDragGestures(
+                onDragStart = { tracker.resetTracking() },
+                onHorizontalDrag = { change, dx ->
+                    change.consume()
+                    tracker.addPointerInputChange(change)
+                    scope.launch { offset.snapTo(offset.value + dx * 0.5f) }
+                },
+                onDragCancel = { scope.launch { offset.animateTo(0f) } },
+                onDragEnd = {
+                    val travelled = offset.value * 2
+                    val speed = tracker.calculateVelocity().x
+                    val far = abs(travelled) > size.width / 5f
+                    val flung = abs(speed) > flingSpeed && sign(speed) == sign(travelled)
+                    if (far || flung) {
+                        if (travelled < 0) next.value() else previous.value()
+                    }
+                    scope.launch { offset.animateTo(0f) }
+                },
+            )
+        }
+        .testTag("player_cover_swipe")
 }

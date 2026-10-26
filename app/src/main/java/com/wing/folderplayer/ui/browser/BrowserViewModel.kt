@@ -80,8 +80,8 @@ data class BrowserUiState(
     val showingSongs: Boolean = false,
     /** Songs in that list (shown on the source list). */
     val songCount: Int = 0,
-    /** The folder that list is narrowed to, with the folders below it (kept, see [SourcePreferences.getSongsFolder]); null: every song. */
-    val songsFolder: SourceRef? = null,
+    /** The folders that list is narrowed to, with the folders below them (kept, see [SourcePreferences.getSongsFolders]); empty: every song. */
+    val songsFolders: List<SourceRef> = emptyList(),
     val files: List<MusicFile> = emptyList(),
     val isLoading: Boolean = false,
     val currentlyPlayingMediaId: String? = null,
@@ -185,7 +185,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
         viewModelScope.launch {
             SourceRegistry.sources.collect { list ->
-                _uiState.value = _uiState.value.copy(availableSources = list, songsFolder = songsFolder())
+                _uiState.value = _uiState.value.copy(availableSources = list, songsFolders = songsFolders())
                 countSongs()
             }
         }
@@ -315,6 +315,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     fun clearError() {
         _error.value = null
+    }
+
+    /** A short note in the browser's snackbar. */
+    fun showMessage(text: String) {
+        _uiState.value = _uiState.value.copy(message = text)
     }
 
     fun clearMessage() {
@@ -899,11 +904,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             lengthJob?.cancel()
             _uiState.value = _uiState.value.copy(showingSongs = true, favoritesKind = null, currentFolder = null, lengthFill = null, filter = filter.orEmpty(), filterOpen = !filter.isNullOrEmpty())
         }
-        val folder = songsFolder()
+        val folders = songsFolders()
         songsJob = viewModelScope.launch(exceptionHandler) {
             val songs = withContext(Dispatchers.Default) {
                 val list = com.wing.folderplayer.data.metadata.SongList
-                list.sort(list.inFolder(durations.songs(), folder), sort.field, sort.ascending)
+                list.sort(list.inFolders(durations.songs(), folders), sort.field, sort.ascending)
             }
             val now = _uiState.value
             if (!now.showingSongs) return@launch // left meanwhile
@@ -914,7 +919,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 else -> null
             }
             _uiState.value = now.copy(
-                showingSongs = true, favoritesKind = null, currentFolder = null, files = songs, isLoading = false, songsFolder = folder,
+                showingSongs = true, favoritesKind = null, currentFolder = null, files = songs, isLoading = false, songsFolders = folders,
                 sortField = sort.field, sortAscending = sort.ascending, viewMode = "LIST", lengthFill = null,
                 filter = f, filterOpen = f.isNotEmpty() || now.filterOpen,
                 scrollToIndex = scroll?.first ?: now.scrollToIndex,
@@ -924,34 +929,40 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    /** The folder the songs list is narrowed to; null: every song (also when its source is gone). */
-    private fun songsFolder(): SourceRef? = sourcePreferences.getSongsFolder()?.takeIf { SourceRegistry.get(it.sourceId) != null }
+    /** The folders the songs list is narrowed to, without those of sources that are gone; empty: every song. */
+    private fun songsFolders(): List<SourceRef> = sourcePreferences.getSongsFolders().filter { SourceRegistry.get(it.sourceId) != null }
 
     private fun countSongs() {
         countJob?.cancel()
         countJob = viewModelScope.launch {
-            val folder = songsFolder()
-            val count = withContext(Dispatchers.Default) { com.wing.folderplayer.data.metadata.SongList.inFolder(durations.songs(), folder).size }
-            _uiState.value = _uiState.value.copy(songCount = count, songsFolder = folder)
+            val folders = songsFolders()
+            val count = withContext(Dispatchers.Default) { com.wing.folderplayer.data.metadata.SongList.inFolders(durations.songs(), folders).size }
+            _uiState.value = _uiState.value.copy(songCount = count, songsFolders = folders)
         }
     }
 
-    /** Narrows the songs list to [folder] and the folders below it (null: every song); kept for the next time. */
-    fun setSongsFolder(folder: SourceRef?) {
-        sourcePreferences.saveSongsFolder(folder)
-        _uiState.value = _uiState.value.copy(songsFolder = songsFolder())
+    /** Narrows the songs list to [folders] and the folders below them (empty: every song); kept for the next time. */
+    fun setSongsFolders(folders: List<SourceRef>) {
+        sourcePreferences.saveSongsFolders(folders)
+        _uiState.value = _uiState.value.copy(songsFolders = songsFolders())
         countSongs()
         if (_uiState.value.showingSongs) renderSongs(restoreScroll = false, top = true)
     }
 
-    /** The songs list of [folder] and the folders below it (a folder's menu, a bookmark's menu). */
+    /** Adds [folder] to the folders the songs list is narrowed to, or takes it out (the folder picker). */
+    fun toggleSongsFolder(folder: SourceRef) {
+        val now = songsFolders()
+        setSongsFolders(if (folder in now) now - folder else now + folder)
+    }
+
+    /** The songs list of [folder] and the folders below it only (a folder's menu, a bookmark's menu). */
     fun showSongsIn(folder: SourceRef) {
-        setSongsFolder(folder)
+        setSongsFolders(listOf(folder))
         showSongs()
     }
 
-    /** Reads the song lengths of the folder the songs list is narrowed to. */
-    fun scanSongsFolderLengths() { songsFolder()?.let { scanLengths(listOf(it)) } }
+    /** Reads the song lengths of the folders the songs list is narrowed to. */
+    fun scanSongsFolderLengths() { songsFolders().takeIf { it.isNotEmpty() }?.let { scanLengths(it) } }
 
     // ---------------- lengths ----------------
 

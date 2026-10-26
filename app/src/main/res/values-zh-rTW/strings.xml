@@ -404,4 +404,12 @@
     <plurals name="length_fill_unknown">
         <item quantity="other">%d 首長度未知（排在最後）</item>
     </plurals>
+    <string name="player_options">播放速度與聲道</string>
+    <string name="player_speed">速度：%1$s</string>
+    <string name="player_swap_channels">左右聲道互換</string>
+    <string name="player_swap_channels_hint">左聲道從右側播放，右聲道從左側播放。</string>
+    <string name="action_play_next">下一首播放</string>
+    <string name="action_add_to_queue">加入播放佇列</string>
+    <string name="queue_added_next">下一首播放：%1$s</string>
+    <string name="queue_added_end">已加入播放佇列：%1$s</string>
 </resources>

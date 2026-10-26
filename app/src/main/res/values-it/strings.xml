@@ -430,4 +430,12 @@
         <item quantity="many">%d brani senza durata nota (in fondo)</item>
         <item quantity="other">%d brani senza durata nota (in fondo)</item>
     </plurals>
+    <string name="player_options">Velocità e canali</string>
+    <string name="player_speed">Velocità: %1$s</string>
+    <string name="player_swap_channels">Inverti sinistra e destra</string>
+    <string name="player_swap_channels_hint">Il canale sinistro esce a destra e il destro a sinistra.</string>
+    <string name="action_play_next">Riproduci dopo</string>
+    <string name="action_add_to_queue">Aggiungi alla coda</string>
+    <string name="queue_added_next">Riprodotto dopo: %1$s</string>
+    <string name="queue_added_end">Aggiunto alla coda: %1$s</string>
 </resources>

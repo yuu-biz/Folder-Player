@@ -146,6 +146,7 @@ fun AppRoot(
     val onCustomPlay = remember(playerViewModel, sheet) { { files: List<MusicFile>, index: Int -> playerViewModel.playCustomList(files, index); if (!wideState.value) sheet.expand() } }
     val onCuePlay = remember(playerViewModel, sheet) { { cue: SourceRef -> playerViewModel.playCueSheet(cue); if (!wideState.value) sheet.expand() } }
     val onAddToPlaylist = remember(playerViewModel) { { id: String, files: List<MusicFile> -> playerViewModel.addFilesToPlaylist(id, files) } }
+    val onAddToQueue = remember(playerViewModel) { { file: MusicFile, next: Boolean, onAdded: (Int) -> Unit -> playerViewModel.addToQueue(file, next, onAdded) } }
     val openSettings = remember(navController, sheet) {
         {
             // No folding animation: Settings slides in at the same moment.
@@ -192,6 +193,7 @@ fun AppRoot(
                                     onCuePlay = onCuePlay,
                                     allPlaylists = allPlaylists,
                                     onAddToPlaylist = onAddToPlaylist,
+                                    onAddToQueue = onAddToQueue,
                                     onOpenSettings = openSettings,
                                     backEnabled = !fullPlayerShown,
                                     playerPane = playerPane,
