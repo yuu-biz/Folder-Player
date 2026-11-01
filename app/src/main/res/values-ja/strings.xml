@@ -412,4 +412,7 @@
     <string name="action_add_to_queue">キューに追加</string>
     <string name="queue_added_next">次に再生: %1$s</string>
     <string name="queue_added_end">キューに追加: %1$s</string>
+    <string name="browser_delete_source_title">このソースを削除しますか？</string>
+    <string name="browser_delete_source_text">「%1$s」をソース一覧から削除します。中のファイルは削除されません。</string>
+    <string name="browser_delete_source_text_network">「%1$s」をソース一覧から削除し、保存したパスワードも削除します。サーバー上のファイルは削除されません。</string>
 </resources>

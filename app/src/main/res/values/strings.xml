@@ -438,4 +438,7 @@
     <string name="action_add_to_queue">Add to queue</string>
     <string name="queue_added_next">Plays next: %1$s</string>
     <string name="queue_added_end">Added to the queue: %1$s</string>
+    <string name="browser_delete_source_title">Delete this source?</string>
+    <string name="browser_delete_source_text">“%1$s” is removed from the source list. The files in it are not deleted.</string>
+    <string name="browser_delete_source_text_network">“%1$s” is removed from the source list, and its saved password is deleted. The files on the server are not deleted.</string>
 </resources>
