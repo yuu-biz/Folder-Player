@@ -2,7 +2,7 @@ Folder Player Fork {VERSION} — an unofficial personal fork of
 [Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000. It is not affiliated with the original
 project. This release follows 1.8.0.
 
-## What's new in 1.9.0
+## What's new in 1.8.1
 
 - **NAS folders that stayed loading**: a folder on an SMB share (NAS) could stay loading for about half a minute or
   fail, most often after going from a NAS folder back to the favourites and into another folder, or after the app was

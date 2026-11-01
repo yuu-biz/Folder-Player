@@ -73,7 +73,7 @@ What a user can run into, in one place. The sections below give the history of e
   (`SmbConnectionTest`): a cancelled request (leaving a folder while its covers or song lengths were still being read, a
   seek in the player) counted as a lost connection and closed the connection everything else was using, and a request
   of another reader in flight on it then waited the whole SMB timeout (33 s for a listing); and a connection that went
-  silent while unused (Wi-Fi power save, a phone that slept) made the first request wait 30 s. Since 1.9.0 these take
+  silent while unused (Wi-Fi power save, a phone that slept) made the first request wait 30 s. Since 1.8.1 these take
   2 s (the relay's added delay) and 3 s. Not checked on the owner's phone and NAS: a NAS whose disks sleep, or a name
   instead of an address in the source, can still take longer. The playback log records each SMB connect (with the
   time it took) and each drop with its reason (`CONNECTION`).

@@ -140,7 +140,7 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
-### 5.37 SMB connection kept through cancelled requests, silent connections noticed (1.9.0, 2026-11-02)
+### 5.37 SMB connection kept through cancelled requests, silent connections noticed (1.8.1, 2026-11-02)
 
 The owner reported NAS folders that now and then stay loading or fail (after the app was in the background, or going
 from a NAS favourite back to the favourites and into another folder), fixed by a task kill or another folder. JVM tests
