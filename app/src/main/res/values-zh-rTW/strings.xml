@@ -412,4 +412,7 @@
     <string name="action_add_to_queue">加入播放佇列</string>
     <string name="queue_added_next">下一首播放：%1$s</string>
     <string name="queue_added_end">已加入播放佇列：%1$s</string>
+    <string name="browser_delete_source_title">刪除此來源？</string>
+    <string name="browser_delete_source_text">將從來源清單中移除「%1$s」。其中的檔案不會被刪除。</string>
+    <string name="browser_delete_source_text_network">將從來源清單中移除「%1$s」，並刪除已儲存的密碼。伺服器上的檔案不會被刪除。</string>
 </resources>

@@ -153,6 +153,9 @@ class SourceUiTest : UiTestBase() {
         val ftps = saved("ui-ftps")!!
         longClick("source_ui-ftps")
         clickText(str(R.string.common_delete))
+        until(5_000, "delete confirmation") { exists("source_delete_dialog") }
+        assertTrue("kept until confirmed", saved("ui-ftps") != null)
+        click("source_delete_confirm")
         // The removed lazy item may linger as a detached semantics node for a moment; what matters is that it is not shown.
         until(5_000, "deleted") { saved("ui-ftps") == null && runCatching { node("source_ui-ftps").assertIsDisplayed() }.isFailure }
         assertEquals(null, creds.get(ftps.effectiveCredentialRef))

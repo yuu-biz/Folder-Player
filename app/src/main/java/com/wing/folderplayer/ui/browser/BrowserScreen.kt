@@ -96,6 +96,7 @@ fun BrowserScreen(
 
     var editorType by remember { mutableStateOf<SourceType?>(null) }
     var sourceToEdit by remember { mutableStateOf<SourceConfig?>(null) }
+    var sourceToDelete by remember { mutableStateOf<SourceConfig?>(null) }
     var showAddMenu by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
 
@@ -125,6 +126,21 @@ fun BrowserScreen(
             onDiscover = { viewModel.discoverSmb() },
             onListShares = { cfg, pass -> viewModel.listSmbShares(cfg, pass) },
             onListSharesAsGuest = { host, port -> viewModel.listSmbSharesAsGuest(host, port) },
+        )
+    }
+
+    sourceToDelete?.let { source ->
+        AlertDialog(
+            onDismissRequest = { sourceToDelete = null },
+            title = { Text(stringResource(R.string.browser_delete_source_title)) },
+            text = { Text(stringResource(if (source.isNetwork) R.string.browser_delete_source_text_network else R.string.browser_delete_source_text, source.name)) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.removeSource(source.id); sourceToDelete = null }, modifier = Modifier.testTag("source_delete_confirm")) {
+                    Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { sourceToDelete = null }) { Text(stringResource(R.string.common_cancel)) } },
+            modifier = Modifier.testTag("source_delete_dialog"),
         )
     }
 
@@ -484,7 +500,7 @@ fun BrowserScreen(
                                 onSongsClick = { viewModel.showSongs() },
                                 onSourceClick = { viewModel.selectSource(it) },
                                 onEditSource = { sourceToEdit = it },
-                                onDeleteSource = { viewModel.removeSource(it.id) },
+                                onDeleteSource = { sourceToDelete = it },
                                 onDuplicateSource = { viewModel.duplicateSource(it.id) },
                                 onMoveUp = { viewModel.moveSourceUp(it.id) },
                                 onMoveDown = { viewModel.moveSourceDown(it.id) },

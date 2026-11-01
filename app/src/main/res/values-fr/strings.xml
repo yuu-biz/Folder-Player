@@ -438,4 +438,7 @@
     <string name="action_add_to_queue">Ajouter à la file d\'attente</string>
     <string name="queue_added_next">Lu ensuite : %1$s</string>
     <string name="queue_added_end">Ajouté à la file d\'attente : %1$s</string>
+    <string name="browser_delete_source_title">Supprimer cette source ?</string>
+    <string name="browser_delete_source_text">« %1$s » est retirée de la liste des sources. Ses fichiers ne sont pas supprimés.</string>
+    <string name="browser_delete_source_text_network">« %1$s » est retirée de la liste des sources et son mot de passe enregistré est supprimé. Les fichiers du serveur ne sont pas supprimés.</string>
 </resources>
