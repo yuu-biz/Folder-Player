@@ -408,6 +408,11 @@
     <string name="player_speed">速度: %1$s</string>
     <string name="player_swap_channels">左右を入れ替える</string>
     <string name="player_swap_channels_hint">左チャンネルを右から、右チャンネルを左から鳴らします。</string>
+    <string name="player_retry_waiting">接続が切れました。%1$d 秒後に再試行します</string>
+    <string name="player_retry_trying">再接続しています…</string>
+    <string name="player_retry_reconnected">再接続しました</string>
+    <string name="player_retry_now">今すぐ再試行</string>
+    <string name="player_retry_stop">中止</string>
     <string name="action_play_next">次に再生</string>
     <string name="action_add_to_queue">キューに追加</string>
     <string name="queue_added_next">次に再生: %1$s</string>

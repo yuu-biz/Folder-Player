@@ -58,12 +58,12 @@ class MusicService : MediaLibraryService() {
     private lateinit var diagnostics: com.wing.folderplayer.playback.PlaybackDiagnostics
     private lateinit var resume: ResumeTracker
 
-    /** Sleep timer commands (START / CANCEL / GET) from the app's screens, on top of the default commands. */
+    /** Sleep timer commands (START / CANCEL / GET) and "retry now" from the app's screens, on top of the default commands. */
     private inner class SessionCallback : MediaLibrarySession.Callback {
         override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
             val accepted = super.onConnect(session, controller)
             val commands = accepted.availableSessionCommands.buildUpon()
-                .add(SleepTimer.COMMAND_START).add(SleepTimer.COMMAND_CANCEL).add(SleepTimer.COMMAND_GET)
+                .add(SleepTimer.COMMAND_START).add(SleepTimer.COMMAND_CANCEL).add(SleepTimer.COMMAND_GET).add(COMMAND_RETRY_NOW)
                 .build()
             return MediaSession.ConnectionResult.accept(commands, accepted.availablePlayerCommands)
         }
@@ -75,6 +75,7 @@ class MusicService : MediaLibraryService() {
             args: Bundle,
         ): ListenableFuture<SessionResult> {
             when (customCommand.customAction) {
+                ACTION_RETRY_NOW -> { retry.retryNow(); return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS)) }
                 SleepTimer.ACTION_START -> sleepTimer.start(args.getString(SleepTimer.ARG_TYPE), args.getInt(SleepTimer.ARG_VALUE))
                 SleepTimer.ACTION_CANCEL -> sleepTimer.cancel()
                 SleepTimer.ACTION_GET -> Unit
@@ -349,6 +350,9 @@ class MusicService : MediaLibraryService() {
 
     internal companion object {
         const val MIN_NOTIFICATION_INTERVAL_MS = 300L
+
+        const val ACTION_RETRY_NOW = "com.wing.folderplayer.retry.NOW"
+        val COMMAND_RETRY_NOW = SessionCommand(ACTION_RETRY_NOW, Bundle.EMPTY)
 
         /** Running instance, for instrumentation tests only (the shell cannot send AUDIO_BECOMING_NOISY on API 34+). */
         @Volatile internal var current: MusicService? = null

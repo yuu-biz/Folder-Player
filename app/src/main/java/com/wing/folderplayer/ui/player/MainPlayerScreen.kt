@@ -423,7 +423,7 @@ private fun PortraitPlayerLayout(
 
                 Column(Modifier.fillMaxWidth().fullPlayerContent(transition), horizontalAlignment = Alignment.CenterHorizontally) {
                     if (!lyricsExpanded) LyricsFooter(uiState) { regen -> viewModel.requestAiLyrics(regen) }
-                    PlaybackErrorBanner(uiState)
+                    PlaybackStatusRow(uiState, viewModel)
                 }
                 // (The seek bar below is 48 dp high for the finger: 12 dp of it were spacing before.)
                 Spacer(modifier = Modifier.height(4.dp))

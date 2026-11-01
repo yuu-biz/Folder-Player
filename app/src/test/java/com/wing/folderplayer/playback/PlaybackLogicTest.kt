@@ -102,6 +102,37 @@ class PlaybackLogicTest {
         assertEquals(emptyList<Boolean>(), awake)
     }
 
+    @Test fun statusFollowsARetryFromTheWaitToRecoveryOrCancel() {
+        var now = 10_000L
+        val awake = mutableListOf<Boolean>()
+        val retry = NetworkRetryController(idlePlayer(), clock = { now }, keepAwake = { awake += it }, isNetworkItem = { true })
+        retry.onPlayerError(playbackError(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED))
+        assertEquals(RetryStatus(1, 1_000, PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED, RetryPhase.WAITING, 11_000), NetworkRetryController.status.value)
+
+        now += 300
+        retry.retryNow()
+        assertEquals(RetryPhase.TRYING, NetworkRetryController.status.value.phase)
+        assertEquals("the attempt holds the player's own locks", listOf(true, false), awake)
+        retry.retryNow()
+        assertEquals("nothing pending: nothing run twice", listOf(true, false), awake)
+
+        retry.onPlaybackStateChanged(Player.STATE_READY)
+        assertEquals(RetryStatus(1, 0, PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED, RetryPhase.RECOVERED, 10_300), NetworkRetryController.status.value)
+
+        retry.onPlayerError(playbackError(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT))
+        assertEquals("a new trouble counts from 1", 1, NetworkRetryController.status.value.attempt)
+        retry.onPlayWhenReadyChanged(false, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
+        assertEquals(RetryPhase.CANCELLED, NetworkRetryController.status.value.phase)
+        assertEquals(0L, NetworkRetryController.status.value.pendingDelayMs)
+
+        retry.onPlayerError(playbackError(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT))
+        retry.onPlayerError(playbackError(PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND))
+        assertTrue("a retry ended by an error that is not retried", NetworkRetryController.status.value.gaveUp)
+        retry.onPlayerError(playbackError(PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND))
+        assertEquals("no retry, so nothing to show", RetryPhase.NONE, NetworkRetryController.status.value.phase)
+        retry.detach()
+    }
+
     // ---- export never publishes partial data ----
 
     @Test fun exportCopiesExactBytes() = runBlocking {

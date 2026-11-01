@@ -434,6 +434,11 @@
     <string name="player_speed">Speed: %1$s</string>
     <string name="player_swap_channels">Swap left and right</string>
     <string name="player_swap_channels_hint">The left channel plays on the right and the right channel on the left.</string>
+    <string name="player_retry_waiting">Connection lost – retrying in %1$d s</string>
+    <string name="player_retry_trying">Reconnecting…</string>
+    <string name="player_retry_reconnected">Reconnected</string>
+    <string name="player_retry_now">Retry now</string>
+    <string name="player_retry_stop">Stop</string>
     <string name="action_play_next">Play next</string>
     <string name="action_add_to_queue">Add to queue</string>
     <string name="queue_added_next">Plays next: %1$s</string>

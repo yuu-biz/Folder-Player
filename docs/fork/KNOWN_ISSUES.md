@@ -29,19 +29,26 @@ What a user can run into, in one place. The sections below give the history of e
 - **Sleep timer**: a "songs" timer ends with the queue (with "next folder" on it does not carry on into the next
   folder; use the minutes timer) and does not count a track repeated by "repeat one". The timer is lost when the app
   process ends.
-- **Restore**: after playing a list built from search results, favourites or a shuffle across folders, the next start
-  restores the folder of the first song of that list, at the position of the song that played last.
-- **Queue** (1.8.0): songs added with "Play next" / "Add to queue" are in the queue and in "Default" (when the queue came
-  from it), but a restart restores the folder of the song that played, as above, not the queue. With shuffle on, the
-  player places added songs among the shuffled ones, so "Play next" is not always next. A CUE sheet cannot be added
-  (play it). A folder adds its own songs, not those of the folders below it.
+- **Restore** (since 1.8.1): the next start brings back the queue as it was (a folder, a CUE sheet, the songs list, search
+  results, favourites, a shuffle across folders, songs added with "Play next" / "Add to queue"), paused at the same
+  song and position, with shuffle on or off as it was (Media3 draws a new shuffle order; repeat is not kept). The queue is
+  kept as the playlist it was built from: "Default", or the user's playlist it was played from. Kept that way, a
+  folder comes back with the songs it had when it was played (a song added to the folder since is not in the queue),
+  and a song whose file is gone stays in the queue and fails when it plays. When that playlist was deleted or no longer
+  holds the song, or the session was saved by 1.8.0, the folder of the song is restored as before. CUE tracks in a
+  playlist now play from it (they were skipped). Not checked on a device (JVM tests only).
+- **Queue** (1.8.0): with shuffle on, the player places added songs among the shuffled ones, so "Play next" is not always
+  next. A CUE sheet cannot be added (play it). A folder adds its own songs, not those of the folders below it. Adding
+  to a queue that is not exactly one list (a playlist with entries that cannot play) makes "Default" that queue.
 - **Speed and left / right** (1.8.0): kept for the next start; the pitch stays the same (Media3's time stretching, which
   can sound rough at 0.5× and 2×). A DLNA cast plays at normal speed and unswapped (the renderer plays the file).
 - **Cover swipe** (1.8.0): only on the cover of the full player (portrait and landscape), not on the mini player, whose
   sideways swipe still ends the session.
 - **Android 8–9**: auto-save of network tracks and saving `Info.nfo` into shared storage need the storage write
   permission, which the app does not ask for (off by default; Android 10+ is not affected).
-- **Large folders**: playing a folder of several thousand songs writes the playlist on the main thread (a short stall);
+- **Large folders**: since 1.8.1 the playlists are written in the background (in order, each file replaced whole; a
+  process killed within moments of a play keeps the list before it); they
+  are still read once on the main thread when the app starts (a short stall with a "Default" of several thousand songs);
   every local folder listing queries the media library once (slow on very large libraries, not measured).
 - **Backup**: on Android 11 and older Auto Backup covers the settings (shared preferences) only, not the playlists and
   `fav.json` under `files/`; Android 12+ backs them up (without downloaded fonts and the Keystore secrets).
@@ -249,7 +256,15 @@ In 1.5.0:
   lock and a Wi-Fi lock (released when the retry has prepared the player again, which then holds its own, or when it is
   cancelled or gives up), so a retry runs on time with the screen off. Not checked on a phone with the screen off.
 
-Still open: the retry status is not shown in the player (only in the log); retries inside ExoPlayer
+Since 1.8.1 the player shows a retry: the full player (portrait and landscape) has a row above the seek bar with
+"Connection lost – retrying in N s" (then "Reconnecting…") and the buttons "Retry now" and "Stop" (a pause, which ends
+the retries), and "Reconnected" for a moment when it worked; the mini player shows "Reconnecting…" in place of the
+artist. The icon pulses unless the system's animations are off. A retry of a paused player (the restore of the last session,
+when the NAS does not answer at start) prepares it again without playing. When the retries give up or are stopped, the error is
+shown as before (landscape now shows errors too). The screens read the retry state directly from the service (one
+process); "Retry now" is a session command. The notification shows nothing new. Not checked against a real outage.
+
+Still open: retries inside ExoPlayer
 (`LoadErrorHandlingPolicy`), which would keep the foreground notification, are not done; the cause of the reported stops
 is not known until a log of one is read.
 
