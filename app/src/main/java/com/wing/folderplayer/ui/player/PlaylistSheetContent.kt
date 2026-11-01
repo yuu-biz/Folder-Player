@@ -18,7 +18,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.media3.common.Player
+import com.wing.folderplayer.R
+import com.wing.folderplayer.data.playlist.Playlist
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,9 +69,12 @@ fun PlaylistSheetContent(
             var expanded by remember { mutableStateOf(false) }
             var showCreateDialog by remember { mutableStateOf(false) }
             var playlistToRename by remember { mutableStateOf<String?>(null) }
+            var playlistToDelete by remember { mutableStateOf<Playlist?>(null) }
             var renameName by remember { mutableStateOf("") }
             var createName by remember { mutableStateOf("") }
             var showTimerDialog by remember { mutableStateOf(false) }
+
+            playlistToDelete?.let { DeletePlaylistDialog(it, viewModel) { playlistToDelete = null } }
 
             if (showTimerDialog) {
                 TimerDialog(
@@ -129,7 +135,8 @@ fun PlaylistSheetContent(
                                             )
                                         }
                                         IconButton(onClick = {
-                                            viewModel.deletePlaylist(playlist.id)
+                                            playlistToDelete = playlist
+                                            expanded = false
                                         }, modifier = Modifier.size(48.dp)) {
                                             Icon(
                                                 Icons.Default.Delete,
@@ -273,6 +280,22 @@ fun PlaylistSheetContent(
 
         PlaylistTrackList(uiState, viewModel, onPlayed = onClose)
     }
+}
+
+/** Asks before a playlist is deleted (the playlist menu of the full player and of the playlist sheet). */
+@Composable
+fun DeletePlaylistDialog(playlist: Playlist, viewModel: PlayerViewModel, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.playlist_delete_title, playlist.name)) },
+        confirmButton = {
+            TextButton(onClick = { viewModel.deletePlaylist(playlist.id); onDismiss() }, modifier = Modifier.testTag("playlist_delete_confirm")) {
+                Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
+        modifier = Modifier.testTag("playlist_delete_dialog"),
+    )
 }
 
 @Composable

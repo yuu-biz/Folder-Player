@@ -264,7 +264,7 @@ private fun PortraitPlayerLayout(
                                 else Modifier
                             )
                     ) {
-                        FullCover(uiState, transition, Modifier.fillMaxSize().swipeToSkip(onNext = { viewModel.next() }, onPrevious = { viewModel.previous() }))
+                        PlayerCover(uiState, viewModel, transition)
                     }
                 }
 
@@ -583,7 +583,7 @@ private fun PortraitPlayerLayout(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
+                        .padding(horizontal = 12.dp)
                         .padding(bottom = controlsPaddingBottom)
                         .fullPlayerContent(transition)
                         .graphicsLayer {
@@ -593,6 +593,8 @@ private fun PortraitPlayerLayout(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // 48 + 56 + 80 + 56 + 48 dp: fits a 360 dp wide phone.
+                    SkipButton(uiState.skipSeconds, forward = false, onSkip = viewModel::skipBy, modifier = Modifier.size(48.dp))
                     IconButton(onClick = { viewModel.previous() }, modifier = Modifier.size(56.dp)) {
                         Icon(
                             imageVector = Icons.Default.SkipPrevious,
@@ -623,6 +625,7 @@ private fun PortraitPlayerLayout(
                             modifier = Modifier.size(36.dp)
                         )
                     }
+                    SkipButton(uiState.skipSeconds, forward = true, onSkip = viewModel::skipBy, modifier = Modifier.size(48.dp))
                 }
             }
             if (!docked) CollapsePlayerButton(onCollapse, Modifier.align(Alignment.TopStart).statusBarsPadding().padding(4.dp).fullPlayerContent(transition))
@@ -652,9 +655,12 @@ private fun PortraitPlayerLayout(
                         var expanded by remember { mutableStateOf(false) }
                         var showCreateDialog by remember { mutableStateOf(false) }
                         var playlistToRename by remember { mutableStateOf<String?>(null) }
+                        var playlistToDelete by remember { mutableStateOf<com.wing.folderplayer.data.playlist.Playlist?>(null) }
                         var renameName by remember { mutableStateOf("") }
                         var createName by remember { mutableStateOf("") }
                         var showTimerDialog by remember { mutableStateOf(false) }
+
+                        playlistToDelete?.let { DeletePlaylistDialog(it, viewModel) { playlistToDelete = null } }
 
                         if (showTimerDialog) {
                             TimerDialog(
@@ -697,8 +703,9 @@ private fun PortraitPlayerLayout(
                                                     }, modifier = Modifier.size(48.dp)) {
                                                         Icon(Icons.Default.Edit, contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_rename), tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
                                                     }
-                                                    IconButton(onClick = { 
-                                                        viewModel.deletePlaylist(playlist.id)
+                                                    IconButton(onClick = {
+                                                        playlistToDelete = playlist
+                                                        expanded = false
                                                     }, modifier = Modifier.size(48.dp)) {
                                                         Icon(Icons.Default.Delete, contentDescription = androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.common_delete), tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
                                                     }

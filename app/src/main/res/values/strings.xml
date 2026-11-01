@@ -438,4 +438,21 @@
     <string name="action_add_to_queue">Add to queue</string>
     <string name="queue_added_next">Plays next: %1$s</string>
     <string name="queue_added_end">Added to the queue: %1$s</string>
+    <string name="playlist_delete_title">Delete playlist “%1$s”?</string>
+    <string name="settings_previous_button">Previous button</string>
+    <string name="settings_previous_always">Always the previous song</string>
+    <string name="settings_previous_restart">Restart the song after 3 s</string>
+    <string name="settings_resume_long">Remember where each long file was left</string>
+    <string name="settings_resume_long_help">A file of 10 minutes or more starts where you left it. Once played to the end, it starts from the beginning again.</string>
+    <string name="settings_skip_seconds">Skip back and forward</string>
+    <string name="settings_skip_seconds_help">The buttons beside previous and next, and a double tap on the cover: left half back, right half forward.</string>
+    <string name="settings_seconds">%1$d s</string>
+    <plurals name="player_skip_back">
+        <item quantity="one">Back %d second</item>
+        <item quantity="other">Back %d seconds</item>
+    </plurals>
+    <plurals name="player_skip_forward">
+        <item quantity="one">Forward %d second</item>
+        <item quantity="other">Forward %d seconds</item>
+    </plurals>
 </resources>

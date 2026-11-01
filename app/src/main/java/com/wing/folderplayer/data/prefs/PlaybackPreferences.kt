@@ -106,7 +106,21 @@ class PlaybackPreferences(context: Context) {
     fun getVisualizerStyle(): String = prefs.getString("visualizer_style", "WAVE") ?: "WAVE"
     fun saveVisualizerStyle(style: String) = prefs.edit { putString("visualizer_style", style) }
 
+    // Read on every use: the service and the app's screens share this process, so a change applies at once.
+    /** Previous restarts the song when more than 3 s in; off (default): always the previous song. */
+    fun getPreviousRestarts(): Boolean = prefs.getBoolean("previous_restarts", false)
+    fun savePreviousRestarts(on: Boolean) = prefs.edit { putBoolean("previous_restarts", on) }
+    fun getResumeLongFiles(): Boolean = prefs.getBoolean("resume_long_files", false)
+    fun saveResumeLongFiles(on: Boolean) = prefs.edit { putBoolean("resume_long_files", on) }
+    fun getSkipSeconds(): Int = prefs.getInt("skip_seconds", DEFAULT_SKIP_SECONDS).takeIf { it in SKIP_SECONDS } ?: DEFAULT_SKIP_SECONDS
+    fun saveSkipSeconds(seconds: Int) = prefs.edit { putInt("skip_seconds", seconds) }
+
     fun clearAll() {
         prefs.edit { clear() }
+    }
+
+    companion object {
+        val SKIP_SECONDS = listOf(5, 10, 15, 30)
+        const val DEFAULT_SKIP_SECONDS = 10
     }
 }

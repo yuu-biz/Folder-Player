@@ -30,6 +30,7 @@ import com.wing.folderplayer.data.ai.AlbumInfoRepository
 import com.wing.folderplayer.data.waveform.Waveform
 import com.wing.folderplayer.data.waveform.WaveformRepository
 import com.wing.folderplayer.data.waveform.WaveformSettings
+import com.wing.folderplayer.playback.PreviousAction
 import com.wing.folderplayer.utils.LyricLine
 import com.wing.folderplayer.utils.CueParser
 import com.google.common.util.concurrent.ListenableFuture
@@ -84,6 +85,8 @@ data class PlayerUiState(
     /** Playback speed (1.0 = normal; the pitch is kept) and left / right swapped (1.8.0). */
     val playbackSpeed: Float = 1f,
     val swapChannels: Boolean = false,
+    /** How far the back / forward buttons and a double tap on the cover move. */
+    val skipSeconds: Int = PlaybackPreferences.DEFAULT_SKIP_SECONDS,
 
     // Buffering state
     val isBuffering: Boolean = false,
@@ -150,6 +153,7 @@ class PlayerViewModel : ViewModel() {
     val allPlaylists: StateFlow<List<Playlist>> = part { it.allPlaylists }
     val coverDisplaySize: StateFlow<String> = part { it.coverDisplaySize }
     val backgroundStyle: StateFlow<String> = part { it.backgroundStyle }
+    val skipSeconds: StateFlow<Int> = part { it.skipSeconds }
     val miniState: StateFlow<MiniPlayerState> = part { it.mini() }
     /** Folder image / embedded picture of the current track (the player panel's background). */
     val cover: StateFlow<Pair<Any?, ByteArray?>> = part { it.coverUri to it.coverFallback }
@@ -305,6 +309,7 @@ class PlayerViewModel : ViewModel() {
             backgroundStyle = playbackPreferences?.getBackgroundStyle() ?: "GRADIENT",
             playbackSpeed = playbackPreferences?.getPlaybackSpeed() ?: 1f,
             swapChannels = playbackPreferences?.getSwapChannels() ?: false,
+            skipSeconds = playbackPreferences?.getSkipSeconds() ?: PlaybackPreferences.DEFAULT_SKIP_SECONDS,
         )
 
         val sessionToken = SessionToken(context, ComponentName(context, MusicService::class.java))
@@ -1164,13 +1169,18 @@ class PlayerViewModel : ViewModel() {
         }
     }
 
-    // Without a track to move to (single track, first / last without repeat) next / previous do nothing: announcing a
-    // change ("Loading…") would leave the display waiting for a change that never comes.
+    // Without a track to move to (single track, first / last without repeat) next / previous do nothing (previous may
+    // restart the song, see PreviousAction): announcing a change ("Loading…") would leave the display waiting for a
+    // change that never comes.
     fun previous() {
         val p = player ?: return
         val target = p.previousMediaItemIndex
-        if (target == androidx.media3.common.C.INDEX_UNSET) { updatePlaybackState(); return }
-        skipTo(p, target) { p.seekToPreviousMediaItem() }
+        val restarts = playbackPreferences?.getPreviousRestarts() == true
+        when (PreviousAction.of(restarts, p.currentPosition, target != C.INDEX_UNSET)) {
+            PreviousAction.PREVIOUS_TRACK -> skipTo(p, target) { p.seekToPreviousMediaItem() }
+            PreviousAction.RESTART -> seekTo(0L)
+            PreviousAction.NONE -> updatePlaybackState()
+        }
     }
 
     fun next() {
@@ -1204,6 +1214,18 @@ class PlayerViewModel : ViewModel() {
     fun seekTo(positionMs: Long) {
         player?.seekTo(positionMs)
         updatePlaybackState()
+    }
+
+    /** Back or forward by [deltaMs] in the current track; forward past its end ends it (the next one plays). */
+    fun skipBy(deltaMs: Long) {
+        val p = player ?: return
+        val duration = p.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
+        seekTo((p.currentPosition + deltaMs).coerceIn(0L, duration))
+    }
+
+    fun setSkipSeconds(seconds: Int) {
+        playbackPreferences?.saveSkipSeconds(seconds)
+        _uiState.value = _uiState.value.copy(skipSeconds = seconds)
     }
 
     fun seekTo(position: Float) {
@@ -1279,10 +1301,9 @@ class PlayerViewModel : ViewModel() {
             val mediaItems = repo().mediaItemsFor(files, around = startIndex)
             if (!isCurrent(generation)) return@launch
             currentFolder = firstFile.ref.parent
-            player?.setMediaItems(mediaItems)
-            if (startIndex in mediaItems.indices) {
-                player?.seekTo(startIndex, 0L)
-            }
+            // Started at its default position, not seeked to 0 afterwards: MusicService may resume the file where it was left.
+            if (startIndex in mediaItems.indices) player?.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
+            else player?.setMediaItems(mediaItems)
             player?.prepare()
             player?.play()
 
@@ -1375,9 +1396,8 @@ class PlayerViewModel : ViewModel() {
             val clicked = items[startIndex].ref?.toUriString()
             val index = mediaItems.indexOfFirst { it.mediaId == clicked }.coerceAtLeast(0)
 
-            player?.setMediaItems(mediaItems)
+            player?.setMediaItems(mediaItems, index, C.TIME_UNSET)
             queuePlaylistId = playlistId
-            player?.seekTo(index, 0L)
             player?.prepare()
             player?.play()
 
