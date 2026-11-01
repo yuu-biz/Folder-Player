@@ -427,4 +427,7 @@
     <plurals name="player_skip_forward">
         <item quantity="other">快进 %d 秒</item>
     </plurals>
+    <string name="browser_delete_source_title">删除此来源？</string>
+    <string name="browser_delete_source_text">将从来源列表中移除“%1$s”。其中的文件不会被删除。</string>
+    <string name="browser_delete_source_text_network">将从来源列表中移除“%1$s”，并删除已保存的密码。服务器上的文件不会被删除。</string>
 </resources>

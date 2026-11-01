@@ -457,4 +457,7 @@
         <item quantity="many">Avancer de %d secondes</item>
         <item quantity="other">Avancer de %d secondes</item>
     </plurals>
+    <string name="browser_delete_source_title">Supprimer cette source ?</string>
+    <string name="browser_delete_source_text">« %1$s » est retirée de la liste des sources. Ses fichiers ne sont pas supprimés.</string>
+    <string name="browser_delete_source_text_network">« %1$s » est retirée de la liste des sources et son mot de passe enregistré est supprimé. Les fichiers du serveur ne sont pas supprimés.</string>
 </resources>

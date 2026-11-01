@@ -457,4 +457,7 @@
         <item quantity="many">Avanti di %d secondi</item>
         <item quantity="other">Avanti di %d secondi</item>
     </plurals>
+    <string name="browser_delete_source_title">Eliminare questa sorgente?</string>
+    <string name="browser_delete_source_text">«%1$s» viene tolta dall\'elenco delle sorgenti. I suoi file non vengono eliminati.</string>
+    <string name="browser_delete_source_text_network">«%1$s» viene tolta dall\'elenco delle sorgenti e la password salvata viene eliminata. I file sul server non vengono eliminati.</string>
 </resources>
