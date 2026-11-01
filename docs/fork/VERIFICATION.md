@@ -152,6 +152,7 @@ while new connections pass.
 |---|---|
 | `SmbConnectionTest` on 1.8.0 (`479e553`) | a listing while another listing is cancelled (thread interrupted with its request in flight, as `runInterruptible` does): 33 220 ms, 3 connections; while a read is cancelled (the player's loader, a cover, a song length): 33 224 ms, 2 connections; first listing after the idle connection went silent: 30 017 ms. All three FAILED. The interrupt came back from SMBJ wrapped in a `TransportException`, was mapped as Unreachable, and closed the shared connection; the other reader's request on it got no answer until the 30 s timeout |
 | `SmbConnectionTest` on the fix | 2 004 ms and 2 007 ms with one connection (the relay's delay over the round trips of a listing); 3 016 ms after the silent connection (echo timeout 3 s, then a new connection). PASS |
+| `SmbConnectionTest#aHealthyIdleConnectionIsKept` on the fix | after 12 s unused with the server answering: 4 ms, still one connection. PASS |
 | `SmbStallTest` (Samba paused mid-read) on the fix | read 30 s, each open 30 s, 10 ms after unpause, PASS (as in 1.8.0) |
 | JVM, final pass on the fix | `testDebugUnitTest` with the fixture servers 330 tests, 0 failures, 1 skipped (`SmbConnectionTest` 2 003 / 2 004 / 3 015 ms, `SmbStallTest` 30 / 30 / 30 s, 9 ms after unpause); `lintDebug` 0 errors, 61 warnings (as before) |
 
