@@ -67,6 +67,16 @@ What a user can run into, in one place. The sections below give the history of e
   answering, with no line logged while the player retried by itself; since 1.8.0 a dead SMB connection is dropped after
   a read times out and the log shows buffering, load errors, a heartbeat and memory warnings (see "Playback that stops
   by itself"). Share the log right after a stop.
+- **NAS folders that stayed loading** (reported on 1.8.0, 2026-11-02: now and then a folder on the NAS stays loading or
+  fails, more often after the app was in the background or after going from a NAS favourite back to the favourites and
+  into another folder; a task kill or another folder helps). Two causes were measured against the Samba fixture
+  (`SmbConnectionTest`): a cancelled request (leaving a folder while its covers or song lengths were still being read, a
+  seek in the player) counted as a lost connection and closed the connection everything else was using, and a request
+  of another reader in flight on it then waited the whole SMB timeout (33 s for a listing); and a connection that went
+  silent while unused (Wi-Fi power save, a phone that slept) made the first request wait 30 s. Since 1.9.0 these take
+  2 s (the relay's added delay) and 3 s. Not checked on the owner's phone and NAS: a NAS whose disks sleep, or a name
+  instead of an address in the source, can still take longer. The playback log records each SMB connect (with the
+  time it took) and each drop with its reason (`CONNECTION`).
 - **Not checked**: TalkBack sessions, HyperOS devices, a background network retry on a real phone with the screen off (a
   refused foreground start is caught and logged, see below). Low priority (owner's decision, 2026-10-24): a real NAS
   (Synology, QNAP, Windows), SMB search and mDNS on a real LAN, and DLNA with a real TV or speaker; the owner uses the

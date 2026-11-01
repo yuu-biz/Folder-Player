@@ -1,26 +1,18 @@
 Folder Player Fork {VERSION} — an unofficial personal fork of
 [Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000. It is not affiliated with the original
-project. This release follows 1.7.2.
+project. This release follows 1.8.0.
 
-## What's new in 1.8.0
+## What's new in 1.9.0
 
-- **Play next / Add to queue**: the long-press menu of a song or a folder (also in the songs list, favourites and
-  search results) has "Play next" (right after the song playing) and "Add to queue" (at the end; a folder adds its
-  songs). The song playing goes on; with nothing playing they start.
-- **Speed and left / right**: a new button beside the sleep timer in the player's playlist opens "Speed and channels":
-  playback speed from 0.5× to 2× (the pitch stays the same) and "Swap left and right". Both are kept; the button is lit
-  while either is changed.
-- **Swipe the cover**: in the full player, swipe the cover to the left for the next song and to the right for the
-  previous one.
-- **Songs list of several folders**: the folder button of the songs list now ticks several bookmarks and sources at
-  once (the menu stays open); "All folders" shows every song again. "Songs list of this folder" still shows that one
-  folder.
-- **A song on a NAS that went silent**: when the NAS (or Wi-Fi) stops answering in the middle of a song, the app no
-  longer waits on the dead connection before connecting again, so it notices the dead connection sooner and retries
-  sooner (each retry waited 60 s, now 30 s, and connects at once when the NAS answers again).
-- **Playback log**: it now also records when playback waits for data, the read errors the player retries by itself, a
-  line with the position every 5 minutes while playing, memory warnings, and more about why the app was ended. If
-  playback stops by itself again, share the log (Settings → Playback → Playback log).
+- **NAS folders that stayed loading**: a folder on an SMB share (NAS) could stay loading for about half a minute or
+  fail, most often after going from a NAS folder back to the favourites and into another folder, or after the app was
+  in the background. Leaving a folder while its covers or song lengths were still being read, or a seek in the player,
+  closed the connection that everything else was using, and the next folder then waited about 30 s for an answer
+  that never came. The connection now stays open for the others. A connection that went silent while the app was not
+  using it (Wi-Fi power save, a phone that slept) is noticed within 3 s instead of 30 s.
+- **Playback log**: it now also records each connection to an SMB share (and how long it took) and each connection
+  that was closed, with the reason. If a NAS folder still stays loading, share the log (Settings → Playback →
+  Playback log).
 
 ## Install
 

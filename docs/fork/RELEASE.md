@@ -132,3 +132,6 @@ which installs over 1.7.0.
 
 1.8.0 (play next / add to queue, speed and left / right swap, cover swipe, songs list of several folders, SMB stall and
 playback log): `v1.8.0` is versionName `1.8.0`, versionCode `1080099`, which installs over 1.7.2.
+
+1.9.0 (NAS folders that stayed loading: SMB connection kept through cancelled requests, silent connections noticed in
+3 s): `v1.9.0` is versionName `1.9.0`, versionCode `1090099`, which installs over 1.8.0.
