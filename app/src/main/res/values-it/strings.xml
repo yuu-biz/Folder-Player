@@ -438,4 +438,23 @@
     <string name="action_add_to_queue">Aggiungi alla coda</string>
     <string name="queue_added_next">Riprodotto dopo: %1$s</string>
     <string name="queue_added_end">Aggiunto alla coda: %1$s</string>
+    <string name="playlist_delete_title">Eliminare la playlist «%1$s»?</string>
+    <string name="settings_previous_button">Pulsante Precedente</string>
+    <string name="settings_previous_always">Sempre il brano precedente</string>
+    <string name="settings_previous_restart">Riavvia il brano dopo 3 s</string>
+    <string name="settings_resume_long">Riprendi i file lunghi da dove erano rimasti</string>
+    <string name="settings_resume_long_help">Un file di 10 minuti o più riprende dal punto in cui l\'hai lasciato. Una volta ascoltato fino alla fine, riparte dall\'inizio.</string>
+    <string name="settings_skip_seconds">Indietro e avanti</string>
+    <string name="settings_skip_seconds_help">I pulsanti accanto a Precedente e Successivo e un doppio tocco sulla copertina: metà sinistra indietro, metà destra avanti.</string>
+    <string name="settings_seconds">%1$d s</string>
+    <plurals name="player_skip_back">
+        <item quantity="one">Indietro di %d secondo</item>
+        <item quantity="many">Indietro di %d secondi</item>
+        <item quantity="other">Indietro di %d secondi</item>
+    </plurals>
+    <plurals name="player_skip_forward">
+        <item quantity="one">Avanti di %d secondo</item>
+        <item quantity="many">Avanti di %d secondi</item>
+        <item quantity="other">Avanti di %d secondi</item>
+    </plurals>
 </resources>

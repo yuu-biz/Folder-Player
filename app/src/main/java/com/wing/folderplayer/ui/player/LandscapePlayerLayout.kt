@@ -210,7 +210,7 @@ fun LandscapeLeftControlPanel(
                     .coverChange(uiState.coverUri to uiState.coverFallback) { direction }
                     .sharedCover(transition, cornerPx = { with(density) { 12.dp.toPx() } }, elevationPx = { with(density) { 12.dp.toPx() } })
             ) {
-                FullCover(uiState, transition, Modifier.fillMaxSize().swipeToSkip(onNext = { viewModel.next() }, onPrevious = { viewModel.previous() }))
+                PlayerCover(uiState, viewModel, transition)
             }
         }
 
@@ -342,6 +342,8 @@ fun LandscapeLeftControlPanel(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Smaller skip buttons: the left panel of a 16:9 phone is about 260 dp wide.
+            SkipButton(uiState.skipSeconds, forward = false, onSkip = viewModel::skipBy, modifier = Modifier.size(40.dp), iconSize = 26.dp)
             IconButton(onClick = { viewModel.previous() }) {
                 Icon(Icons.Default.SkipPrevious, null, tint = Color.White, modifier = Modifier.size(36.dp))
             }
@@ -361,6 +363,7 @@ fun LandscapeLeftControlPanel(
             IconButton(onClick = { viewModel.next() }) {
                 Icon(Icons.Default.SkipNext, null, tint = Color.White, modifier = Modifier.size(36.dp))
             }
+            SkipButton(uiState.skipSeconds, forward = true, onSkip = viewModel::skipBy, modifier = Modifier.size(40.dp), iconSize = 26.dp)
         }
     }
 }

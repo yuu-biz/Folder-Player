@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
+import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -29,6 +30,9 @@ import com.wing.folderplayer.playback.PlaybackLog
 import com.wing.folderplayer.playback.PlaybackLogFormat
 import com.wing.folderplayer.playback.PlayerNames
 import com.wing.folderplayer.playback.PlaybackExportManager
+import com.wing.folderplayer.playback.PreviousAction
+import com.wing.folderplayer.playback.ResumePositions
+import com.wing.folderplayer.playback.ResumeTracker
 import com.wing.folderplayer.playback.RoutingDataSource
 import com.wing.folderplayer.playback.SourceBitmapLoader
 import android.content.BroadcastReceiver
@@ -52,6 +56,7 @@ class MusicService : MediaLibraryService() {
     private var exporter: PlaybackExportManager? = null
     private lateinit var sleepTimer: SleepTimer
     private lateinit var diagnostics: com.wing.folderplayer.playback.PlaybackDiagnostics
+    private lateinit var resume: ResumeTracker
 
     /** Sleep timer commands (START / CANCEL / GET) from the app's screens, on top of the default commands. */
     private inner class SessionCallback : MediaLibrarySession.Callback {
@@ -86,6 +91,21 @@ class MusicService : MediaLibraryService() {
                 PlaybackLog.record(PlaybackEventKind.COMMAND, "$it from ${controller.packageName} playWhenReady=${player.playWhenReady}")
             }
             return super.onPlayerCommandRequest(session, controller, playerCommand)
+        }
+    }
+
+    /**
+     * The player as the session (notification, lock screen, Bluetooth, other apps) sees it. Their "previous" is
+     * [Player.seekToPrevious], which ExoPlayer turns into a restart after 3 s; it follows the app's option instead, read
+     * at each press (ExoPlayer's own limit is fixed when it is built).
+     */
+    private class SessionPlayer(player: Player, private val prefs: PlaybackPreferences) : ForwardingPlayer(player) {
+        override fun seekToPrevious() {
+            when (PreviousAction.of(prefs.getPreviousRestarts(), currentPosition, hasPreviousMediaItem())) {
+                PreviousAction.PREVIOUS_TRACK -> seekToPreviousMediaItem()
+                PreviousAction.RESTART -> seekTo(0)
+                PreviousAction.NONE -> Unit
+            }
         }
     }
 
@@ -188,10 +208,9 @@ class MusicService : MediaLibraryService() {
             .build()
 
         player.volume = 1.0f
-        PlaybackPreferences(applicationContext).let { prefs ->
-            player.setPlaybackSpeed(prefs.getPlaybackSpeed())
-            com.wing.folderplayer.playback.ChannelSwapAudioProcessor.enabled = prefs.getSwapChannels()
-        }
+        val prefs = PlaybackPreferences(applicationContext)
+        player.setPlaybackSpeed(prefs.getPlaybackSpeed())
+        com.wing.folderplayer.playback.ChannelSwapAudioProcessor.enabled = prefs.getSwapChannels()
 
         // Also the playback log: what started, paused or stopped playback and why.
         player.addListener(object : Player.Listener {
@@ -236,8 +255,9 @@ class MusicService : MediaLibraryService() {
         diagnostics = com.wing.folderplayer.playback.PlaybackDiagnostics(player, ::where).also { it.attach() }
         retry = NetworkRetryController(player, keepAwake = ::keepAwakeForRetry).also { it.attach() }
         exporter = PlaybackExportManager(applicationContext, player).also { it.attach() }
+        resume = ResumeTracker(player, prefs::getResumeLongFiles, ResumePositions.of(applicationContext)).also { it.attach() }
 
-        mediaSession = MediaLibrarySession.Builder(this, player, SessionCallback())
+        mediaSession = MediaLibrarySession.Builder(this, SessionPlayer(player, prefs), SessionCallback())
             .setSessionActivity(pendingIntent)
             .setBitmapLoader(SourceBitmapLoader(DataSourceBitmapLoader(this)))
             .build()
@@ -317,6 +337,7 @@ class MusicService : MediaLibraryService() {
         diagnostics.detach()
         retry.detach()
         keepAwakeForRetry(false)
+        resume.detach()
         exporter?.detach()
         PlaybackLog.record(PlaybackEventKind.SERVICE_STOP, where())
         mediaSession.run {

@@ -86,7 +86,7 @@ internal fun SettingsCategoryPage(
     onNotchModeChange: (String) -> Unit,
 ) {
     when (category) {
-        SettingsCategory.PLAYBACK -> PlaybackPage(openSub)
+        SettingsCategory.PLAYBACK -> PlaybackPage(openSub, playerViewModel)
         SettingsCategory.DISPLAY -> DisplayPage(openSub, playerViewModel, onOrientationChange, onNotchModeChange)
         SettingsCategory.LIBRARY -> LibraryPage(openSub, browserViewModel)
         SettingsCategory.LYRICS -> LyricsPage(openSub, playerViewModel)
@@ -111,8 +111,10 @@ internal fun SettingsSubPage(sub: SettingsSub, snackbar: SnackbarHostState, brow
 // ---------------------------------------------------------------- Playback
 
 @Composable
-private fun PlaybackPage(openSub: (SettingsSub) -> Unit) {
+private fun PlaybackPage(openSub: (SettingsSub) -> Unit, playerViewModel: PlayerViewModel) {
     val context = LocalContext.current
+    val playbackPrefs = remember { PlaybackPreferences(context) }
+    val skipSeconds by playerViewModel.skipSeconds.collectAsState()
     val castSettings = remember { CastSettings(context) }
     val exportSettings = remember { ExportSettings(context) }
     SettingsPage {
@@ -142,6 +144,23 @@ private fun PlaybackPage(openSub: (SettingsSub) -> Unit) {
                 maxMinutes, "waveform_max",
             ) { maxMinutes = it; waveform.maxMinutes = it }
         }
+        var previousRestarts by remember { mutableStateOf(playbackPrefs.getPreviousRestarts()) }
+        SettingsChoice(
+            stringResource(R.string.settings_previous_button),
+            listOf(false to stringResource(R.string.settings_previous_always), true to stringResource(R.string.settings_previous_restart)),
+            previousRestarts, "previous_restarts",
+        ) { previousRestarts = it; playbackPrefs.savePreviousRestarts(it) }
+        SettingsChoice(
+            stringResource(R.string.settings_skip_seconds),
+            PlaybackPreferences.SKIP_SECONDS.map { it to stringResource(R.string.settings_seconds, it) },
+            skipSeconds, "skip_seconds",
+            description = stringResource(R.string.settings_skip_seconds_help),
+        ) { playerViewModel.setSkipSeconds(it) }
+        var resumeOn by remember { mutableStateOf(playbackPrefs.getResumeLongFiles()) }
+        SettingsSwitch(
+            stringResource(R.string.settings_resume_long), resumeOn, "resume_long_files",
+            description = stringResource(R.string.settings_resume_long_help),
+        ) { resumeOn = it; playbackPrefs.saveResumeLongFiles(it) }
         SettingsGroupTitle(stringResource(R.string.settings_decoders))
         SettingsInfo(
             if (NativeDecoder.isAvailable()) stringResource(R.string.settings_native_decoder_ok, NativeDecoder.version())

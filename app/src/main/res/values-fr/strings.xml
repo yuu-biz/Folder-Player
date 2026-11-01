@@ -438,4 +438,23 @@
     <string name="action_add_to_queue">Ajouter à la file d\'attente</string>
     <string name="queue_added_next">Lu ensuite : %1$s</string>
     <string name="queue_added_end">Ajouté à la file d\'attente : %1$s</string>
+    <string name="playlist_delete_title">Supprimer la playlist « %1$s » ?</string>
+    <string name="settings_previous_button">Bouton Précédent</string>
+    <string name="settings_previous_always">Toujours le morceau précédent</string>
+    <string name="settings_previous_restart">Revenir au début du morceau après 3 s</string>
+    <string name="settings_resume_long">Reprendre les longs fichiers là où ils ont été laissés</string>
+    <string name="settings_resume_long_help">Un fichier de 10 minutes ou plus reprend là où vous l\'avez laissé. Une fois écouté jusqu\'au bout, il repart du début.</string>
+    <string name="settings_skip_seconds">Reculer et avancer</string>
+    <string name="settings_skip_seconds_help">Les boutons à côté de Précédent et Suivant, et un double appui sur la pochette : moitié gauche pour reculer, moitié droite pour avancer.</string>
+    <string name="settings_seconds">%1$d s</string>
+    <plurals name="player_skip_back">
+        <item quantity="one">Reculer de %d seconde</item>
+        <item quantity="many">Reculer de %d secondes</item>
+        <item quantity="other">Reculer de %d secondes</item>
+    </plurals>
+    <plurals name="player_skip_forward">
+        <item quantity="one">Avancer de %d seconde</item>
+        <item quantity="many">Avancer de %d secondes</item>
+        <item quantity="other">Avancer de %d secondes</item>
+    </plurals>
 </resources>

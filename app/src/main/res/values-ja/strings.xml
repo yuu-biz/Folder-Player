@@ -412,4 +412,19 @@
     <string name="action_add_to_queue">キューに追加</string>
     <string name="queue_added_next">次に再生: %1$s</string>
     <string name="queue_added_end">キューに追加: %1$s</string>
+    <string name="playlist_delete_title">プレイリスト「%1$s」を削除しますか？</string>
+    <string name="settings_previous_button">前へボタン</string>
+    <string name="settings_previous_always">常に前の曲へ</string>
+    <string name="settings_previous_restart">3 秒以降は曲の頭へ</string>
+    <string name="settings_resume_long">長いファイルは続きから再生</string>
+    <string name="settings_resume_long_help">10 分以上のファイルは、前回やめたところから再生します。最後まで聴いたファイルは、次は最初から再生します。</string>
+    <string name="settings_skip_seconds">早戻し・早送りの秒数</string>
+    <string name="settings_skip_seconds_help">前へ・次への外側にあるボタンと、ジャケットのダブルタップ（左半分で戻る、右半分で進む）で動く秒数です。</string>
+    <string name="settings_seconds">%1$d 秒</string>
+    <plurals name="player_skip_back">
+        <item quantity="other">%d 秒戻る</item>
+    </plurals>
+    <plurals name="player_skip_forward">
+        <item quantity="other">%d 秒進む</item>
+    </plurals>
 </resources>

@@ -412,4 +412,19 @@
     <string name="action_add_to_queue">添加到播放队列</string>
     <string name="queue_added_next">下一首播放：%1$s</string>
     <string name="queue_added_end">已添加到播放队列：%1$s</string>
+    <string name="playlist_delete_title">删除播放列表“%1$s”？</string>
+    <string name="settings_previous_button">“上一首”按钮</string>
+    <string name="settings_previous_always">总是上一首</string>
+    <string name="settings_previous_restart">播放超过 3 秒时从头播放</string>
+    <string name="settings_resume_long">长文件从上次停止处继续</string>
+    <string name="settings_resume_long_help">10 分钟及以上的文件会从上次停止的位置开始播放。播放到结尾后，下次从头开始。</string>
+    <string name="settings_skip_seconds">快退与快进</string>
+    <string name="settings_skip_seconds_help">“上一首”“下一首”外侧的按钮，以及双击封面：左半边快退，右半边快进。</string>
+    <string name="settings_seconds">%1$d 秒</string>
+    <plurals name="player_skip_back">
+        <item quantity="other">快退 %d 秒</item>
+    </plurals>
+    <plurals name="player_skip_forward">
+        <item quantity="other">快进 %d 秒</item>
+    </plurals>
 </resources>
