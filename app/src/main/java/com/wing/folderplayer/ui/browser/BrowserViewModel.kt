@@ -547,12 +547,17 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         if (parent == null) showSourceList() else loadFolder(parent, isBackNavigation = true)
     }
 
-    /** The arrow-up button of the top bar: the folder above (a new step: Back returns to the folder the user was in). */
-    fun goUp() {
-        if (_uiState.value.search.active) return
-        val parent = _uiState.value.currentFolder?.parent ?: return
+    /** The arrow-up button of the top bar: the folder above. */
+    fun goUp() { _uiState.value.currentFolder?.parent?.let(::openFolderAbove) }
+
+    /**
+     * A folder above the one on screen (the up arrow, a folder of the path row): a new step, so Back returns to the folder
+     * the user was in; the folder comes back at the place it was left.
+     */
+    fun openFolderAbove(folder: SourceRef) {
+        if (_uiState.value.search.active || folder == _uiState.value.currentFolder) return
         rememberCurrentPlace()
-        loadFolder(parent, isBackNavigation = true)
+        loadFolder(folder, isBackNavigation = true)
     }
 
     /** The home button of the top bar: the source list, with no way back from it (Back there leaves the app). */
