@@ -22,7 +22,7 @@ import java.util.concurrent.Executors
 enum class PlaybackEventKind {
     SERVICE_START, SERVICE_STOP, PROCESS_EXIT, PLAY, PAUSE, SUPPRESSED, STATE, TRACK, COMMAND, NOISY, SLEEP_TIMER, ERROR,
     RETRY, RETRY_RECOVERED, RETRY_GAVE_UP, RETRY_CANCELLED,
-    BUFFERING, LOAD_ERROR, HEARTBEAT, MEMORY,
+    BUFFERING, LOAD_ERROR, HEARTBEAT, MEMORY, CONNECTION,
 }
 
 data class PlaybackEvent(val time: Long, val kind: PlaybackEventKind, val detail: String)

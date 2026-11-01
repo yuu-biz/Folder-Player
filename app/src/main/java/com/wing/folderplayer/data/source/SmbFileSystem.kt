@@ -6,18 +6,22 @@ import com.hierynomus.mserref.NtStatus
 import com.hierynomus.mssmb2.SMB2CreateDisposition
 import com.hierynomus.mssmb2.SMB2CreateOptions
 import com.hierynomus.mssmb2.SMB2Dialect
+import com.hierynomus.mssmb2.SMB2Packet
 import com.hierynomus.mssmb2.SMB2ShareAccess
 import com.hierynomus.mssmb2.SMBApiException
+import com.hierynomus.mssmb2.messages.SMB2Echo
 import com.hierynomus.protocol.transport.TransportException
 import com.hierynomus.security.bc.BCSecurityProvider
 import com.hierynomus.smbj.SMBClient
 import com.hierynomus.smbj.SmbConfig
 import com.hierynomus.smbj.auth.AuthenticationContext
 import com.hierynomus.smbj.connection.Connection
-import com.hierynomus.smbj.session.Session
 import com.hierynomus.smbj.share.DiskShare
 import com.hierynomus.smbj.share.File
+import com.wing.folderplayer.playback.PlaybackEventKind
+import com.wing.folderplayer.playback.PlaybackLog
 import java.io.IOException
+import java.io.InterruptedIOException
 import java.net.ConnectException
 import java.net.NoRouteToHostException
 import java.net.SocketTimeoutException
@@ -45,85 +49,101 @@ internal fun smbAuthentication(username: String, password: String?, domain: Stri
 }
 
 /**
- * One SMB2/3 connection + session + share per source, reused across requests and torn down after [idleMillis]
- * without use or when the source's connection settings change. SMB1 is not offered (SMBJ does not implement it).
+ * One SMB2/3 connection + session + share per source, shared by everything that reads the source at once (browser,
+ * player, scans, covers) and kept until it fails or the source's connection settings change. SMB1 is not offered
+ * (SMBJ does not implement it).
+ *
+ * A connection is always closed at once, without the tree disconnect / logoff, which wait for answers a dead connection
+ * never gives (a failed read took 75 s instead of 30 s). A connection unused for [probeAfterMillis] may have died
+ * silently (Wi-Fi power save, a phone that slept): an echo with a short timeout tells before it is used again, instead
+ * of the first request waiting 30 s on it.
  */
 class SmbConnectionManager(
     private val config: SourceConfig,
     private val password: String?,
-    private val idleMillis: Long = 2 * 60 * 1000L,
+    private val probeAfterMillis: Long = 10_000L,
 ) : java.io.Closeable {
-    private var client: SMBClient? = null
-    private var connection: Connection? = null
-    private var session: Session? = null
-    private var share: DiskShare? = null
-    @Volatile private var lastUsed = 0L
-    /** Open file handles; an idle connection is only recycled when none are open. */
-    private val openHandles = java.util.concurrent.atomic.AtomicInteger()
+    private class Link(val client: SMBClient, val connection: Connection, val share: DiskShare) {
+        @Volatile var lastAnswer = System.currentTimeMillis()
+    }
 
-    fun handleOpened() { openHandles.incrementAndGet() }
-    fun handleClosed() { openHandles.decrementAndGet() }
-
-    private fun smbConfig(): SmbConfig = smbClientConfig(config.anonymous)
+    @Volatile private var link: Link? = null
 
     @Synchronized
     fun share(): DiskShare {
         if (config.share.isBlank()) throw SourceException.ShareMissing()
-        val now = System.currentTimeMillis()
-        val current = share
-        if (current != null && current.isConnected && connection?.isConnected == true &&
-            (now - lastUsed < idleMillis || openHandles.get() > 0)) {
-            lastUsed = now
-            return current
-        }
-        closeQuietly()
+        link?.let { l -> deadReason(l)?.let { drop(l.share, it) } ?: return l.share }
+        val start = System.nanoTime()
+        val client = SMBClient(smbClientConfig(config.anonymous))
+        var connection: Connection? = null
         try {
-            val c = SMBClient(smbConfig())
-            client = c
-            val conn = c.connect(config.host, config.effectivePort)
-            connection = conn
-            val auth = smbAuthentication(config.username, password, config.domain, config.anonymous)
-            val s = conn.authenticate(auth)
-            session = s
-            val sh = s.connectShare(config.share) as? DiskShare ?: throw SourceException.ShareNotFound("${config.share} is not a disk share")
-            share = sh
-            lastUsed = now
-            return sh
+            connection = client.connect(config.host, config.effectivePort)
+            val session = connection.authenticate(smbAuthentication(config.username, password, config.domain, config.anonymous))
+            val share = session.connectShare(config.share) as? DiskShare ?: throw SourceException.ShareNotFound("${config.share} is not a disk share")
+            link = Link(client, connection, share)
+            log("connected to ${config.host}/${config.share} in ${(System.nanoTime() - start) / 1_000_000} ms")
+            return share
         } catch (e: Exception) {
-            closeQuietly()
+            runCatching { connection?.close(true) }
+            runCatching { client.close() }
             throw SmbErrors.map(e, "connect")
         }
     }
 
-    fun touch() { lastUsed = System.currentTimeMillis() }
-
-    @Synchronized
-    fun closeQuietly() {
-        runCatching { share?.close() }
-        runCatching { session?.close() }
-        runCatching { connection?.close(true) }
-        runCatching { client?.close() }
-        share = null; session = null; connection = null; client = null
+    /** Why [l] cannot be used any more, or null when it can. */
+    private fun deadReason(l: Link): String? {
+        if (!l.connection.isConnected || !l.share.isConnected) return "closed by the server or the network"
+        val idle = System.currentTimeMillis() - l.lastAnswer
+        if (idle < probeAfterMillis) return null
+        return try {
+            l.connection.send<SMB2Packet>(SMB2Echo(l.connection.negotiatedProtocol.dialect)).get(PROBE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            l.lastAnswer = System.currentTimeMillis()
+            null
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw e
+        } catch (e: Exception) {
+            "no answer to an echo after ${idle / 1000} s unused"
+        }
     }
+
+    /** The server answered a request on the current connection. */
+    fun touch() { link?.lastAnswer = System.currentTimeMillis() }
 
     /**
-     * A connection that stopped answering, closed at once: [closeQuietly] says goodbye first (close of the open files,
-     * tree disconnect, logoff) and waits for each answer, which made a failed read take 75 s instead of 30 s.
+     * Closes the connection [failed] belongs to, if it is still the current one: a request that failed on a connection
+     * already replaced must not close the new one, which the others are using.
      */
     @Synchronized
-    fun dropDead() {
-        runCatching { connection?.close(true) }
-        runCatching { client?.close() }
-        share = null; session = null; connection = null; client = null
+    fun drop(failed: DiskShare, reason: String) {
+        val l = link?.takeIf { it.share === failed } ?: return
+        link = null
+        runCatching { l.connection.close(true) }
+        runCatching { l.client.close() }
+        log("dropped: $reason")
     }
 
-    override fun close() = closeQuietly()
+    private fun log(what: String) = PlaybackLog.record(PlaybackEventKind.CONNECTION, "SMB ${config.name}: $what")
+
+    @Synchronized
+    override fun close() {
+        link?.let { drop(it.share, "closed") }
+    }
+
+    private companion object {
+        const val PROBE_TIMEOUT_SECONDS = 3L
+    }
 }
 
 internal object SmbErrors {
+    /**
+     * Maps an SMBJ failure to a [SourceException]. A request whose thread was interrupted (a cancelled coroutine, the
+     * player's loader stopping a read) throws [InterruptedException]: SMBJ wraps it in a [TransportException], which
+     * would otherwise read as a lost connection and close the connection the others are using.
+     */
     fun map(e: Throwable, what: String): IOException {
         if (e is SourceException) return e
-        if (e is InterruptedException) throw e
+        if (interrupted(e)) throw InterruptedException("$what interrupted")
         var t: Throwable? = e
         while (t != null) {
             when (t) {
@@ -147,6 +167,11 @@ internal object SmbErrors {
         if (e is TransportException) return SourceException.Unreachable("$what: transport ${e.message}", e)
         return if (e is IOException) e else SourceException.Protocol("$what: ${e.message}", e)
     }
+
+    private fun interrupted(e: Throwable): Boolean = generateSequence(e) { it.cause }.take(10).any {
+        it is InterruptedException || it is java.nio.channels.ClosedByInterruptException ||
+            (it is java.io.InterruptedIOException && it !is SocketTimeoutException)
+    }
 }
 
 class SmbFileSystem(override val config: SourceConfig, credentials: CredentialStore) : SourceFileSystem {
@@ -168,7 +193,7 @@ class SmbFileSystem(override val config: SourceConfig, credentials: CredentialSt
                 // A dropped TCP connection surfaces as transport error: reconnect once.
                 if (mapped is SourceException.Unreachable && attempt == 0) {
                     attempt++
-                    manager.dropDead()
+                    manager.drop(share, "$what: ${mapped.message}")
                     continue
                 }
                 throw mapped
@@ -219,16 +244,19 @@ class SmbFileSystem(override val config: SourceConfig, credentials: CredentialSt
     /**
      * A read that got no answer leaves a connection that still looks open: the next open would wait on it for the whole
      * timeout before connecting again (60 s instead of 30 s per retry of the player, `SmbStallTest`). It is dropped.
+     * An interrupted read (the player stopping its loader) is an [InterruptedIOException] for the player.
      */
-    private fun readFailed(e: Exception): java.io.IOException =
-        SmbErrors.map(e, "read").also { if (it is SourceException.Unreachable) manager.dropDead() }
+    private fun readFailed(e: Exception, file: File): IOException = try {
+        SmbErrors.map(e, "read").also { if (it is SourceException.Unreachable) manager.drop(file.diskShare, "read: ${it.message}") }
+    } catch (_: InterruptedException) {
+        InterruptedIOException("read interrupted")
+    }
 
     override fun openRead(path: String, offset: Long, length: Long): SourceInput {
         val file = withShare("open") { openFile(it, path) }
         val size = try { file.fileInformation.standardInformation.endOfFile } catch (e: Exception) { file.close(); throw SmbErrors.map(e, "stat") }
         val available = (size - offset).coerceAtLeast(0)
         val len = if (length < 0) available else minOf(length, available)
-        manager.handleOpened()
         return SmbInput(file, offset, len)
     }
 
@@ -243,7 +271,7 @@ class SmbFileSystem(override val config: SourceConfig, credentials: CredentialSt
         private fun fill(): Boolean {
             if (remaining <= 0) return false
             val want = minOf(buf.size.toLong(), remaining).toInt()
-            val n = try { file.read(buf, position, 0, want) } catch (e: Exception) { throw readFailed(e) }
+            val n = try { file.read(buf, position, 0, want) } catch (e: Exception) { throw readFailed(e, file) }
             manager.touch()
             if (n <= 0) throw SourceException.PrematureEof(length, length - remaining)
             position += n
@@ -274,19 +302,17 @@ class SmbFileSystem(override val config: SourceConfig, credentials: CredentialSt
             if (closed) return
             closed = true
             runCatching { file.close() }
-            manager.handleClosed()
         }
     }
 
     override fun openRandomAccess(path: String): RandomAccessReader {
         val file = withShare("open") { openFile(it, path) }
         val size = try { file.fileInformation.standardInformation.endOfFile } catch (e: Exception) { file.close(); throw SmbErrors.map(e, "stat") }
-        manager.handleOpened()
         return object : RandomAccessReader {
             override val size: Long = size
             override fun read(position: Long, buffer: ByteArray, offset: Int, len: Int): Int {
                 if (position >= size) return -1
-                val n = try { file.read(buffer, position, offset, len) } catch (e: Exception) { throw readFailed(e) }
+                val n = try { file.read(buffer, position, offset, len) } catch (e: Exception) { throw readFailed(e, file) }
                 manager.touch()
                 return if (n <= 0) -1 else n
             }
@@ -295,7 +321,6 @@ class SmbFileSystem(override val config: SourceConfig, credentials: CredentialSt
                 if (closed) return
                 closed = true
                 runCatching { file.close() }
-                manager.handleClosed()
             }
         }
     }
