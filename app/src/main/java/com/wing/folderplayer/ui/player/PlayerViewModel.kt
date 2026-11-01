@@ -3,6 +3,7 @@ package com.wing.folderplayer.ui.player
 import com.wing.folderplayer.data.playlist.PlaylistManager
 import com.wing.folderplayer.data.playlist.Playlist
 import com.wing.folderplayer.data.playlist.PlaylistItem
+import com.wing.folderplayer.data.playlist.SavedQueue
 
 import android.content.ComponentName
 import android.content.Context
@@ -210,9 +211,12 @@ class PlayerViewModel : ViewModel() {
     private var pendingPlayIntent: String? = null
     /**
      * Playlist the player queue was built from ("default" for folder / list / CUE playback, the playlist's id when
-     * played from a playlist), or null when unknown. Only edits of that list apply to the queue.
+     * played from a playlist), or null when unknown. Only edits of that list apply to the queue. It is also what the
+     * next start restores: the queue is kept as that list (see [SavedQueue]), so every change of the queue keeps one
+     * list holding it.
      */
     private var queuePlaylistId: String? = null
+        set(value) { field = value; playbackPreferences?.saveQueuePlaylistId(value) }
     /** Queue position a next / previous / play-at is moving to; metadata of other positions is not shown meanwhile. */
     private var pendingQueueIndex: Int? = null
     private var lastMediaIdBeforeIntent: String? = null
@@ -357,6 +361,10 @@ class PlayerViewModel : ViewModel() {
                 if (playerMediaId != null && !isRestoring && _uiState.value.currentMediaId == null) {
                     _uiState.value = _uiState.value.copy(currentMediaId = playerMediaId)
                 }
+                // The service went on playing without a screen: its queue is still the list it was built from.
+                if (!isRestoring && controller.mediaItemCount > 0 && queuePlaylistId == null) {
+                    queuePlaylistId = playbackPreferences?.getSavedQueue()?.playlistId
+                }
 
                 updateMetadata()
 
@@ -421,27 +429,15 @@ class PlayerViewModel : ViewModel() {
 
     private fun restoreLastState() {
         val prefs = playbackPreferences ?: return
-        val folder = prefs.getLastFolder() ?: return
-        val mediaId = prefs.getLastMediaId() ?: return
-        if (SourceRegistry.get(folder.sourceId) == null) { isRestoring = false; return }
         // Only started while no user request exists; the first one makes it stale.
         val generation = playRequestGeneration
 
         restoreJob = viewModelScope.launch(exceptionHandler) {
             try {
-                if (SourceUris.isCueTrackId(mediaId)) {
-                    val audio = SourceUris.parse(mediaId) ?: return@launch
-                    val cue = SourceRef(audio.sourceId, SourcePath.baseName(audio.path) + ".cue")
-                    playCueSheetInternal(cue, mediaId, prefs.getLastPosition(), playWhenReady = false, generation)
-                } else if (mediaId.lowercase().endsWith(".cue")) {
-                    playCueSheetInternal(SourceUris.parse(mediaId) ?: return@launch, null, prefs.getLastPosition(), playWhenReady = false, generation)
-                } else {
-                    playFolderInternal(folder, SourceUris.parse(mediaId)?.path, prefs.getLastPosition(), playWhenReady = false, generation)
-                }
+                val restored = restoreQueue(prefs.getSavedQueue(), generation) || isCurrent(generation) && restoreFolder(prefs, generation)
                 if (!isCurrent(generation)) return@launch
-                queuePlaylistId = null
-                val defaultItems = playlistManager?.getPlaylist("default")?.items
-                if (defaultItems != null && queueHolds(defaultItems)) queuePlaylistId = "default"
+                if (!restored) { isRestoring = false; return@launch }
+                player?.shuffleModeEnabled = prefs.getShuffle()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -449,6 +445,45 @@ class PlayerViewModel : ViewModel() {
                 if (isCurrent(generation)) isRestoring = false
             }
         }
+    }
+
+    /**
+     * The queue as it was: the list it is kept as, at the same item and position (paused). False when there is no such
+     * list or it no longer holds that item (a session saved by 1.8.0, a deleted playlist): the folder is restored then.
+     */
+    private suspend fun restoreQueue(saved: SavedQueue?, generation: Int): Boolean {
+        saved ?: return false
+        val items = playlistManager?.getPlaylist(saved.playlistId)?.items ?: return false
+        if (items.none { it.matchesMediaId(saved.mediaId) }) return false
+        val mediaItems = mediaItemsOf(items)
+        val index = saved.startIn(mediaItems.map { it.mediaId }) ?: return false
+        val p = player ?: return false
+        if (!isCurrent(generation)) return false
+        p.setMediaItems(mediaItems, index, saved.positionMs)
+        p.prepare()
+        queuePlaylistId = saved.playlistId
+        kotlinx.coroutines.delay(1000)
+        if (isCurrent(generation)) updateMetadata()
+        return true
+    }
+
+    /** The folder (or CUE sheet) of the last song, at its position. */
+    private suspend fun restoreFolder(prefs: PlaybackPreferences, generation: Int): Boolean {
+        val folder = prefs.getLastFolder() ?: return false
+        val mediaId = prefs.getLastMediaId() ?: return false
+        if (SourceRegistry.get(folder.sourceId) == null) return false
+        if (SourceUris.isCueTrackId(mediaId)) {
+            val audio = SourceUris.parse(mediaId) ?: return false
+            val cue = SourceRef(audio.sourceId, SourcePath.baseName(audio.path) + ".cue")
+            playCueSheetInternal(cue, mediaId, prefs.getLastPosition(), playWhenReady = false, generation)
+        } else if (mediaId.lowercase().endsWith(".cue")) {
+            playCueSheetInternal(SourceUris.parse(mediaId) ?: return false, null, prefs.getLastPosition(), playWhenReady = false, generation)
+        } else {
+            playFolderInternal(folder, SourceUris.parse(mediaId)?.path, prefs.getLastPosition(), playWhenReady = false, generation)
+        }
+        if (!isCurrent(generation)) return true
+        queuePlaylistId = playlistManager?.getPlaylist("default")?.items?.takeIf { queueHolds(it) }?.let { "default" }
+        return true
     }
 
     /** Covers found for items of a long queue that started without theirs (only the screen shows them; by media id). */
@@ -786,7 +821,7 @@ class PlayerViewModel : ViewModel() {
 
             // Save playback state
             if (!isRestoring && p.playbackState != Player.STATE_IDLE) {
-                playbackPreferences?.savePlaybackState(currentFolder, targetMediaId, p.currentPosition)
+                playbackPreferences?.savePlaybackState(currentFolder, targetMediaId, p.currentPosition, p.currentMediaItemIndex)
             }
         }
     }
@@ -847,6 +882,7 @@ class PlayerViewModel : ViewModel() {
     fun toggleShuffle() {
         player?.let { p ->
             p.shuffleModeEnabled = !p.shuffleModeEnabled
+            playbackPreferences?.saveShuffle(p.shuffleModeEnabled)
             _uiState.value = _uiState.value.copy(shuffleModeEnabled = p.shuffleModeEnabled)
         }
     }
@@ -1105,6 +1141,19 @@ class PlayerViewModel : ViewModel() {
 
     fun pauseLocal() { player?.pause() }
 
+    /** The service's network retry; it runs in this process, so its state is read directly. */
+    val retryStatus: StateFlow<com.wing.folderplayer.playback.RetryStatus> = com.wing.folderplayer.playback.NetworkRetryController.status
+
+    fun retryNow() {
+        viewModelScope.launch(exceptionHandler) {
+            val controller = awaitPlayer() as? MediaController ?: return@launch
+            runCatching { controller.sendCustomCommand(MusicService.COMMAND_RETRY_NOW, android.os.Bundle.EMPTY).await() }
+        }
+    }
+
+    /** A pause by the user ends the retries (see NetworkRetryController). */
+    fun stopRetry() { player?.pause() }
+
     /**
      * Ends the session (mini player swiped away; only while not playing): the queue is emptied, so the notification
      * goes away, and nothing is restored on the next start. Playlists, including "Default", are kept.
@@ -1307,7 +1356,7 @@ class PlayerViewModel : ViewModel() {
             player?.prepare()
             player?.play()
 
-            playbackPreferences?.savePlaybackState(currentFolder, firstFile.ref.toUriString(), 0L)
+            playbackPreferences?.savePlaybackState(currentFolder, firstFile.ref.toUriString(), 0L, startIndex.takeIf { it in mediaItems.indices } ?: 0)
 
             // Sync to "Default" playlist
             val playlistItems = files.mapIndexed { i, file -> playlistItemFor(file, mediaItems.getOrNull(i)) }
@@ -1332,6 +1381,7 @@ class PlayerViewModel : ViewModel() {
         artist = "",
         sourceId = file.sourceId,
         artworkUri = item?.mediaMetadata?.artworkUri?.toString(),
+        size = file.size,
     )
 
     fun playCueSheet(cue: SourceRef) {
@@ -1375,20 +1425,8 @@ class PlayerViewModel : ViewModel() {
         playJob = viewModelScope.launch(exceptionHandler) {
             awaitPlayer()
             if (!isCurrent(generation)) return@launch
-            val mediaItems = items.mapNotNull { pItem ->
-                val ref = pItem.ref ?: return@mapNotNull null
-                if (SourceRegistry.get(ref.sourceId) == null) return@mapNotNull null
-                val file = MusicFile(ref.name, ref.path, false, 0, 0, ref.sourceId)
-                if (pItem.cueStartMs != null || MediaTypes.isCue(ref.name)) {
-                    null
-                } else {
-                    val built = repo().buildMediaItem(file, pItem.artworkUri, null)
-                    if (pItem.title.isNotBlank() && repo().titleMode == TitleMode.FILENAME) {
-                        built.buildUpon().setMediaMetadata(built.mediaMetadata.buildUpon().setTitle(pItem.title)
-                            .setArtist(pItem.artist?.takeIf { it.isNotBlank() }).build()).build()
-                    } else built
-                }
-            }
+            val mediaItems = mediaItemsOf(items)
+            if (!isCurrent(generation)) return@launch
             if (mediaItems.isEmpty()) {
                 _uiState.value = _uiState.value.copy(playbackError = com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_playlist_unavailable))
                 return@launch
@@ -1410,17 +1448,53 @@ class PlayerViewModel : ViewModel() {
         }
     }
 
-    private suspend fun playCueSheetInternal(
-        cue: SourceRef,
-        startingMediaId: String?,
-        positionMs: Long,
-        playWhenReady: Boolean,
-        generation: Int,
-    ) {
+    /**
+     * Queue items for playlist entries, in their order. Files need no I/O (their folder's cover and lyric file are looked
+     * up when they come near, see [completeUpcoming]); each CUE sheet is read once. Entries of a removed source, of a
+     * sheet that cannot be read, and whole sheets without a track are left out.
+     */
+    private suspend fun mediaItemsOf(items: List<PlaylistItem>): List<MediaItem> {
+        val sheets = HashMap<SourceRef, LoadedCue?>()
+        return items.mapNotNull { pItem ->
+            val ref = pItem.ref ?: return@mapNotNull null
+            if (SourceRegistry.get(ref.sourceId) == null) return@mapNotNull null
+            val start = pItem.cueStartMs
+            if (start != null) {
+                // Not getOrPut: a sheet that could not be read (null) is not read again for each of its tracks.
+                if (ref !in sheets) sheets[ref] = try { loadCue(ref) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
+                val sheet = sheets[ref]
+                return@mapNotNull sheet?.tracks?.firstOrNull { it.startTimeMs == start }?.let { sheet.mediaItem(it) }
+            }
+            if (MediaTypes.isCue(ref.name)) return@mapNotNull null
+            val file = MusicFile(ref.name, ref.path, false, pItem.size, 0, ref.sourceId)
+            val built = repo().buildMediaItem(file, pItem.artworkUri, null, coverPending = pItem.artworkUri == null)
+            if (pItem.title.isNotBlank() && repo().titleMode == TitleMode.FILENAME) {
+                built.buildUpon().setMediaMetadata(built.mediaMetadata.buildUpon().setTitle(pItem.title)
+                    .setArtist(pItem.artist?.takeIf { it.isNotBlank() }).build()).build()
+            } else built
+        }
+    }
+
+    /** A CUE sheet read with its audio file and the cover of its folder. */
+    private inner class LoadedCue(val audio: MusicFile, val tracks: List<com.wing.folderplayer.utils.CueTrack>, val cover: String?, val parent: SourceRef, val cue: SourceRef) {
+        fun mediaItem(track: com.wing.folderplayer.utils.CueTrack) = repo().createCueMediaItem(
+            audio = audio,
+            trackTitle = track.title,
+            performer = track.performer,
+            startTimeMs = track.startTimeMs,
+            endTimeMs = track.endTimeMs,
+            coverUri = cover,
+            cue = cue,
+            trackNumber = track.number,
+        )
+    }
+
+    /** Null when the sheet has no tracks or its audio file is not beside it. */
+    private suspend fun loadCue(cue: SourceRef): LoadedCue? {
         val fs = SourceRegistry.fileSystem(cue)
         val cueContent = runInterruptible(Dispatchers.IO) { fs.readText(cue.path) }
         val (referencedFile, tracks) = CueParser.parse(cueContent)
-        if (tracks.isEmpty()) return
+        if (tracks.isEmpty()) return null
 
         val parent = cue.parent ?: SourceRef(cue.sourceId, SourcePath.ROOT)
         val siblings = repo().list(parent)
@@ -1440,25 +1514,26 @@ class PlayerViewModel : ViewModel() {
                 if (audio != null) break
             }
         }
-        val audioFile = audio ?: return
+        val audioFile = audio ?: return null
+        return LoadedCue(audioFile, tracks, repo().coverFor(parent, siblings), parent, cue)
+    }
 
-        val cover = repo().coverFor(parent, siblings)
+    private suspend fun playCueSheetInternal(
+        cue: SourceRef,
+        startingMediaId: String?,
+        positionMs: Long,
+        playWhenReady: Boolean,
+        generation: Int,
+    ) {
+        val sheet = loadCue(cue) ?: return
+        val tracks = sheet.tracks
+        val cover = sheet.cover
+        val parent = sheet.parent
         // Nothing of an older request is applied from here on (queue, folder, Default playlist, saved state).
         if (!isCurrent(generation)) return
         currentFolder = parent
 
-        val mediaItems = tracks.map { track ->
-            repo().createCueMediaItem(
-                audio = audioFile,
-                trackTitle = track.title,
-                performer = track.performer,
-                startTimeMs = track.startTimeMs,
-                endTimeMs = track.endTimeMs,
-                coverUri = cover,
-                cue = cue,
-                trackNumber = track.number,
-            )
-        }
+        val mediaItems = tracks.map { sheet.mediaItem(it) }
 
         player?.setMediaItems(mediaItems)
 
@@ -1534,16 +1609,7 @@ class PlayerViewModel : ViewModel() {
         player?.setMediaItems(items)
 
         if (!isRestoring) {
-            val playlistItems = items.map { item ->
-                val ref = SourceUris.parse(item.mediaId)
-                PlaylistItem(
-                    path = ref?.path ?: "",
-                    title = item.mediaMetadata.displayTitle?.toString() ?: "Unknown",
-                    artist = item.mediaMetadata.artist?.toString() ?: "",
-                    sourceId = ref?.sourceId ?: "",
-                    artworkUri = item.mediaMetadata.artworkUri?.toString()
-                )
-            }
+            val playlistItems = items.mapNotNull { playlistItemOf(it) }
             playlistManager?.savePlaylist(Playlist("default", "Default", playlistItems))
             queuePlaylistId = "default"
 
@@ -1583,7 +1649,7 @@ class PlayerViewModel : ViewModel() {
             if (isCurrent(generation)) updateMetadata()
         }
 
-        playbackPreferences?.savePlaybackState(folder, target ?: items.firstOrNull()?.mediaId, positionMs)
+        playbackPreferences?.savePlaybackState(folder, target ?: items.firstOrNull()?.mediaId, positionMs, index.coerceAtLeast(0))
     }
 
     fun setCoverDisplaySize(size: String) {
@@ -1626,6 +1692,7 @@ class PlayerViewModel : ViewModel() {
             autoNextFolder = false
         )
         player?.shuffleModeEnabled = false
+        playbackPreferences?.saveShuffle(false)
         player?.repeatMode = Player.REPEAT_MODE_OFF
 
         refreshPlaylists()
@@ -1723,31 +1790,41 @@ class PlayerViewModel : ViewModel() {
             val listItems = listId?.let { playlistManager?.getPlaylist(it)?.items }
             val follows = listId != null && listItems != null && queueFollows(listId, listItems)
             p.addMediaItems(at, items)
-            if (follows) {
-                val added = items.mapNotNull { playlistItemOf(it) }
-                val updated = listItems!!.toMutableList().apply { addAll(at.coerceAtMost(size), added) }
-                playlistManager?.savePlaylist(Playlist("default", "Default", updated))
-                queuePlaylistId = "default"
-                if (listId != "default" || _uiState.value.activePlaylistId != "default") {
-                    playbackPreferences?.saveActivePlaylistId("default")
-                    _uiState.value = _uiState.value.copy(activePlaylistId = "default", activePlaylistName = "Default")
-                }
-                refreshPlaylists()
+            val updated = if (follows) {
+                listItems!!.toMutableList().apply { addAll(at.coerceAtMost(size), items.mapNotNull { playlistItemOf(it) }) }
+            } else {
+                // The queue is not one list (a playlist with entries that cannot play, a queue of a restored folder):
+                // it becomes "Default" as it is now, so that it can be restored.
+                (0 until p.mediaItemCount).mapNotNull { playlistItemOf(p.getMediaItemAt(it)) }
             }
+            playlistManager?.savePlaylist(Playlist("default", "Default", updated))
+            queuePlaylistId = "default"
+            if (listId != "default" || _uiState.value.activePlaylistId != "default") {
+                playbackPreferences?.saveActivePlaylistId("default")
+                _uiState.value = _uiState.value.copy(activePlaylistId = "default", activePlaylistName = "Default")
+            }
+            refreshPlaylists()
             updatePlaybackState()
             onAdded(items.size)
         }
     }
 
-    /** The playlist entry of a queue item (null: not a source file). */
+    /** The playlist entry of a queue item (null: not a source file); a CUE track is its sheet and start, as [playCueSheet] keeps it. */
     private fun playlistItemOf(item: MediaItem): PlaylistItem? {
         val ref = SourceUris.parse(item.mediaId) ?: return null
+        val extras = item.mediaMetadata.extras
+        val cueStart = SourceUris.cueStartMs(item.mediaId)
+        val cuePath = extras?.getString(PlayerRepository.EXTRA_CUE_PATH)
+        val clipEnd = item.clippingConfiguration.endPositionMs
         return PlaylistItem(
-            path = ref.path,
+            path = if (cueStart != null && cuePath != null) cuePath else ref.path,
             title = item.mediaMetadata.displayTitle?.toString() ?: SourcePath.baseName(ref.name),
             artist = item.mediaMetadata.artist?.toString() ?: "",
             sourceId = ref.sourceId,
             artworkUri = item.mediaMetadata.artworkUri?.toString(),
+            durationMs = if (cueStart != null && clipEnd != C.TIME_END_OF_SOURCE) clipEnd - cueStart else 0,
+            cueStartMs = cueStart.takeIf { cuePath != null },
+            size = extras?.getLong("file_size") ?: 0,
         )
     }
 

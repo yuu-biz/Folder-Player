@@ -434,6 +434,11 @@
     <string name="player_speed">Velocità: %1$s</string>
     <string name="player_swap_channels">Inverti sinistra e destra</string>
     <string name="player_swap_channels_hint">Il canale sinistro esce a destra e il destro a sinistra.</string>
+    <string name="player_retry_waiting">Connessione persa – nuovo tentativo tra %1$d s</string>
+    <string name="player_retry_trying">Riconnessione…</string>
+    <string name="player_retry_reconnected">Riconnesso</string>
+    <string name="player_retry_now">Riprova ora</string>
+    <string name="player_retry_stop">Interrompi</string>
     <string name="action_play_next">Riproduci dopo</string>
     <string name="action_add_to_queue">Aggiungi alla coda</string>
     <string name="queue_added_next">Riprodotto dopo: %1$s</string>

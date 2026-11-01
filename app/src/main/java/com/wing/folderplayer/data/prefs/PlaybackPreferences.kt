@@ -3,6 +3,7 @@ package com.wing.folderplayer.data.prefs
 import androidx.core.content.edit
 
 import android.content.Context
+import com.wing.folderplayer.data.playlist.SavedQueue
 import com.wing.folderplayer.data.source.SourceRef
 import com.wing.folderplayer.data.source.SourceUris
 import com.wing.folderplayer.utils.LyricLine
@@ -40,20 +41,34 @@ class PlaybackPreferences(context: Context) {
     private val prefs = context.getSharedPreferences("playback_prefs", Context.MODE_PRIVATE)
     private val gson = Gson()
 
-    fun savePlaybackState(folder: SourceRef?, mediaId: String?, position: Long) {
+    /** [index]: the queue position of [mediaId] (-1: unknown, the one saved before is kept). */
+    fun savePlaybackState(folder: SourceRef?, mediaId: String?, position: Long, index: Int = -1) {
         prefs.edit().apply {
             if (folder != null) putString("folder_ref", folder.toUriString()) else remove("folder_ref")
             putString("last_media_id", mediaId)
             putLong("last_position", position)
+            if (index >= 0) putInt("queue_index", index)
             apply()
         }
     }
 
-    /** Forgets the last session (track, position, cached title / cover / lyrics): nothing is restored on next start. */
+    /** Forgets the last session (queue, track, position, cached title / cover / lyrics): nothing is restored on next start. */
     fun clearSession() {
         prefs.edit {
             remove("folder_ref"); remove("last_media_id"); remove("last_position"); remove("cached_metadata")
+            remove("queue_playlist_id"); remove("queue_index")
         }
+    }
+
+    /** The playlist the queue is (null: none, e.g. after 1.8.0, which restored the folder of the song only). */
+    fun saveQueuePlaylistId(id: String?) = prefs.edit { if (id != null) putString("queue_playlist_id", id) else remove("queue_playlist_id") }
+    fun saveShuffle(on: Boolean) = prefs.edit { putBoolean("shuffle", on) }
+    fun getShuffle(): Boolean = prefs.getBoolean("shuffle", false)
+
+    fun getSavedQueue(): SavedQueue? {
+        val id = prefs.getString("queue_playlist_id", null) ?: return null
+        val mediaId = getLastMediaId() ?: return null
+        return SavedQueue(id, prefs.getInt("queue_index", 0), mediaId, getLastPosition(), getShuffle())
     }
 
     fun getLastFolder(): SourceRef? = SourceUris.parse(prefs.getString("folder_ref", null))

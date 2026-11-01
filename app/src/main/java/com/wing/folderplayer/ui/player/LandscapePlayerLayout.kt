@@ -244,6 +244,7 @@ fun LandscapeLeftControlPanel(
             }
         }
         
+        Column(Modifier.fullPlayerContent(transition), horizontalAlignment = Alignment.CenterHorizontally) { PlaybackStatusRow(uiState, viewModel) }
         Spacer(modifier = Modifier.height(12.dp))
 
         // 3. Progress

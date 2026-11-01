@@ -408,6 +408,11 @@
     <string name="player_speed">速度：%1$s</string>
     <string name="player_swap_channels">左右聲道互換</string>
     <string name="player_swap_channels_hint">左聲道從右側播放，右聲道從左側播放。</string>
+    <string name="player_retry_waiting">連線已中斷，%1$d 秒後重試</string>
+    <string name="player_retry_trying">正在重新連線…</string>
+    <string name="player_retry_reconnected">已重新連線</string>
+    <string name="player_retry_now">立即重試</string>
+    <string name="player_retry_stop">停止</string>
     <string name="action_play_next">下一首播放</string>
     <string name="action_add_to_queue">加入播放佇列</string>
     <string name="queue_added_next">下一首播放：%1$s</string>

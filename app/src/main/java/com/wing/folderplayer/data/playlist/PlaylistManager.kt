@@ -21,6 +21,8 @@ data class PlaylistItem(
     val artworkUri: String? = null,
     val durationMs: Long = 0,
     val cueStartMs: Long? = null,
+    /** File size in bytes (0: not known), for the bitrate shown of formats that do not state one. */
+    val size: Long = 0,
 ) {
     val ref: SourceRef? get() = if (sourceId.isNotEmpty() && path.startsWith("/")) SourceRef(sourceId, path) else null
 }
@@ -33,9 +35,17 @@ data class Playlist(
 
 private data class PlaylistFile(val version: Int = PlaylistStore.VERSION, val items: List<PlaylistItem> = emptyList())
 
-class PlaylistStore(private val context: Context) {
+/**
+ * The playlists in `files/playlists`. Each file is read once, then served from memory; changes are written in the
+ * background in the order they were made ("Default" holds the queue, thousands of songs from the songs list, and is
+ * rewritten on every play). Used from one thread.
+ */
+class PlaylistStore(private val playlistsDir: File) {
+    constructor(context: Context) : this(File(context.filesDir, "playlists"))
+
     private val gson = Gson()
-    private val playlistsDir = File(context.filesDir, "playlists").apply { if (!exists()) mkdirs() }
+    private val loaded = HashMap<String, List<PlaylistItem>>()
+    init { if (!playlistsDir.exists()) playlistsDir.mkdirs() }
     private val metadataFile = File(playlistsDir, "metadata.json")
 
     // Metadata keeps track of display names for IDs
@@ -64,7 +74,12 @@ class PlaylistStore(private val context: Context) {
     private fun saveMetadata() {
         // Rewritten on every play: a kill or a full disk in the middle must not leave a cut-off file, which the next
         // start reads as "no playlists" (the .fpl files stay, unlisted).
-        writeTextAtomically(metadataFile, gson.toJson(playlistMetadata))
+        val names = HashMap(playlistMetadata)
+        write { writeTextAtomically(metadataFile, gson.toJson(names)) }
+    }
+
+    private fun write(task: () -> Unit) {
+        writer.execute { runCatching(task).onFailure { android.util.Log.e("PlaylistStore", "write failed", it) } }
     }
 
     fun getAllPlaylists(): List<Playlist> {
@@ -85,10 +100,11 @@ class PlaylistStore(private val context: Context) {
     }
 
     fun getPlaylist(id: String): Playlist? {
+        loaded[id]?.let { return Playlist(id, playlistMetadata[id] ?: id, it) }
         val file = File(playlistsDir, "$id.fpl")
         if (!file.exists()) return null
         return try {
-            Playlist(id, playlistMetadata[id] ?: id, readItems(file).orEmpty())
+            Playlist(id, playlistMetadata[id] ?: id, readItems(file).orEmpty().also { loaded[id] = it })
         } catch (e: Exception) {
             android.util.Log.e("PlaylistStore", "playlist $id unreadable; leaving file untouched", e)
             null
@@ -97,7 +113,9 @@ class PlaylistStore(private val context: Context) {
 
     fun savePlaylist(playlist: Playlist) {
         val file = File(playlistsDir, "${playlist.id}.fpl")
-        writeTextAtomically(file, gson.toJson(PlaylistFile(VERSION, playlist.items)))
+        val items = playlist.items.toList()
+        loaded[playlist.id] = items
+        write { writeTextAtomically(file, gson.toJson(PlaylistFile(VERSION, items))) }
         playlistMetadata[playlist.id] = playlist.name
         saveMetadata()
     }
@@ -119,7 +137,8 @@ class PlaylistStore(private val context: Context) {
     fun deletePlaylist(id: String) {
         if (id == "default") return
         val file = File(playlistsDir, "$id.fpl")
-        if (file.exists()) file.delete()
+        loaded.remove(id)
+        write { file.delete() }
         playlistMetadata.remove(id)
         saveMetadata()
     }
@@ -176,6 +195,12 @@ class PlaylistStore(private val context: Context) {
 
     companion object {
         const val VERSION = 2
+
+        // One for every instance: the migration's store and the player's write the same files.
+        private val writer = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "playlist-writer").apply { isDaemon = true } }
+
+        /** Waits until the changes made so far are on disk. */
+        internal fun flush() { writer.submit {}.get() }
         fun artworkRef(item: PlaylistItem): SourceRef? = SourceUris.parse(item.artworkUri)
     }
 }

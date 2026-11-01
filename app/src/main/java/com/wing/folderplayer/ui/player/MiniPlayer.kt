@@ -89,6 +89,7 @@ fun MiniPlayer(
 ) {
     val barHeight = miniPlayerHeight()
     val state by viewModel.miniState.collectAsState()
+    val retryNotice by rememberRetryNotice(viewModel)
     val context = androidx.compose.ui.platform.LocalContext.current
     val cast by com.wing.folderplayer.cast.CastController.get(context).state.collectAsState()
     val sheet = transition.sheet
@@ -197,7 +198,10 @@ fun MiniPlayer(
                                 modifier = Modifier.testTag("mini_title"),
                             )
                             val error = state.error
-                            if (error != null) {
+                            val retry = retryNotice
+                            if (retry != null) {
+                                MiniRetryLine(retry)
+                            } else if (error != null) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
                                     Spacer(Modifier.width(4.dp))
