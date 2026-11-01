@@ -96,6 +96,7 @@ fun BrowserScreen(
 
     var editorType by remember { mutableStateOf<SourceType?>(null) }
     var sourceToEdit by remember { mutableStateOf<SourceConfig?>(null) }
+    var sourceToDelete by remember { mutableStateOf<SourceConfig?>(null) }
     var showAddMenu by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
 
@@ -125,6 +126,21 @@ fun BrowserScreen(
             onDiscover = { viewModel.discoverSmb() },
             onListShares = { cfg, pass -> viewModel.listSmbShares(cfg, pass) },
             onListSharesAsGuest = { host, port -> viewModel.listSmbSharesAsGuest(host, port) },
+        )
+    }
+
+    sourceToDelete?.let { source ->
+        AlertDialog(
+            onDismissRequest = { sourceToDelete = null },
+            title = { Text(stringResource(R.string.browser_delete_source_title)) },
+            text = { Text(stringResource(if (source.isNetwork) R.string.browser_delete_source_text_network else R.string.browser_delete_source_text, source.name)) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.removeSource(source.id); sourceToDelete = null }, modifier = Modifier.testTag("source_delete_confirm")) {
+                    Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { sourceToDelete = null }) { Text(stringResource(R.string.common_cancel)) } },
+            modifier = Modifier.testTag("source_delete_dialog"),
         )
     }
 
@@ -236,10 +252,10 @@ fun BrowserScreen(
                                     uiState.favoritesKind == FavoritesKind.FOLDERS -> stringResource(R.string.browser_favorite_folders)
                                     uiState.showingSongs -> stringResource(R.string.browser_songs)
                                     uiState.currentFolder == null -> stringResource(R.string.browser_sources_title)
+                                    // The folder on screen; the path to it is the row below the bar ([FolderPathRow]).
                                     else -> {
                                         val folder = uiState.currentFolder!!
-                                        val srcName = uiState.currentSource?.name ?: ""
-                                        if (folder.path == SourcePath.ROOT) srcName else "$srcName > ${SourcePath.name(folder.path)}"
+                                        if (folder.path == SourcePath.ROOT) uiState.currentSource?.name.orEmpty() else SourcePath.name(folder.path)
                                     }
                                 },
                                 maxLines = 1,
@@ -392,6 +408,9 @@ fun BrowserScreen(
                 }
 
                 Column(modifier = Modifier.fillMaxSize().padding(padding).then(if (uiState.search.active || uiState.filterOpen) Modifier.imePadding() else Modifier)) {
+                    uiState.currentFolder?.takeIf { it.path != SourcePath.ROOT && !uiState.search.active }?.let { folder ->
+                        FolderPathRow(folder, uiState.currentSource?.name.orEmpty(), onOpen = { viewModel.openFolderAbove(it) })
+                    }
                     if (uiState.isLoading || uiState.search.running) {
                         LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     }
@@ -484,7 +503,7 @@ fun BrowserScreen(
                                 onSongsClick = { viewModel.showSongs() },
                                 onSourceClick = { viewModel.selectSource(it) },
                                 onEditSource = { sourceToEdit = it },
-                                onDeleteSource = { viewModel.removeSource(it.id) },
+                                onDeleteSource = { sourceToDelete = it },
                                 onDuplicateSource = { viewModel.duplicateSource(it.id) },
                                 onMoveUp = { viewModel.moveSourceUp(it.id) },
                                 onMoveDown = { viewModel.moveSourceDown(it.id) },
@@ -625,6 +644,39 @@ private fun SearchBarRow(query: String, onQuery: (String) -> Unit, onClose: () -
         },
         actions = { BrowserOverflow(onOpenSettings) }
     )
+}
+
+/**
+ * Where [folder] is: the source, then each folder down to this one (emphasised). A folder above opens as the up arrow
+ * opens the parent. A long path scrolls sideways; each folder shows its end (reversed scrolling starts there).
+ */
+@Composable
+private fun FolderPathRow(folder: SourceRef, sourceName: String, onOpen: (SourceRef) -> Unit) {
+    val names = SourcePath.segments(folder.path)
+    val crumbs = listOf(sourceName to SourcePath.ROOT) + names.indices.map { i -> names[i] to names.take(i + 1).joinToString("/", prefix = "/") }
+    key(folder) {
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState(), reverseScrolling = true).padding(horizontal = 8.dp).testTag("folder_path"),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            crumbs.forEachIndexed { i, (name, path) ->
+                val current = i == crumbs.lastIndex
+                if (i > 0) Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                Text(
+                    name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (current) androidx.compose.ui.text.font.FontWeight.SemiBold else null,
+                    color = if (current) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .then(if (current) Modifier.semantics { selected = true } else Modifier.clickable(role = Role.Button) { onOpen(SourceRef(folder.sourceId, path)) })
+                        .padding(horizontal = 6.dp, vertical = 10.dp)
+                        .testTag("folder_path_$i"),
+                )
+            }
+        }
+    }
 }
 
 /** The filter of the folder on screen: narrows the list as the user types (it does not look into the folders below). */

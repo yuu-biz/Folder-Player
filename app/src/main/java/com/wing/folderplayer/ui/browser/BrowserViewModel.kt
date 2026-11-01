@@ -396,7 +396,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             }
 
             try {
-                val filesRaw = runInterruptible(Dispatchers.IO) { SourceRegistry.fileSystem(folder).list(folder.path) }
+                val filesRaw = com.wing.folderplayer.data.source.runSourceCall { SourceRegistry.fileSystem(folder).list(folder.path) }
                 // The whole folder: lengths of files that are no longer in it go.
                 viewModelScope.launch(Dispatchers.IO) { durations.onFolderListed(folder, filesRaw) }
                 val files = withContext(Dispatchers.Default) { applySort(filesRaw, field, asc) }
@@ -423,6 +423,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 throw e
             } catch (e: Exception) {
                 android.util.Log.e("BrowserViewModel", "Error loading folder: ${e.javaClass.simpleName} ${e.message}")
+                if (_uiState.value.currentFolder != folder) return@launch
                 _error.value = com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_load_failed, com.wing.folderplayer.ui.player.PlaybackErrorText.describe(e))
                 _uiState.value = _uiState.value.copy(isLoading = false, files = emptyList(), loadError = _error.value)
             }
@@ -498,8 +499,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             val newAscending = if (state.sortField == by) !state.sortAscending else true
             val sorted = withContext(Dispatchers.Default) { applySort(state.files, by, newAscending) }
             sourcePreferences.saveDirectorySort(folder, by, newAscending)
-            _uiState.value = _uiState.value.copy(files = sorted, sortField = by, sortAscending = newAscending)
-            fillLengths()
+            // Left meanwhile: the folder on screen now is not this one (its cached copy is still sorted below).
+            if (_uiState.value.currentFolder == folder) {
+                _uiState.value = _uiState.value.copy(files = sorted, sortField = by, sortAscending = newAscending)
+                fillLengths()
+            }
             val key = folder.toUriString()
             directoryCache[key]?.let { entry ->
                 directoryCache[key] = entry.copy(files = sorted, sortField = by, sortAscending = newAscending)
@@ -543,12 +547,17 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         if (parent == null) showSourceList() else loadFolder(parent, isBackNavigation = true)
     }
 
-    /** The arrow-up button of the top bar: the folder above (a new step: Back returns to the folder the user was in). */
-    fun goUp() {
-        if (_uiState.value.search.active) return
-        val parent = _uiState.value.currentFolder?.parent ?: return
+    /** The arrow-up button of the top bar: the folder above. */
+    fun goUp() { _uiState.value.currentFolder?.parent?.let(::openFolderAbove) }
+
+    /**
+     * A folder above the one on screen (the up arrow, a folder of the path row): a new step, so Back returns to the folder
+     * the user was in; the folder comes back at the place it was left.
+     */
+    fun openFolderAbove(folder: SourceRef) {
+        if (_uiState.value.search.active || folder == _uiState.value.currentFolder) return
         rememberCurrentPlace()
-        loadFolder(parent, isBackNavigation = true)
+        loadFolder(folder, isBackNavigation = true)
     }
 
     /** The home button of the top bar: the source list, with no way back from it (Back there leaves the app). */
