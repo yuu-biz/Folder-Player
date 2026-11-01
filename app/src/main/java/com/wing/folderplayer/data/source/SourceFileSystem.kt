@@ -1,5 +1,9 @@
 package com.wing.folderplayer.data.source
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.runInterruptible
 import java.io.Closeable
 import java.io.IOException
 import java.io.InputStream
@@ -93,6 +97,19 @@ interface SourceFileSystem : Closeable {
     fun ref(path: String) = SourceRef(config.id, path)
 
     override fun close() {}
+}
+
+/**
+ * Runs a blocking call to a source on the I/O dispatcher, interruptible. A call cancelled meanwhile does not always end in
+ * the [InterruptedException] that [runInterruptible] turns into cancellation: an interrupted OkHttp read is an
+ * [java.io.InterruptedIOException], an SMB connect that ignores the interrupt times out later. Its error then belongs to
+ * nobody, so it ends as the cancellation it is, and the caller's catch does not show it over the screen the user went to.
+ */
+suspend fun <T> runSourceCall(block: () -> T): T = try {
+    runInterruptible(Dispatchers.IO, block)
+} catch (e: Exception) {
+    currentCoroutineContext().ensureActive()
+    throw e
 }
 
 fun SourceFileSystem.readBytes(path: String, maxBytes: Long): ByteArray {
