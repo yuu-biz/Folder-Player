@@ -113,6 +113,18 @@ class SmbConnectionTest {
         }
     }
 
+    @Test fun aHealthyIdleConnectionIsKept() {
+        fs().use { smb ->
+            smb.list("/fixture/Album-A")
+            Thread.sleep(12_000)
+            val after = timed("first listing after 12 s unused, server answering") { smb.list("/fixture/Album-A") }
+            println("SMBCONN connections: ${relay.accepted.get()}")
+            assertNull("the listing succeeds: ${after.error}", after.error)
+            assertEquals("the connection answered the echo and is kept", 1, relay.accepted.get())
+            assertTrue("no wait for an echo timeout: ${after.millis} ms", after.millis < 2_000)
+        }
+    }
+
     /**
      * TCP relay to the SMB server. [answerDelayMillis] holds each chunk from the server back; [silenceOpenConnections]
      * makes the relayed connections drop everything in both directions while their sockets stay open (no FIN, no RST),
