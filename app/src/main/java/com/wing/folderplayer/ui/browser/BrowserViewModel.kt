@@ -396,7 +396,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             }
 
             try {
-                val filesRaw = runInterruptible(Dispatchers.IO) { SourceRegistry.fileSystem(folder).list(folder.path) }
+                val filesRaw = com.wing.folderplayer.data.source.runSourceCall { SourceRegistry.fileSystem(folder).list(folder.path) }
                 // The whole folder: lengths of files that are no longer in it go.
                 viewModelScope.launch(Dispatchers.IO) { durations.onFolderListed(folder, filesRaw) }
                 val files = withContext(Dispatchers.Default) { applySort(filesRaw, field, asc) }
@@ -423,6 +423,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 throw e
             } catch (e: Exception) {
                 android.util.Log.e("BrowserViewModel", "Error loading folder: ${e.javaClass.simpleName} ${e.message}")
+                if (_uiState.value.currentFolder != folder) return@launch
                 _error.value = com.wing.folderplayer.utils.Strings.get(com.wing.folderplayer.R.string.err_load_failed, com.wing.folderplayer.ui.player.PlaybackErrorText.describe(e))
                 _uiState.value = _uiState.value.copy(isLoading = false, files = emptyList(), loadError = _error.value)
             }
@@ -498,8 +499,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             val newAscending = if (state.sortField == by) !state.sortAscending else true
             val sorted = withContext(Dispatchers.Default) { applySort(state.files, by, newAscending) }
             sourcePreferences.saveDirectorySort(folder, by, newAscending)
-            _uiState.value = _uiState.value.copy(files = sorted, sortField = by, sortAscending = newAscending)
-            fillLengths()
+            // Left meanwhile: the folder on screen now is not this one (its cached copy is still sorted below).
+            if (_uiState.value.currentFolder == folder) {
+                _uiState.value = _uiState.value.copy(files = sorted, sortField = by, sortAscending = newAscending)
+                fillLengths()
+            }
             val key = folder.toUriString()
             directoryCache[key]?.let { entry ->
                 directoryCache[key] = entry.copy(files = sorted, sortField = by, sortAscending = newAscending)
