@@ -140,6 +140,26 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.37 SMB connection kept through cancelled requests, silent connections noticed (1.9.0, 2026-11-02)
+
+The owner reported NAS folders that now and then stay loading or fail (after the app was in the background, or going
+from a NAS favourite back to the favourites and into another folder), fixed by a task kill or another folder. JVM tests
+against the Samba fixture (`fp-fixtures-samba-1`) through the relay of `SmbConnectionTest`, which can delay the
+server's answers (400 ms per chunk) or make the open connections silent (sockets kept, nothing passed, no FIN / RST),
+while new connections pass.
+
+| Check | Result |
+|---|---|
+| `SmbConnectionTest` on 1.8.0 (`479e553`) | a listing while another listing is cancelled (thread interrupted with its request in flight, as `runInterruptible` does): 33 220 ms, 3 connections; while a read is cancelled (the player's loader, a cover, a song length): 33 224 ms, 2 connections; first listing after the idle connection went silent: 30 017 ms. All three FAILED. The interrupt came back from SMBJ wrapped in a `TransportException`, was mapped as Unreachable, and closed the shared connection; the other reader's request on it got no answer until the 30 s timeout |
+| `SmbConnectionTest` on the fix | 2 004 ms and 2 007 ms with one connection (the relay's delay over the round trips of a listing); 3 016 ms after the silent connection (echo timeout 3 s, then a new connection). PASS |
+| `SmbStallTest` (Samba paused mid-read) on the fix | read 30 s, each open 30 s, 10 ms after unpause, PASS (as in 1.8.0) |
+| JVM, final pass on the fix | `testDebugUnitTest` with the fixture servers 330 tests, 0 failures, 1 skipped (`SmbConnectionTest` 2 003 / 2 004 / 3 015 ms, `SmbStallTest` 30 / 30 / 30 s, 9 ms after unpause); `lintDebug` 0 errors, 61 warnings (as before) |
+
+Not checked: the owner's phone and NAS (the trigger there is inferred from the reported pattern, not seen), a NAS whose
+disks sleep, a source configured with a host name. The playback log now records `CONNECTION` lines (connect with its
+time, drop with its reason) to check this on the phone. No device suite was run: the change is in `SmbFileSystem.kt`
+(and one log kind), and Docker Desktop's integration for the WSL distro was detached, which the emulator containers need.
+
 ### 5.36 Queue, speed and left / right, cover swipe, several folders, SMB stall and playback log (1.8.0, 2026-10-26)
 
 The owner shared a playback log of a stop on 1.7.2 (an MP3 on an SMB share went silent; nothing logged until the
