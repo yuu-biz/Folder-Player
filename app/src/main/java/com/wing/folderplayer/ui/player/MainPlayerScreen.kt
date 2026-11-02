@@ -254,7 +254,7 @@ private fun PortraitPlayerLayout(
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(1f)
-                            .coverChange(uiState.coverUri to uiState.coverFallback) { direction }
+                            .coverChange(uiState.currentMediaId) { direction }
                             .sharedCover(
                                 transition,
                                 cornerPx = { with(density) { animatedCornerSize.toPx() } },

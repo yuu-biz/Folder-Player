@@ -36,6 +36,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.platform.testTag
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.sign
 import androidx.compose.ui.unit.dp
@@ -59,7 +60,11 @@ fun rememberTrackDirection(viewModel: PlayerViewModel): State<Int> {
     return direction
 }
 
-/** The new picture comes in from the side by a short distance; the old one is simply replaced (one image view). */
+/**
+ * On a change of [key] (the track, not its picture: songs of one album share the cover) the picture comes in from the
+ * side, a third of its width on the full player, slightly smaller and faded; the old one is simply replaced (one image
+ * view).
+ */
 fun Modifier.coverChange(key: Any?, direction: () -> Int): Modifier = composed {
     val offset = remember { Animatable(0f) }
     var shown by remember { mutableStateOf(key) }
@@ -67,12 +72,15 @@ fun Modifier.coverChange(key: Any?, direction: () -> Int): Modifier = composed {
         if (key == shown) return@LaunchedEffect
         shown = key
         offset.snapTo(direction().toFloat())
-        offset.animateTo(0f, tween(280, easing = FastOutSlowInEasing))
+        offset.animateTo(0f, tween(320, easing = FastOutSlowInEasing))
     }
     graphicsLayer {
         val o = offset.value
-        translationX = o * 28.dp.toPx()
-        alpha = 1f - abs(o) * 0.5f
+        translationX = o * maxOf(28.dp.toPx(), size.width / 3f)
+        alpha = 1f - abs(o) * 0.6f
+        val scale = 1f - abs(o) * 0.08f
+        scaleX = scale
+        scaleY = scale
     }
 }
 
@@ -109,14 +117,24 @@ fun PlayPauseIcon(isPlaying: Boolean, contentDescription: (playing: Boolean) -> 
  * A sideways swipe over the full player's cover: to the left the next track, to the right the previous one (1.8.0).
  * The cover follows the finger a little and springs back; a swipe counts when it went a fifth of the cover's width or
  * was flung. Vertical drags stay with the player (the slop decides the direction before this takes the move).
+ * A swipe that counts throws the cover out to its side, where it stays until [track] changes ([coverChange] then
+ * brings the new one in from the other side); with no change (the end of the queue, Previous restarting the song) it
+ * comes back.
  */
-fun Modifier.swipeToSkip(onNext: () -> Unit, onPrevious: () -> Unit): Modifier = composed {
+fun Modifier.swipeToSkip(track: Any?, onNext: () -> Unit, onPrevious: () -> Unit): Modifier = composed {
     val next = rememberUpdatedState(onNext)
     val previous = rememberUpdatedState(onPrevious)
     val offset = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
+    var thrown by remember { mutableStateOf(false) }
+    LaunchedEffect(track) {
+        if (thrown) { thrown = false; offset.snapTo(0f) }
+    }
     this
-        .graphicsLayer { translationX = offset.value }
+        .graphicsLayer {
+            translationX = offset.value
+            alpha = 1f - (abs(offset.value) / size.width).coerceAtMost(0.7f)
+        }
         .pointerInput(Unit) {
             val tracker = VelocityTracker()
             val flingSpeed = 1_000.dp.toPx()
@@ -134,9 +152,14 @@ fun Modifier.swipeToSkip(onNext: () -> Unit, onPrevious: () -> Unit): Modifier =
                     val far = abs(travelled) > size.width / 5f
                     val flung = abs(speed) > flingSpeed && sign(speed) == sign(travelled)
                     if (far || flung) {
+                        thrown = true
+                        scope.launch {
+                            offset.animateTo(sign(travelled) * size.width * 0.6f, tween(180))
+                            delay(800)
+                            if (thrown) { thrown = false; offset.animateTo(0f) }
+                        }
                         if (travelled < 0) next.value() else previous.value()
-                    }
-                    scope.launch { offset.animateTo(0f) }
+                    } else scope.launch { offset.animateTo(0f) }
                 },
             )
         }

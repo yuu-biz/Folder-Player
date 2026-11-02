@@ -104,6 +104,7 @@ fun MiniPlayer(
     val playLabel = stringResource(R.string.player_play)
     val pauseLabel = stringResource(R.string.player_pause)
     val direction by rememberTrackDirection(viewModel)
+    val trackId by viewModel.currentMediaId.collectAsState()
     // While the full player is (partly) in front, the bar is not reachable (TalkBack, tests).
     val covered by remember(sheet) { derivedStateOf { sheet.isOpen } }
 
@@ -178,7 +179,7 @@ fun MiniPlayer(
                             .onGloballyPositioned { if (dragX == 0f) transition.miniCover = Rect(it.positionInRoot(), it.size.toSize()) }
                             // Hidden once the full player's cover (the same picture) is there and moving.
                             .graphicsLayer { alpha = if (transition.fullCoverShown()) 0f else 1f }
-                            .coverChange(state.coverUri to state.coverFallback) { direction }
+                            .coverChange(trackId) { direction }
                             .clip(RoundedCornerShape(6.dp))
                     ) {
                         CoverImage(
