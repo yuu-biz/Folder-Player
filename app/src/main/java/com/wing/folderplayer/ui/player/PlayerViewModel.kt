@@ -683,8 +683,8 @@ class PlayerViewModel : ViewModel() {
         val controller = awaitPlayer() as? MediaController ?: return null
         val result = runCatching { controller.sendCustomCommand(MusicService.COMMAND_AUDIO_SESSION, android.os.Bundle.EMPTY).await() }.getOrNull()
         return result?.takeIf { it.resultCode == androidx.media3.session.SessionResult.RESULT_SUCCESS }
-            ?.extras?.getInt(MusicService.KEY_AUDIO_SESSION, androidx.media3.common.C.AUDIO_SESSION_ID_UNSET)
-            ?.takeIf { it != androidx.media3.common.C.AUDIO_SESSION_ID_UNSET }
+            ?.extras?.getInt(MusicService.KEY_AUDIO_SESSION, android.media.AudioManager.AUDIO_SESSION_ID_GENERATE)
+            ?.takeIf { it != android.media.AudioManager.AUDIO_SESSION_ID_GENERATE }
     }
 
     /** The timer runs in MusicService, so it ends playback also when no screen is left. */
