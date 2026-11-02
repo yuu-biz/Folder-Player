@@ -472,4 +472,7 @@
     <string name="player_equalizer">Equalizzatore</string>
     <string name="player_equalizer_hint">Apre l\'equalizzatore del telefono</string>
     <string name="player_equalizer_none">Questo telefono non ha una schermata dell\'equalizzatore.</string>
+    <string name="browser_replace_remote_title">Sostituire i preferiti remoti?</string>
+    <string name="browser_replace_remote_text">Il file dei preferiti di «%1$s» (%2$s) viene sovrascritto con i preferiti di questo dispositivo. I preferiti presenti solo in quel file, ad esempio aggiunti da un altro dispositivo, vanno persi.</string>
+    <string name="browser_replace_remote_confirm">Sostituisci</string>
 </resources>

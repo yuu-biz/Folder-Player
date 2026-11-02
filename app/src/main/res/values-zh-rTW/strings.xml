@@ -442,4 +442,7 @@
     <string name="player_equalizer">等化器</string>
     <string name="player_equalizer_hint">開啟手機內建的等化器</string>
     <string name="player_equalizer_none">此手機沒有等化器畫面。</string>
+    <string name="browser_replace_remote_title">覆蓋遠端收藏？</string>
+    <string name="browser_replace_remote_text">將以本裝置的收藏覆蓋「%1$s」的收藏檔案（%2$s）。只存在於該檔案中的收藏（例如在其他裝置上新增的）將會遺失。</string>
+    <string name="browser_replace_remote_confirm">覆蓋</string>
 </resources>
