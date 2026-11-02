@@ -368,6 +368,14 @@ class PlayerViewModel : ViewModel() {
                     }
                 }
 
+                // A new service (or one whose queue is empty or being replaced) starts with the switches the user left,
+                // also when nothing is restored or a play request comes first.
+                if (controller.mediaItemCount == 0 || isRestoring) playbackPreferences?.let { prefs ->
+                    controller.shuffleModeEnabled = prefs.getShuffle()
+                    controller.repeatMode = prefs.getRepeatMode()
+                    _uiState.value = _uiState.value.copy(shuffleModeEnabled = controller.shuffleModeEnabled, repeatMode = controller.repeatMode)
+                }
+
                 // The current track is known from the controller at once, before its title / metadata are complete:
                 // a screen may be waiting for "is there a track" (notification tap on a new activity without cache).
                 if (playerMediaId != null && !isRestoring && _uiState.value.currentMediaId == null) {
@@ -449,7 +457,6 @@ class PlayerViewModel : ViewModel() {
                 val restored = restoreQueue(prefs.getSavedQueue(), generation) || isCurrent(generation) && restoreFolder(prefs, generation)
                 if (!isCurrent(generation)) return@launch
                 if (!restored) { isRestoring = false; return@launch }
-                player?.shuffleModeEnabled = prefs.getShuffle()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -885,24 +892,37 @@ class PlayerViewModel : ViewModel() {
     }
 
     fun toggleShuffle() {
-        player?.let { p ->
-            p.shuffleModeEnabled = !p.shuffleModeEnabled
-            playbackPreferences?.saveShuffle(p.shuffleModeEnabled)
-            _uiState.value = _uiState.value.copy(shuffleModeEnabled = p.shuffleModeEnabled)
-        }
+        player?.let { setShuffle(!it.shuffleModeEnabled) }
     }
 
     fun toggleRepeatMode() {
         player?.let { p ->
-            val nextMode = when (p.repeatMode) {
+            setRepeatMode(when (p.repeatMode) {
                 Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
                 Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
                 Player.REPEAT_MODE_ONE -> Player.REPEAT_MODE_OFF
                 else -> Player.REPEAT_MODE_OFF
-            }
-            p.repeatMode = nextMode
-            _uiState.value = _uiState.value.copy(repeatMode = p.repeatMode)
+            })
         }
+    }
+
+    // Shuffle, repeat and next folder each change in one place: what the player does, what is shown and what the next
+    // start restores stay the same.
+    private fun setShuffle(on: Boolean) {
+        player?.shuffleModeEnabled = on
+        playbackPreferences?.saveShuffle(on)
+        _uiState.value = _uiState.value.copy(shuffleModeEnabled = on)
+    }
+
+    private fun setRepeatMode(mode: Int) {
+        player?.repeatMode = mode
+        playbackPreferences?.saveRepeatMode(mode)
+        _uiState.value = _uiState.value.copy(repeatMode = mode)
+    }
+
+    private fun setAutoNextFolder(on: Boolean) {
+        _uiState.value = _uiState.value.copy(autoNextFolder = on)
+        playbackPreferences?.saveAutoNextFolder(on)
     }
 
     /** Kept for the next start; the service applies the saved speed when it starts. */
@@ -919,11 +939,7 @@ class PlayerViewModel : ViewModel() {
         com.wing.folderplayer.playback.ChannelSwapAudioProcessor.enabled = on
     }
 
-    fun toggleAutoNextFolder() {
-        val nextValue = !_uiState.value.autoNextFolder
-        _uiState.value = _uiState.value.copy(autoNextFolder = nextValue)
-        playbackPreferences?.saveAutoNextFolder(nextValue)
-    }
+    fun toggleAutoNextFolder() = setAutoNextFolder(!_uiState.value.autoNextFolder)
 
     private fun checkAndPlayNextFolder() {
         if (!_uiState.value.autoNextFolder) return
@@ -1703,13 +1719,11 @@ class PlayerViewModel : ViewModel() {
             activePlaylistId = id,
             activePlaylistName = playlist.name,
             activePlaylistItems = playlist.items,
-            shuffleModeEnabled = false,
-            repeatMode = Player.REPEAT_MODE_OFF,
-            autoNextFolder = false
         )
-        player?.shuffleModeEnabled = false
-        playbackPreferences?.saveShuffle(false)
-        player?.repeatMode = Player.REPEAT_MODE_OFF
+        // Showing another list turns the three off, also for the next start (next folder used to come back on).
+        setShuffle(false)
+        setRepeatMode(Player.REPEAT_MODE_OFF)
+        setAutoNextFolder(false)
 
         refreshPlaylists()
     }

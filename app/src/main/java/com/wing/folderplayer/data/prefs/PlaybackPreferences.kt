@@ -65,6 +65,9 @@ class PlaybackPreferences(context: Context) {
     fun saveQueuePlaylistId(id: String?) = prefs.edit { if (id != null) putString("queue_playlist_id", id) else remove("queue_playlist_id") }
     fun saveShuffle(on: Boolean) = prefs.edit { putBoolean("shuffle", on) }
     fun getShuffle(): Boolean = prefs.getBoolean("shuffle", false)
+    /** Player.REPEAT_MODE_OFF (0, default), _ONE or _ALL. */
+    fun saveRepeatMode(mode: Int) = prefs.edit { putInt("repeat_mode", mode) }
+    fun getRepeatMode(): Int = prefs.getInt("repeat_mode", 0)
 
     fun getSavedQueue(): SavedQueue? {
         val id = prefs.getString("queue_playlist_id", null) ?: return null

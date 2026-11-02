@@ -31,7 +31,8 @@ What a user can run into, in one place. The sections below give the history of e
   process ends.
 - **Restore** (since 1.9.0): the next start brings back the queue as it was (a folder, a CUE sheet, the songs list, search
   results, favourites, a shuffle across folders, songs added with "Play next" / "Add to queue"), paused at the same
-  song and position, with shuffle on or off as it was (Media3 draws a new shuffle order; repeat is not kept). The queue is
+  song and position, with shuffle and repeat as they were (Media3 draws a new shuffle order). Showing another playlist
+  in the playlist menu turns shuffle, repeat and next folder off, and that is what the next start keeps. The queue is
   kept as the playlist it was built from: "Default", or the user's playlist it was played from. Kept that way, a
   folder comes back with the songs it had when it was played (a song added to the folder since is not in the queue),
   and a song whose file is gone stays in the queue and fails when it plays. When that playlist was deleted or no longer
