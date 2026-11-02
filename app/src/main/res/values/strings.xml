@@ -302,7 +302,6 @@
     <string name="player_repeat">Repeat</string>
     <string name="player_timer_mins">min</string>
     <string name="player_timer_songs">songs</string>
-    <string name="player_timer_reset">Reset</string>
     <string name="player_album_discovery">Album information</string>
     <string name="player_artist_discovery">Artist information</string>
     <string name="player_no_info">No information available.</string>
@@ -465,4 +464,8 @@
     <string name="browser_delete_source_text_network">“%1$s” is removed from the source list, and its saved password is deleted. The files on the server are not deleted.</string>
     <string name="player_timer_stop_after">Stop after</string>
     <string name="settings_about_copyright">Copyright © 2026 Wyvern2000. All rights reserved.</string>
+    <string name="player_timer_start">Start</string>
+    <string name="player_timer_off">Turn off the timer</string>
+    <string name="player_timer_finish_song">At the time, let the song finish</string>
+    <string name="player_timer_fade">Fade out over the last 30 seconds</string>
 </resources>

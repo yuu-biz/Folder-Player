@@ -26,9 +26,13 @@ What a user can run into, in one place. The sections below give the history of e
 - **Playback control from other apps**: `MusicService` is exported so that the system UI, Bluetooth and car
   controls can use it, and accepts any controller. Another installed app can start / stop playback and replace the queue.
   An allow-list of known controller packages is a hardening candidate after 1.0.0.
-- **Sleep timer**: a "songs" timer ends with the queue (with "next folder" on it does not carry on into the next
-  folder; use the minutes timer) and does not count a track repeated by "repeat one". The timer is lost when the app
-  process ends.
+- **Sleep timer**: it pauses the phone's player only: a DLNA cast plays on the renderer and is neither paused nor faded.
+  A songs timer counts a track repeated by "repeat one" and the end of the queue; with "next folder" on it goes on in
+  the next folder, and when its last song is the last of the folder the next folder is not started. "Next folder" is
+  run by the app's screen, so this was not checked with the screen gone. The fade at the end of a song needs the song's
+  length (a stream without one is paused at its end without a fade). After the process ended, a minutes timer comes
+  back while its deadline (wall clock) is ahead, a songs timer only within an hour of its last change. The minutes left
+  shown in the app are updated while playing. Finish-song, fade and the restore are checked by JVM tests only.
 - **Restore** (since 1.9.0): the next start brings back the queue as it was (a folder, a CUE sheet, the songs list, search
   results, favourites, a shuffle across folders, songs added with "Play next" / "Add to queue"), paused at the same
   song and position, with shuffle on or off as it was (Media3 draws a new shuffle order; repeat is not kept). The queue is
@@ -580,7 +584,6 @@ Found by static review, reproduced by tests first (see VERIFICATION.md 5.11).
 - Debug safe mode (`Music/Init`) still clears the source list but leaves the sources' stored passwords in the
   credential store (unreachable, not readable without the source). There is no user-facing "reset app settings";
   Android's "Clear storage" is the full reset.
-- The sleep timer is not kept when the app process ends (as before: it was never persisted).
 - Next-folder playback is skipped while a play request is still loading (the request decides what plays).
 
 ## Fixed in 0.6.0-dev5

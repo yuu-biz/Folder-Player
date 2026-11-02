@@ -566,9 +566,11 @@ private fun PortraitPlayerLayout(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         ScrubTime(scrub, sliderPosition, uiState.currentPosition, uiState.duration, MaterialTheme.typography.labelMedium)
+                        SleepTimerChip(uiState, viewModel)
                         Text(
                             text = formatTime(uiState.duration),
                             color = Color.White.copy(alpha = 0.75f),
@@ -665,8 +667,7 @@ private fun PortraitPlayerLayout(
                         if (showTimerDialog) {
                             TimerDialog(
                                 uiState = uiState,
-                                onStart = { type, value -> viewModel.startSleepTimer(type, value) },
-                                onReset = { viewModel.resetSleepTimer() },
+                                viewModel = viewModel,
                                 onDismiss = { showTimerDialog = false }
                             )
                         }

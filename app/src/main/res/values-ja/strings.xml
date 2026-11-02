@@ -290,7 +290,6 @@
     <string name="player_repeat">リピート</string>
     <string name="player_timer_mins">分</string>
     <string name="player_timer_songs">曲</string>
-    <string name="player_timer_reset">リセット</string>
     <string name="player_album_discovery">アルバム情報</string>
     <string name="player_artist_discovery">アーティスト情報</string>
     <string name="player_no_info">情報がありません。</string>
@@ -436,4 +435,8 @@
     <string name="browser_delete_source_text_network">「%1$s」をソース一覧から削除し、保存したパスワードも削除します。サーバー上のファイルは削除されません。</string>
     <string name="player_timer_stop_after">停止まで</string>
     <string name="settings_about_copyright">Copyright © 2026 Wyvern2000. All rights reserved.</string>
+    <string name="player_timer_start">開始</string>
+    <string name="player_timer_off">タイマーを止める</string>
+    <string name="player_timer_finish_song">時間になったら、曲の終わりで止める</string>
+    <string name="player_timer_fade">最後の30秒で少しずつ音を小さくする</string>
 </resources>

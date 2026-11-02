@@ -290,7 +290,6 @@
     <string name="player_repeat">循环</string>
     <string name="player_timer_mins">分钟</string>
     <string name="player_timer_songs">首</string>
-    <string name="player_timer_reset">重置</string>
     <string name="player_album_discovery">专辑信息</string>
     <string name="player_artist_discovery">艺术家信息</string>
     <string name="player_no_info">暂无信息。</string>
@@ -436,4 +435,8 @@
     <string name="browser_delete_source_text_network">将从来源列表中移除“%1$s”，并删除已保存的密码。服务器上的文件不会被删除。</string>
     <string name="player_timer_stop_after">剩余</string>
     <string name="settings_about_copyright">Copyright © 2026 Wyvern2000. All rights reserved.</string>
+    <string name="player_timer_start">开始</string>
+    <string name="player_timer_off">关闭定时</string>
+    <string name="player_timer_finish_song">时间到后，播完当前歌曲再停止</string>
+    <string name="player_timer_fade">最后 30 秒逐渐调低音量</string>
 </resources>
