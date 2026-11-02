@@ -225,10 +225,16 @@ class PlayerViewModel : ViewModel() {
     private fun saveQueuePointer() {
         val prefs = playbackPreferences ?: return
         val p = player
+        // A file of another app is kept nowhere: the session before it stays the one to restore.
+        if (p?.playsOtherAppsFile() == true) return
         val item = p?.currentMediaItem
         if (p == null || item == null || isRestoring) return prefs.saveQueuePlaylistId(queuePlaylistId)
         prefs.saveQueue(queuePlaylistId, currentFolder, item.mediaId, p.currentPosition, p.currentMediaItemIndex)
     }
+
+    /** The item playing is a file another app opened with this one ([playOtherAppsFile]), not a file of a source. */
+    private fun Player.playsOtherAppsFile(): Boolean = currentMediaItem?.mediaId?.let { !SourceUris.isSourceUri(it) } == true
+
     /** Queue position a next / previous / play-at is moving to; metadata of other positions is not shown meanwhile. */
     private var pendingQueueIndex: Int? = null
     private var lastMediaIdBeforeIntent: String? = null
@@ -825,7 +831,7 @@ class PlayerViewModel : ViewModel() {
             )
 
             // Save for next restart (instant cache)
-            playbackPreferences?.saveCachedMetadata(
+            if (!p.playsOtherAppsFile()) playbackPreferences?.saveCachedMetadata(
                 com.wing.folderplayer.data.prefs.CachedMetadata(
                     title = cleanTitle,
                     artist = currentArtistImmediate,
@@ -1239,7 +1245,7 @@ class PlayerViewModel : ViewModel() {
             )
 
             // Periodically save position (every 5 seconds)
-            if (!isRestoring && Math.abs(position - (playbackPreferences?.getLastPosition() ?: 0L)) > 5000) {
+            if (!isRestoring && !p.playsOtherAppsFile() && Math.abs(position - (playbackPreferences?.getLastPosition() ?: 0L)) > 5000) {
                 playbackPreferences?.savePosition(position)
             }
         }
@@ -1358,6 +1364,43 @@ class PlayerViewModel : ViewModel() {
             } catch (e: Exception) {
                 if (isCurrent(generation)) _uiState.value = _uiState.value.copy(isBuffering = false, playbackError = errorText(e, folder.sourceId))
             }
+        }
+    }
+
+    /**
+     * Plays an audio file another app opened with this one (a `content://` [uri]): the queue is that file alone, with
+     * the title and cover Media3 reads from its tags. The app may read it only while that app's grant lasts, so it goes
+     * into no playlist and is not saved: the next start restores the session before it.
+     */
+    fun playOtherAppsFile(uri: android.net.Uri) {
+        val generation = newPlayRequest()
+        val id = uri.toString()
+        _uiState.value = _uiState.value.copy(
+            currentTitle = "Loading...", currentArtist = "", currentFolderName = "", currentMediaId = id,
+            coverUri = null, coverFallback = null, lyrics = emptyList(), isBuffering = true, playbackError = null, playRequested = true,
+        )
+        lastMediaIdBeforeIntent = player?.currentMediaItem?.mediaId
+        pendingPlayIntent = id
+        playJob = viewModelScope.launch(exceptionHandler) {
+            val name = runCatching {
+                runInterruptible(Dispatchers.IO) {
+                    appContext?.contentResolver?.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+                        ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+                }
+            }.getOrNull() ?: uri.lastPathSegment.orEmpty()
+            val p = awaitPlayer() ?: return@launch
+            if (!isCurrent(generation)) return@launch
+            val item = MediaItem.Builder().setUri(uri).setMediaId(id)
+                .setMediaMetadata(androidx.media3.common.MediaMetadata.Builder().setDisplayTitle(SourcePath.baseName(name)).build())
+                .build()
+            p.setMediaItems(listOf(item))
+            // Only now: set before the item, the pointer saved with it would drop the list of the session before.
+            queuePlaylistId = null
+            currentFolder = null
+            p.prepare()
+            p.play()
+            kotlinx.coroutines.delay(1000)
+            if (isCurrent(generation)) updateMetadata()
         }
     }
 
@@ -1899,7 +1942,9 @@ class PlayerViewModel : ViewModel() {
         // The end first: the index of the song playing stays valid.
         p.removeMediaItems(current + 1, p.mediaItemCount)
         p.removeMediaItems(0, current)
-        keepQueueAsDefault(listOfNotNull(playlistItemOf(p.getMediaItemAt(0))), listId)
+        // A file of another app is in no list: "Default" and the saved session stay as they were.
+        val entry = playlistItemOf(p.getMediaItemAt(0)) ?: return updatePlaybackState()
+        keepQueueAsDefault(listOf(entry), listId)
     }
 
     /** The playlist entry of a queue item (null: not a source file); a CUE track is its sheet and start, as [playCueSheet] keeps it. */

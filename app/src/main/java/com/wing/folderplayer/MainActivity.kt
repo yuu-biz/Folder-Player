@@ -178,6 +178,12 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         if (intent?.action == ACTION_OPEN_PLAYER) openPlayerRequests.trySend(Unit)
+        // An audio file opened from another app (a file manager). Not again when the task comes back from recents.
+        val uri = intent?.data
+        if (intent?.action == Intent.ACTION_VIEW && uri != null && (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0) {
+            ViewModelProvider(this)[PlayerViewModel::class.java].playOtherAppsFile(uri)
+            openPlayerRequests.trySend(Unit)
+        }
     }
 
     private var lastPermissionReport: PermissionDiagnostics.Report? = null
