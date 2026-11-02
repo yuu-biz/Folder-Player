@@ -475,4 +475,6 @@
     <string name="browser_replace_remote_title">Sostituire i preferiti remoti?</string>
     <string name="browser_replace_remote_text">Il file dei preferiti di «%1$s» (%2$s) viene sovrascritto con i preferiti di questo dispositivo. I preferiti presenti solo in quel file, ad esempio aggiunti da un altro dispositivo, vanno persi.</string>
     <string name="browser_replace_remote_confirm">Sostituisci</string>
+    <string name="bookmark_removed">«%1$s» rimosso dai segnalibri</string>
+    <string name="common_undo">Annulla</string>
 </resources>

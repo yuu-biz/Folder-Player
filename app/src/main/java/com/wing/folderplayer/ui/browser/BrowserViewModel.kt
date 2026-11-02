@@ -798,7 +798,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         loadFolder(bookmark.ref)
     }
 
-    fun removeBookmark(bookmark: Bookmark) = bookmarksRepository.remove(bookmark.ref)
+    /** Returns where it was, for [restoreBookmark] (Undo), or -1. */
+    fun removeBookmark(bookmark: Bookmark): Int = bookmarksRepository.remove(bookmark.ref)
+
+    fun restoreBookmark(bookmark: Bookmark, index: Int) = bookmarksRepository.restore(bookmark, index)
 
     fun renameBookmark(bookmark: Bookmark, name: String) = bookmarksRepository.rename(bookmark.id, name)
 

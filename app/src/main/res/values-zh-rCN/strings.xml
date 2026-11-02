@@ -445,4 +445,6 @@
     <string name="browser_replace_remote_title">覆盖远程收藏？</string>
     <string name="browser_replace_remote_text">将用本设备的收藏覆盖“%1$s”的收藏文件（%2$s）。只存在于该文件中的收藏（例如在其他设备上添加的）将会丢失。</string>
     <string name="browser_replace_remote_confirm">覆盖</string>
+    <string name="bookmark_removed">已从书签中移除“%1$s”</string>
+    <string name="common_undo">撤销</string>
 </resources>

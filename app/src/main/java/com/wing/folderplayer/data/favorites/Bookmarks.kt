@@ -110,11 +110,23 @@ class BookmarksRepository(private val file: File, private val clock: () -> Long 
         }
     }
 
-    fun remove(ref: SourceRef) {
-        val k = key(ref) ?: return
+    /** Returns where the bookmark was in the whole list (for [restore]), or -1 when there was none. */
+    fun remove(ref: SourceRef): Int {
+        val k = key(ref) ?: return -1
         synchronized(lock) {
-            val kept = _items.value.filterNot { it.sourceId == k.first && it.path == k.second }
-            if (kept.size != _items.value.size) store(kept)
+            val list = _items.value
+            val at = list.indexOfFirst { it.sourceId == k.first && it.path == k.second }
+            if (at >= 0) store(list.filterIndexed { i, _ -> i != at })
+            return at
+        }
+    }
+
+    /** Puts a removed [bookmark] back as it was (id, name) at [index]; nothing if its folder was bookmarked again since. */
+    fun restore(bookmark: Bookmark, index: Int) {
+        synchronized(lock) {
+            if (isBookmarked(bookmark.ref)) return
+            val list = _items.value
+            store(list.toMutableList().also { it.add(index.coerceIn(0, list.size), bookmark) })
         }
     }
 
