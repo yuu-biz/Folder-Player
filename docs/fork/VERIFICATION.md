@@ -140,6 +140,24 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.39 Sleep timer, queue save / clear, undo, equalizer, files from other apps (1.10.0, 2026-11-02)
+
+The owner asked for the recommended items of the backlog review in one release. Built on two branches in parallel and
+merged; no emulator run (device tests kept to a minimum at the owner's request). A read-only review of the merged
+diff found five bugs and three likely ones; fixed in 81b887f, except a songs timer counting a song when the user swipes
+out the playing last song of the queue (left; it needs the timeline event of the same batch, not reachable in JVM
+tests).
+
+| Check | Result |
+|---|---|
+| `SleepTimerTest` (new) | 11/11: finish the song, deadline while paused, fade and its restore, pause / cancel during a fade, last-song fade, repeat-one / end-of-queue counting, restore cases; the pause re-entering the timer was red before its fix (3 FAILED), the songs-timer hour restarting on each restore and a timer of an earlier boot were red before their fix (2 FAILED) |
+| `PlaylistStoreTest` (new), `QueueEntriesTest`, `BookmarksTest` | a saved queue keeps order with a CUE entry and a duplicate; 10 lists made in one millisecond all exist and the 11th is refused; an undone removal goes back to its queue position; a bookmark undo restores place and name |
+| JVM, final pass | `testDebugUnitTest` 365 tests, 0 failures, 33 skipped (protocol tests without fixture servers); `lintDebug` 0 errors, 61 warnings (as before); `compileDebugAndroidTestKotlin` passes (androidTest not run) |
+
+Not checked: everything on a device. In particular the fade as heard, the equalizer panel from the player and the
+effect-session broadcasts, a file opened from a file manager, the marquee, the snackbars, and a sleep timer kept across
+a process end.
+
 ### 5.38 Playback options, skip by seconds, queue restore, retry status, path row, wording (1.9.0, 2026-11-02)
 
 The owner chose these from the backlog review (docs/implementation/backlog-2026-11-02.md is local). No emulator run:

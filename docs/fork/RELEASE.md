@@ -138,3 +138,7 @@ playback log): `v1.8.0` is versionName `1.8.0`, versionCode `1080099`, which ins
 
 1.9.0 (previous-button and resume options, skip by seconds, queue restore, retry status, path row, plainer wording):
 `v1.9.0` is versionName `1.9.0`, versionCode `1090099`, which installs over 1.8.1.
+
+1.10.0 (sleep timer options, queue save / clear, undo, repeat kept, equalizer, files from other apps, scrolling titles):
+`v1.10.0` is versionName `1.10.0`, versionCode `1100099`, which installs over 1.9.0.
+
