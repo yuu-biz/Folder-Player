@@ -93,7 +93,7 @@ fun PlaylistSheetContent(
                         .padding(top = 0.dp, bottom = 4.dp)
                 ) {
                     Text(
-                        uiState.activePlaylistName.uppercase(),
+                        uiState.activePlaylistName,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.primary

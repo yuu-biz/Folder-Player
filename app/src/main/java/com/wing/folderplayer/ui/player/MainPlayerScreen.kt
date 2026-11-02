@@ -3,6 +3,7 @@ package com.wing.folderplayer.ui.player
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -283,7 +284,7 @@ private fun PortraitPlayerLayout(
                         modifier = Modifier.padding(bottom = 0.dp)
                     ) {
                         TrackText(uiState.currentTitle, direction) { title ->
-                            TextCompressed(
+                            MarqueeText(
                                 text = displayTitle(title),
                                 style = if (lyricsExpanded) MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineMedium,
                                 color = Color.White,
@@ -292,7 +293,7 @@ private fun PortraitPlayerLayout(
                         }
                         
                         if (uiState.currentFolderName.isNotEmpty()) {
-                            TextCompressed(
+                            MarqueeText(
                                 text = uiState.currentFolderName,
                                 style = if (lyricsExpanded) MaterialTheme.typography.bodySmall else MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
@@ -677,7 +678,7 @@ private fun PortraitPlayerLayout(
                                 modifier = Modifier.clickable { expanded = true }.padding(top = 0.dp, bottom = 4.dp)
                             ) {
                                 Text(
-                                    uiState.activePlaylistName.uppercase(),
+                                    uiState.activePlaylistName,
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Black,
                                     color = MaterialTheme.colorScheme.primary
@@ -808,55 +809,26 @@ fun formatTime(ms: Long): String {
     return String.format("%02d:%02d", minutes, seconds)
 }
 
+/** One centred line; a line too long for the width scrolls sideways, after a pause on its start. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun TextCompressed(
+fun MarqueeText(
     text: String,
     style: androidx.compose.ui.text.TextStyle,
     color: Color = Color.Unspecified,
     fontWeight: FontWeight? = null,
     modifier: Modifier = Modifier
 ) {
-    var scale by remember { mutableStateOf(1f) }
-    var readyToDraw by remember { mutableStateOf(false) }
-
-    val mergedStyle = style.merge(
-        androidx.compose.ui.text.TextStyle(
+    // The marquee is as wide as the text when it fits: the box centres it.
+    Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Text(
+            text = text,
+            style = style,
             color = color,
             fontWeight = fontWeight,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE, delayMillis = 2000, initialDelayMillis = 1500),
         )
-    )
-
-    androidx.compose.ui.layout.Layout(
-        content = {
-            Text(
-                text = text,
-                style = mergedStyle,
-                maxLines = 1,
-                softWrap = false,
-                modifier = Modifier.graphicsLayer {
-                    scaleX = scale
-                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.5f)
-                }
-            )
-        },
-        modifier = modifier.fillMaxWidth()
-    ) { measurables, constraints ->
-        val placeable = measurables.first().measure(constraints.copy(minWidth = 0, maxWidth = Int.MAX_VALUE))
-        
-        val contentWidth = placeable.width.toFloat()
-        val containerWidth = constraints.maxWidth.toFloat()
-        
-        if (contentWidth > containerWidth) {
-            scale = containerWidth / contentWidth
-        } else {
-            scale = 1f
-        }
-        readyToDraw = true
-
-        layout(constraints.maxWidth, placeable.height) {
-            val xOffset = ((constraints.maxWidth - placeable.width) / 2)
-            placeable.place(xOffset, 0)
-        }
     }
 }
