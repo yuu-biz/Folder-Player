@@ -39,6 +39,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.IntentFilter
 import android.media.AudioManager
+import android.media.audiofx.AudioEffect
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
@@ -58,12 +59,12 @@ class MusicService : MediaLibraryService() {
     private lateinit var diagnostics: com.wing.folderplayer.playback.PlaybackDiagnostics
     private lateinit var resume: ResumeTracker
 
-    /** Sleep timer commands (START / CANCEL / GET) and "retry now" / "stop retrying" from the app's screens, on top of the default commands. */
+    /** Sleep timer commands (START / CANCEL / GET), "retry now" / "stop retrying" and the audio session id (for the equaliser) from the app's screens, on top of the default commands. */
     private inner class SessionCallback : MediaLibrarySession.Callback {
         override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
             val accepted = super.onConnect(session, controller)
             val commands = accepted.availableSessionCommands.buildUpon()
-                .add(SleepTimer.COMMAND_START).add(SleepTimer.COMMAND_CANCEL).add(SleepTimer.COMMAND_GET).add(COMMAND_RETRY_NOW).add(COMMAND_STOP_RETRY)
+                .add(SleepTimer.COMMAND_START).add(SleepTimer.COMMAND_CANCEL).add(SleepTimer.COMMAND_GET).add(COMMAND_RETRY_NOW).add(COMMAND_STOP_RETRY).add(COMMAND_AUDIO_SESSION)
                 .build()
             return MediaSession.ConnectionResult.accept(commands, accepted.availablePlayerCommands)
         }
@@ -78,7 +79,14 @@ class MusicService : MediaLibraryService() {
                 ACTION_RETRY_NOW -> { retry.retryNow(); return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS)) }
                 // A pause does not end a retry of a player that was paused already (no change of playWhenReady to see).
                 ACTION_STOP_RETRY -> { retry.cancel("stopped by the user"); return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS)) }
-                SleepTimer.ACTION_START -> sleepTimer.start(args.getString(SleepTimer.ARG_TYPE), args.getInt(SleepTimer.ARG_VALUE))
+                // The equaliser panel of the phone is opened for this session.
+                ACTION_AUDIO_SESSION -> return Futures.immediateFuture(
+                    SessionResult(SessionResult.RESULT_SUCCESS, Bundle().apply { putInt(KEY_AUDIO_SESSION, player.audioSessionId) }),
+                )
+                SleepTimer.ACTION_START -> sleepTimer.start(
+                    args.getString(SleepTimer.ARG_TYPE), args.getInt(SleepTimer.ARG_VALUE),
+                    SleepTimer.Options(args.getBoolean(SleepTimer.ARG_FINISH_SONG), args.getBoolean(SleepTimer.ARG_FADE)),
+                )
                 SleepTimer.ACTION_CANCEL -> sleepTimer.cancel()
                 SleepTimer.ACTION_GET -> Unit
                 else -> return super.onCustomCommand(session, controller, customCommand, args)
@@ -255,6 +263,12 @@ class MusicService : MediaLibraryService() {
             }
         })
 
+        // Effect apps (the phone's own equaliser, Wavelet …) attach to the audio session a player announces.
+        player.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) { if (isPlaying) openEffectSession() }
+            override fun onAudioSessionIdChanged(audioSessionId: Int) { closeEffectSession(); if (player.isPlaying) openEffectSession() }
+        })
+
         diagnostics = com.wing.folderplayer.playback.PlaybackDiagnostics(player, ::where).also { it.attach() }
         retry = NetworkRetryController(player, keepAwake = ::keepAwakeForRetry).also { it.attach() }
         exporter = PlaybackExportManager(applicationContext, player).also { it.attach() }
@@ -264,7 +278,10 @@ class MusicService : MediaLibraryService() {
             .setSessionActivity(pendingIntent)
             .setBitmapLoader(SourceBitmapLoader(DataSourceBitmapLoader(this)))
             .build()
-        sleepTimer = SleepTimer(player, Handler(Looper.getMainLooper()), { state -> mediaSession.setSessionExtras(state) }).also { it.attach() }
+        sleepTimer = SleepTimer(
+            player, SleepTimer.handlerAlarm(Handler(Looper.getMainLooper())), SleepTimer.PrefsStore(applicationContext),
+            { state -> mediaSession.setSessionExtras(state) },
+        ).also { it.attach() }
 
         setMediaNotificationProvider(object : DefaultMediaNotificationProvider(this) {
             // A MediaItem only has a display title when tag titles are used and the file has no title tag.
@@ -327,6 +344,27 @@ class MusicService : MediaLibraryService() {
         return mediaSession
     }
 
+    private var announcedSession = androidx.media3.common.C.AUDIO_SESSION_ID_UNSET
+
+    private fun openEffectSession() {
+        val id = player.audioSessionId
+        if (id == announcedSession || id == androidx.media3.common.C.AUDIO_SESSION_ID_UNSET) return
+        closeEffectSession()
+        sendBroadcast(effectSessionIntent(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION, id))
+        announcedSession = id
+    }
+
+    private fun closeEffectSession() {
+        if (announcedSession == androidx.media3.common.C.AUDIO_SESSION_ID_UNSET) return
+        sendBroadcast(effectSessionIntent(AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION, announcedSession))
+        announcedSession = androidx.media3.common.C.AUDIO_SESSION_ID_UNSET
+    }
+
+    private fun effectSessionIntent(action: String, session: Int) = Intent(action)
+        .putExtra(AudioEffect.EXTRA_AUDIO_SESSION, session)
+        .putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
+        .putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
+
     /** For instrumentation tests (main thread): controllers bound to the session, e.g. the app's own one per activity. */
     internal val connectedControllerCount: Int get() = mediaSession.connectedControllers.size
     internal val isPlayingForTest: Boolean get() = player.isPlaying
@@ -337,6 +375,7 @@ class MusicService : MediaLibraryService() {
         pendingNotification?.let { notificationHandler.removeCallbacks(it) }
         unregisterReceiver(becomingNoisyReceiver)
         sleepTimer.detach()
+        closeEffectSession()
         diagnostics.detach()
         retry.detach()
         keepAwakeForRetry(false)
@@ -357,6 +396,9 @@ class MusicService : MediaLibraryService() {
         val COMMAND_RETRY_NOW = SessionCommand(ACTION_RETRY_NOW, Bundle.EMPTY)
         const val ACTION_STOP_RETRY = "com.wing.folderplayer.retry.STOP"
         val COMMAND_STOP_RETRY = SessionCommand(ACTION_STOP_RETRY, Bundle.EMPTY)
+        const val ACTION_AUDIO_SESSION = "com.wing.folderplayer.audio_session.GET"
+        val COMMAND_AUDIO_SESSION = SessionCommand(ACTION_AUDIO_SESSION, Bundle.EMPTY)
+        const val KEY_AUDIO_SESSION = "audio_session_id"
 
         /** Running instance, for instrumentation tests only (the shell cannot send AUDIO_BECOMING_NOISY on API 34+). */
         @Volatile internal var current: MusicService? = null

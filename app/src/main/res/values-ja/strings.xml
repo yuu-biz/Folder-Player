@@ -290,7 +290,6 @@
     <string name="player_repeat">リピート</string>
     <string name="player_timer_mins">分</string>
     <string name="player_timer_songs">曲</string>
-    <string name="player_timer_reset">リセット</string>
     <string name="player_album_discovery">アルバム情報</string>
     <string name="player_artist_discovery">アーティスト情報</string>
     <string name="player_no_info">情報がありません。</string>
@@ -443,5 +442,16 @@
     <string name="queue_clear_text">再生中の曲だけが残ります。自分で作ったプレイリストはそのままです。</string>
     <string name="playlist_cap_reached">プレイリストは %1$d 個まで作れます。新しく作るには、どれかを削除してください。</string>
     <string name="playlist_removed">リストから外しました：%1$s</string>
+    <string name="player_timer_start">開始</string>
+    <string name="player_timer_off">タイマーを止める</string>
+    <string name="player_timer_finish_song">時間になったら、曲の終わりで止める</string>
+    <string name="player_timer_fade">最後の30秒で少しずつ音を小さくする</string>
+    <string name="player_equalizer">イコライザー</string>
+    <string name="player_equalizer_hint">端末のイコライザーを開きます</string>
+    <string name="player_equalizer_none">この端末にはイコライザーの画面がありません。</string>
+    <string name="browser_replace_remote_title">リモートのお気に入りを上書きしますか？</string>
+    <string name="browser_replace_remote_text">「%1$s」のお気に入りファイル（%2$s）を、この端末のお気に入りで上書きします。そのファイルにしかないお気に入り（ほかの端末で追加したものなど）は消えます。</string>
+    <string name="browser_replace_remote_confirm">上書き</string>
+    <string name="bookmark_removed">「%1$s」をブックマークから削除しました</string>
     <string name="common_undo">元に戻す</string>
 </resources>

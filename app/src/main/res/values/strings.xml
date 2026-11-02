@@ -302,7 +302,6 @@
     <string name="player_repeat">Repeat</string>
     <string name="player_timer_mins">min</string>
     <string name="player_timer_songs">songs</string>
-    <string name="player_timer_reset">Reset</string>
     <string name="player_album_discovery">Album information</string>
     <string name="player_artist_discovery">Artist information</string>
     <string name="player_no_info">No information available.</string>
@@ -472,5 +471,16 @@
     <string name="queue_clear_text">Only the song playing stays. Playlists you made are not changed.</string>
     <string name="playlist_cap_reached" tools:ignore="PluralsCandidate">You can have up to %1$d playlists. Delete one to make a new one.</string>
     <string name="playlist_removed">Removed: %1$s</string>
+    <string name="player_timer_start">Start</string>
+    <string name="player_timer_off">Turn off the timer</string>
+    <string name="player_timer_finish_song">At the time, let the song finish</string>
+    <string name="player_timer_fade">Fade out over the last 30 seconds</string>
+    <string name="player_equalizer">Equalizer</string>
+    <string name="player_equalizer_hint">Opens the phone\'s own equalizer</string>
+    <string name="player_equalizer_none">This phone has no equalizer screen.</string>
+    <string name="browser_replace_remote_title">Replace the remote favorites?</string>
+    <string name="browser_replace_remote_text">The favorites file of “%1$s” (%2$s) is overwritten with the favorites of this device. Favorites that are only in that file, such as ones added on another device, are lost.</string>
+    <string name="browser_replace_remote_confirm">Replace</string>
+    <string name="bookmark_removed">“%1$s” removed from bookmarks</string>
     <string name="common_undo">Undo</string>
 </resources>

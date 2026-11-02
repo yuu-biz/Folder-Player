@@ -97,6 +97,7 @@ fun BrowserScreen(
     var editorType by remember { mutableStateOf<SourceType?>(null) }
     var sourceToEdit by remember { mutableStateOf<SourceConfig?>(null) }
     var sourceToDelete by remember { mutableStateOf<SourceConfig?>(null) }
+    var sourceToReplaceFavorites by remember { mutableStateOf<SourceConfig?>(null) }
     var showAddMenu by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
 
@@ -141,6 +142,21 @@ fun BrowserScreen(
             },
             dismissButton = { TextButton(onClick = { sourceToDelete = null }) { Text(stringResource(R.string.common_cancel)) } },
             modifier = Modifier.testTag("source_delete_dialog"),
+        )
+    }
+
+    sourceToReplaceFavorites?.let { source ->
+        AlertDialog(
+            onDismissRequest = { sourceToReplaceFavorites = null },
+            title = { Text(stringResource(R.string.browser_replace_remote_title)) },
+            text = { Text(stringResource(R.string.browser_replace_remote_text, source.name, source.syncPath)) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.replaceRemoteFavorites(source.id); sourceToReplaceFavorites = null }, modifier = Modifier.testTag("replace_remote_confirm")) {
+                    Text(stringResource(R.string.browser_replace_remote_confirm), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { sourceToReplaceFavorites = null }) { Text(stringResource(R.string.common_cancel)) } },
+            modifier = Modifier.testTag("replace_remote_dialog"),
         )
     }
 
@@ -213,6 +229,8 @@ fun BrowserScreen(
     }
 
     val snackbar = remember { SnackbarHostState() }
+    val snackbarScope = rememberCoroutineScope()
+    val undoLabel = stringResource(R.string.common_undo)
     // The viewer is a window above the browser and would hide the snackbar: while it is open, a toast says it.
     LaunchedEffect(error) {
         error?.let {
@@ -491,7 +509,14 @@ fun BrowserScreen(
                                 favoriteFolders = uiState.favorites.count { it.type == FavoritesKind.FOLDERS.type && uiState.availableSources.any { s -> s.id == it.sourceId } },
                                 bookmarks = uiState.bookmarks.filter { b -> uiState.availableSources.any { it.id == b.sourceId } },
                                 onBookmarkClick = { viewModel.openBookmark(it) },
-                                onBookmarkRemove = { viewModel.removeBookmark(it) },
+                                onBookmarkRemove = { b ->
+                                    val at = viewModel.removeBookmark(b)
+                                    if (at >= 0) snackbarScope.launch {
+                                        val name = b.name.ifEmpty { SourcePath.name(b.path) }
+                                        val r = snackbar.showSnackbar(com.wing.folderplayer.utils.Strings.get(R.string.bookmark_removed, name), actionLabel = undoLabel, duration = SnackbarDuration.Long)
+                                        if (r == SnackbarResult.ActionPerformed) viewModel.restoreBookmark(b, at)
+                                    }
+                                },
                                 onBookmarkRename = { b, name -> viewModel.renameBookmark(b, name) },
                                 onBookmarkMove = { b, delta -> viewModel.moveBookmark(b, delta) },
                                 onBookmarkReorder = { viewModel.reorderBookmarks(it) },
@@ -508,7 +533,7 @@ fun BrowserScreen(
                                 onMoveUp = { viewModel.moveSourceUp(it.id) },
                                 onMoveDown = { viewModel.moveSourceDown(it.id) },
                                 onRepickSaf = { treePicker.launch(null) },
-                                onReplaceRemoteFavorites = { viewModel.replaceRemoteFavorites(it.id) },
+                                onReplaceRemoteFavorites = { sourceToReplaceFavorites = it },
                             )
                             uiState.viewMode == "GRID" -> FileGrid(
                                 files = files,

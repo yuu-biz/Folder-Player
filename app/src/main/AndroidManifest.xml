@@ -19,6 +19,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
+    <!-- The phone's equaliser panel (Android 11+ hides other apps' activities unless they are declared here) -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.DISPLAY_AUDIO_EFFECT_CONTROL_PANEL" />
+        </intent>
+    </queries>
+
     <application
         android:name="com.wing.folderplayer.FolderPlayerApp"
         android:usesCleartextTraffic="true"

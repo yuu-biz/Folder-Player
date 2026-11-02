@@ -88,6 +88,8 @@ class SyncTagsUiTest : UiTestBase() {
         until(5_000, "source row") { exists("source_dav-sync") }
         longClick("source_dav-sync")
         clickText(str(R.string.browser_replace_remote_favorites))
+        until(5_000, "asks first") { exists("replace_remote_dialog") }
+        click("replace_remote_confirm")
         until(30_000, "replaced") { runCatching { FavoritesCodec.decode(fs.readText(syncPath)).items.size == 2 }.getOrDefault(false) }
         onUi { browser.clearMessage() }
 

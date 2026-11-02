@@ -290,7 +290,6 @@
     <string name="player_repeat">Répéter</string>
     <string name="player_timer_mins">min</string>
     <string name="player_timer_songs">morceaux</string>
-    <string name="player_timer_reset">Réinitialiser</string>
     <string name="player_album_discovery">Infos sur l\'album</string>
     <string name="player_artist_discovery">Infos sur l\'artiste</string>
     <string name="player_no_info">Aucune information disponible.</string>
@@ -473,5 +472,16 @@
     <string name="queue_clear_text">Seul le morceau en cours reste. Vos playlists ne changent pas.</string>
     <string name="playlist_cap_reached">%1$d playlists au maximum. Supprimez-en une pour en créer une nouvelle.</string>
     <string name="playlist_removed">Retiré : %1$s</string>
+    <string name="player_timer_start">Démarrer</string>
+    <string name="player_timer_off">Arrêter la minuterie</string>
+    <string name="player_timer_finish_song">À l\'heure, finir le morceau en cours</string>
+    <string name="player_timer_fade">Baisser le son sur les 30 dernières secondes</string>
+    <string name="player_equalizer">Égaliseur</string>
+    <string name="player_equalizer_hint">Ouvre l\'égaliseur du téléphone</string>
+    <string name="player_equalizer_none">Ce téléphone n\'a pas d\'écran d\'égaliseur.</string>
+    <string name="browser_replace_remote_title">Remplacer les favoris distants ?</string>
+    <string name="browser_replace_remote_text">Le fichier de favoris de « %1$s » (%2$s) est remplacé par les favoris de cet appareil. Les favoris qui ne sont que dans ce fichier, par exemple ajoutés sur un autre appareil, sont perdus.</string>
+    <string name="browser_replace_remote_confirm">Remplacer</string>
+    <string name="bookmark_removed">« %1$s » retiré des signets</string>
     <string name="common_undo">Annuler</string>
 </resources>
