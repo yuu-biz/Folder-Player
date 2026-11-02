@@ -995,7 +995,7 @@ class PlayerViewModel : ViewModel() {
         val currentIndex = sortedSiblings.indexOfFirst { it.path == folder.path }
         if (currentIndex != -1 && currentIndex < sortedSiblings.size - 1) {
             val nextFolder = sortedSiblings[currentIndex + 1]
-            playFolderInternal(nextFolder.ref, null, 0L, playWhenReady = true, generation)
+            playFolderInternal(nextFolder.ref, null, 0L, playWhenReady = true, generation, nextFolder = true)
         }
     }
 
@@ -1684,6 +1684,7 @@ class PlayerViewModel : ViewModel() {
         positionMs: Long,
         playWhenReady: Boolean,
         generation: Int,
+        nextFolder: Boolean = false,
     ) {
         val sortPref = sourcePreferences?.getDirectorySort(folder) ?: sourcePreferences?.getDefaultSort()
 
@@ -1694,6 +1695,8 @@ class PlayerViewModel : ViewModel() {
         )
         // Nothing of an older request is applied from here on (queue, folder, Default playlist, saved state).
         if (!isCurrent(generation)) return
+        // Paused while the folders were listed (the sleep timer's deadline, the user): playback stays where it ended.
+        if (nextFolder && player?.playWhenReady == false) return
         if (items.isEmpty()) {
             // Shuffle at a root / artist folder, next folder, or a restore can land on a folder with no songs of its own.
             // What plays, the queue, the "Default" playlist and the saved state stay as they are; only the
@@ -1777,22 +1780,24 @@ class PlayerViewModel : ViewModel() {
     // --- Playlist Management Methods ---
 
     fun switchPlaylist(id: String) {
-        val manager = playlistManager ?: return
-        val playlist = manager.getPlaylist(id) ?: return
+        if (id == _uiState.value.activePlaylistId || !showPlaylist(id)) return
+        // Showing another list turns the three off, also for the next start (next folder used to come back on).
+        setShuffle(false)
+        setRepeatMode(Player.REPEAT_MODE_OFF)
+        setAutoNextFolder(false)
+    }
 
+    /** Shows playlist [id] (kept for the next start); false when there is no such list. */
+    private fun showPlaylist(id: String): Boolean {
+        val playlist = playlistManager?.getPlaylist(id) ?: return false
         playbackPreferences?.saveActivePlaylistId(id)
-
         _uiState.value = _uiState.value.copy(
             activePlaylistId = id,
             activePlaylistName = playlist.name,
             activePlaylistItems = playlist.items,
         )
-        // Showing another list turns the three off, also for the next start (next folder used to come back on).
-        setShuffle(false)
-        setRepeatMode(Player.REPEAT_MODE_OFF)
-        setAutoNextFolder(false)
-
         refreshPlaylists()
+        return true
     }
 
     private fun refreshPlaylists() {
@@ -1826,8 +1831,9 @@ class PlayerViewModel : ViewModel() {
         if (id == "default") return
         playlistManager?.deletePlaylist(id)
         if (id == queuePlaylistId) queuePlaylistId = null
+        // What plays goes on as it is: shuffle, repeat and next folder stay.
         if (id == _uiState.value.activePlaylistId) {
-            switchPlaylist("default")
+            showPlaylist("default")
         } else {
             refreshPlaylists()
         }
@@ -1894,15 +1900,16 @@ class PlayerViewModel : ViewModel() {
 
     /**
      * Adds a song, or the songs of a folder (in name order), to the queue: right after the track playing ([next]) or at
-     * its end; the track playing goes on. With nothing queued they start playing instead. When the queue was built from
-     * "Default" (a folder, the songs list, search results…) that list gets them as well, at the same place; a queue built
-     * from one of the user's playlists becomes "Default" with them, so that playlist itself is not changed. [onAdded]
-     * gets the number of songs added (0: none, e.g. a folder without songs).
+     * its end; the track playing goes on. With nothing queued, or a file of another app playing, they start playing
+     * instead. When the queue was built from "Default" (a folder, the songs list, search results…) that list gets them
+     * as well, at the same place; a queue built from one of the user's playlists becomes "Default" with them, so that
+     * playlist itself is not changed. [onAdded] gets the number of songs added (0: none, e.g. a folder without songs).
      */
     fun addToQueue(file: MusicFile, next: Boolean, onAdded: (Int) -> Unit = {}) {
         viewModelScope.launch(exceptionHandler) {
             val p = awaitPlayer() ?: return@launch onAdded(0)
-            if (p.mediaItemCount == 0) {
+            // A file of another app is in no list ("Default" could not follow the queue): the songs replace it.
+            if (p.mediaItemCount == 0 || p.playsOtherAppsFile()) {
                 if (file.isDirectory) playFolder(file.ref) else playCustomList(listOf(file), 0)
                 onAdded(1)
                 return@launch

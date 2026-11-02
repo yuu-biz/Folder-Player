@@ -25,7 +25,9 @@ import com.wing.folderplayer.playback.PlaybackLog
  * whenever playback is paused, so the next play is never silent. A DLNA cast plays on the renderer and is not faded.
  *
  * The timer is saved on every change and comes back when the service starts again after the process ended: a TIME
- * timer while its deadline (wall clock) is in the future, a SONGS timer within [RESTORE_SONGS_MS] of its last change.
+ * timer while its deadline (wall clock) is in the future, a SONGS timer within [RESTORE_SONGS_MS] of its last change
+ * (a restore is no change); never after the device restarted. [detach] keeps it: the system also destroys the service of
+ * a paused playback, which can be resumed later. Ending the session in the app cancels the timer.
  *
  * A deadline that passes while playback is paused ends the timer without effect (nothing to pause).
  */
@@ -36,6 +38,8 @@ internal class SleepTimer(
     private val onChange: (Bundle) -> Unit,
     private val clock: () -> Long = SystemClock::elapsedRealtime,
     private val wallClock: () -> Long = System::currentTimeMillis,
+    /** How many times the device has started (Settings.Global.BOOT_COUNT): a timer of an earlier boot is not brought back. */
+    private val bootCount: () -> Int,
 ) : Player.Listener {
     /** The timer's single wake-up: each call replaces the one before, null clears it. */
     fun interface Alarm { fun set(delayMs: Long?, action: Runnable) }
@@ -47,8 +51,11 @@ internal class SleepTimer(
 
     data class Options(val finishSong: Boolean = false, val fade: Boolean = false)
 
-    /** [wallDeadline] for TIME, [songsLeft] for SONGS; [savedAt] is the wall-clock time of the last change. */
-    data class SavedTimer(val type: String, val wallDeadline: Long, val songsLeft: Int, val savedAt: Long)
+    /**
+     * [wallDeadline] for TIME, [songsLeft] for SONGS; [savedAt] is the wall-clock time of the last change, [boot] the
+     * [bootCount] at the save.
+     */
+    data class SavedTimer(val type: String, val wallDeadline: Long, val songsLeft: Int, val savedAt: Long, val boot: Int)
 
     data class Saved(val options: Options = Options(), val timer: SavedTimer? = null)
 
@@ -71,13 +78,13 @@ internal class SleepTimer(
     fun attach() {
         player.addListener(this)
         val saved = store.load().timer ?: return
-        countdown = when (saved.type) {
+        countdown = if (saved.boot != bootCount()) null else when (saved.type) {
             TYPE_TIME -> (saved.wallDeadline - wallClock()).takeIf { it > 0 }?.let { Countdown.Time(clock() + it) }
             TYPE_SONGS -> Countdown.Songs(saved.songsLeft).takeIf { it.left > 0 && wallClock() - saved.savedAt < RESTORE_SONGS_MS }
             else -> null
         }
         if (countdown != null) PlaybackLog.record(PlaybackEventKind.SLEEP_TIMER, "brought back after a restart")
-        changed()
+        changed(savedAt = saved.savedAt)
     }
 
     fun detach() {
@@ -114,12 +121,13 @@ internal class SleepTimer(
         putBoolean(KEY_FADE, options.fade)
     }
 
-    private fun changed() {
+    /** [savedAt]: when the timer last changed; a restore keeps the time of the change before it. */
+    private fun changed(savedAt: Long = wallClock()) {
         update()
         val c = countdown
         store.save(Saved(options, when (c) {
-            is Countdown.Time -> SavedTimer(TYPE_TIME, wallClock() + (c.deadline - clock()), 0, wallClock())
-            is Countdown.Songs -> SavedTimer(TYPE_SONGS, 0L, c.left, wallClock())
+            is Countdown.Time -> SavedTimer(TYPE_TIME, wallClock() + (c.deadline - clock()), 0, savedAt, bootCount())
+            is Countdown.Songs -> SavedTimer(TYPE_SONGS, 0L, c.left, savedAt, bootCount())
             null -> null
         }))
         onChange(state())
@@ -218,7 +226,7 @@ internal class SleepTimer(
         override fun load(): Saved = Saved(
             Options(prefs.getBoolean("finish_song", false), prefs.getBoolean("fade", false)),
             prefs.getString("type", null)?.let {
-                SavedTimer(it, prefs.getLong("wall_deadline", 0L), prefs.getInt("songs_left", 0), prefs.getLong("saved_at", 0L))
+                SavedTimer(it, prefs.getLong("wall_deadline", 0L), prefs.getInt("songs_left", 0), prefs.getLong("saved_at", 0L), prefs.getInt("boot", -1))
             },
         )
 
@@ -227,8 +235,8 @@ internal class SleepTimer(
                 putBoolean("finish_song", saved.options.finishSong)
                 putBoolean("fade", saved.options.fade)
                 val t = saved.timer
-                if (t == null) remove("type").remove("wall_deadline").remove("songs_left").remove("saved_at")
-                else putString("type", t.type).putLong("wall_deadline", t.wallDeadline).putInt("songs_left", t.songsLeft).putLong("saved_at", t.savedAt)
+                if (t == null) remove("type").remove("wall_deadline").remove("songs_left").remove("saved_at").remove("boot")
+                else putString("type", t.type).putLong("wall_deadline", t.wallDeadline).putInt("songs_left", t.songsLeft).putLong("saved_at", t.savedAt).putInt("boot", t.boot)
             }
         }
     }
