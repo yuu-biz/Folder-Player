@@ -45,6 +45,8 @@ class PlaylistStore(private val playlistsDir: File) {
 
     private val gson = Gson()
     private val loaded = HashMap<String, List<PlaylistItem>>()
+    // Deleted lists whose file may still be on disk until the writer gets to it.
+    private val deleted = HashSet<String>()
     init { if (!playlistsDir.exists()) playlistsDir.mkdirs() }
     private val metadataFile = File(playlistsDir, "metadata.json")
 
@@ -52,6 +54,8 @@ class PlaylistStore(private val playlistsDir: File) {
     private var playlistMetadata: MutableMap<String, String> = mutableMapOf("default" to "Default")
 
     init {
+        // Another store of this process (the migration, the player of an earlier screen) may still be writing the files.
+        flush()
         loadMetadata()
     }
 
@@ -100,6 +104,7 @@ class PlaylistStore(private val playlistsDir: File) {
     }
 
     fun getPlaylist(id: String): Playlist? {
+        if (id in deleted) return null
         loaded[id]?.let { return Playlist(id, playlistMetadata[id] ?: id, it) }
         val file = File(playlistsDir, "$id.fpl")
         if (!file.exists()) return null
@@ -115,6 +120,7 @@ class PlaylistStore(private val playlistsDir: File) {
         val file = File(playlistsDir, "${playlist.id}.fpl")
         val items = playlist.items.toList()
         loaded[playlist.id] = items
+        deleted.remove(playlist.id)
         write { writeTextAtomically(file, gson.toJson(PlaylistFile(VERSION, items))) }
         playlistMetadata[playlist.id] = playlist.name
         saveMetadata()
@@ -138,6 +144,7 @@ class PlaylistStore(private val playlistsDir: File) {
         if (id == "default") return
         val file = File(playlistsDir, "$id.fpl")
         loaded.remove(id)
+        deleted.add(id)
         write { file.delete() }
         playlistMetadata.remove(id)
         saveMetadata()

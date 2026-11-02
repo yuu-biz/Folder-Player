@@ -150,7 +150,7 @@ class PlayRequestRaceTest : ServiceTestBase() {
     /** The restore of the last session reads the slow source when the app starts; the user plays something else. */
     @Test fun slowRestoreThenFolder() {
         main { vm.dismissSession() }
-        PlaybackPreferences(Fx.ctx).savePlaybackState(SourceRef(slow, "/A"), SourceRef(slow, "/A/a2.flac").toUriString(), 5_000)
+        PlaybackPreferences(Fx.ctx).saveQueue(null, SourceRef(slow, "/A"), SourceRef(slow, "/A/a2.flac").toUriString(), 5_000, 1)
         // A new UI (cold start) connects to an empty player and starts the restore.
         main { androidx.lifecycle.ViewModel::class.java.getDeclaredMethod("onCleared").apply { isAccessible = true }.invoke(vm) }
         main { vm = PlayerViewModel(); vm.initializeController(Fx.ctx) }

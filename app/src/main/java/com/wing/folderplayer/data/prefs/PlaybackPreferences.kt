@@ -41,13 +41,14 @@ class PlaybackPreferences(context: Context) {
     private val prefs = context.getSharedPreferences("playback_prefs", Context.MODE_PRIVATE)
     private val gson = Gson()
 
-    /** [index]: the queue position of [mediaId] (-1: unknown, the one saved before is kept). */
-    fun savePlaybackState(folder: SourceRef?, mediaId: String?, position: Long, index: Int = -1) {
+    /** Where the queue is ([getSavedQueue]): the list [playlistId], the folder of the song, the song at [index] and the position in it. */
+    fun saveQueue(playlistId: String?, folder: SourceRef?, mediaId: String, position: Long, index: Int) {
         prefs.edit().apply {
+            if (playlistId != null) putString("queue_playlist_id", playlistId) else remove("queue_playlist_id")
             if (folder != null) putString("folder_ref", folder.toUriString()) else remove("folder_ref")
             putString("last_media_id", mediaId)
             putLong("last_position", position)
-            if (index >= 0) putInt("queue_index", index)
+            putInt("queue_index", index)
             apply()
         }
     }
