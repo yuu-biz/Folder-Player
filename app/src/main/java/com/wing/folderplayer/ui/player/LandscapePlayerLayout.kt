@@ -207,7 +207,7 @@ fun LandscapeLeftControlPanel(
                 modifier = Modifier
                     .size(size)
                     .aspectRatio(1f)
-                    .coverChange(uiState.coverUri to uiState.coverFallback) { direction }
+                    .coverChange(uiState.currentMediaId) { direction }
                     .sharedCover(transition, cornerPx = { with(density) { 12.dp.toPx() } }, elevationPx = { with(density) { 12.dp.toPx() } })
             ) {
                 PlayerCover(uiState, viewModel, transition)

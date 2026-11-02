@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -166,9 +167,40 @@ fun PlayerCover(uiState: PlayerUiState, viewModel: PlayerViewModel, transition: 
         FullCover(
             uiState, transition,
             Modifier.fillMaxSize()
-                .swipeToSkip(onNext = { viewModel.next() }, onPrevious = { viewModel.previous() })
+                .swipeToSkip(uiState.currentMediaId, onNext = { viewModel.next() }, onPrevious = { viewModel.previous() })
                 .doubleTapToSkip(taps, { uiState.skipSeconds }) { viewModel.skipBy(it) },
         )
         SkipTapMark(taps)
+        TrackNumberMark(viewModel, uiState.playlist.size)
     }
+}
+
+/**
+ * "4 / 12" at the foot of the cover for a moment after the track changes: songs of one album share the picture, and
+ * the number tells that the song moved on. Not shown when the player opens.
+ */
+@Composable
+private fun BoxScope.TrackNumberMark(viewModel: PlayerViewModel, count: Int) {
+    val position by viewModel.queuePosition.collectAsState()
+    var shownFor by remember { mutableIntStateOf(position) }
+    val alpha = remember { Animatable(0f) }
+    LaunchedEffect(position) {
+        if (position < 0 || position == shownFor) return@LaunchedEffect
+        shownFor = position
+        alpha.animateTo(1f, tween(150))
+        delay(1200)
+        alpha.animateTo(0f, tween(400))
+    }
+    if (count < 2 || shownFor < 0) return
+    Text(
+        "${shownFor + 1} / $count",
+        color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .padding(bottom = 16.dp)
+            .graphicsLayer { this.alpha = alpha.value }
+            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50))
+            .padding(horizontal = 14.dp, vertical = 6.dp)
+            .testTag("track_number_mark"),
+    )
 }
