@@ -442,4 +442,7 @@
     <string name="player_equalizer">イコライザー</string>
     <string name="player_equalizer_hint">端末のイコライザーを開きます</string>
     <string name="player_equalizer_none">この端末にはイコライザーの画面がありません。</string>
+    <string name="browser_replace_remote_title">リモートのお気に入りを上書きしますか？</string>
+    <string name="browser_replace_remote_text">「%1$s」のお気に入りファイル（%2$s）を、この端末のお気に入りで上書きします。そのファイルにしかないお気に入り（ほかの端末で追加したものなど）は消えます。</string>
+    <string name="browser_replace_remote_confirm">上書き</string>
 </resources>

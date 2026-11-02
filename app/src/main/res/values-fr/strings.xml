@@ -472,4 +472,7 @@
     <string name="player_equalizer">Égaliseur</string>
     <string name="player_equalizer_hint">Ouvre l\'égaliseur du téléphone</string>
     <string name="player_equalizer_none">Ce téléphone n\'a pas d\'écran d\'égaliseur.</string>
+    <string name="browser_replace_remote_title">Remplacer les favoris distants ?</string>
+    <string name="browser_replace_remote_text">Le fichier de favoris de « %1$s » (%2$s) est remplacé par les favoris de cet appareil. Les favoris qui ne sont que dans ce fichier, par exemple ajoutés sur un autre appareil, sont perdus.</string>
+    <string name="browser_replace_remote_confirm">Remplacer</string>
 </resources>
