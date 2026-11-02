@@ -160,7 +160,8 @@ class NetworkRetryController(
         }
     }
 
-    private fun cancel(why: String) {
+    /** Ends the retries (the user stopped them, paused or changed the track); nothing happens when none was needed. */
+    fun cancel(why: String) {
         pending?.let {
             handler.removeCallbacks(it)
             PlaybackLog.record(PlaybackEventKind.RETRY_CANCELLED, "$why, retry #$attempt was pending")

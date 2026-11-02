@@ -58,12 +58,12 @@ class MusicService : MediaLibraryService() {
     private lateinit var diagnostics: com.wing.folderplayer.playback.PlaybackDiagnostics
     private lateinit var resume: ResumeTracker
 
-    /** Sleep timer commands (START / CANCEL / GET) and "retry now" from the app's screens, on top of the default commands. */
+    /** Sleep timer commands (START / CANCEL / GET) and "retry now" / "stop retrying" from the app's screens, on top of the default commands. */
     private inner class SessionCallback : MediaLibrarySession.Callback {
         override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
             val accepted = super.onConnect(session, controller)
             val commands = accepted.availableSessionCommands.buildUpon()
-                .add(SleepTimer.COMMAND_START).add(SleepTimer.COMMAND_CANCEL).add(SleepTimer.COMMAND_GET).add(COMMAND_RETRY_NOW)
+                .add(SleepTimer.COMMAND_START).add(SleepTimer.COMMAND_CANCEL).add(SleepTimer.COMMAND_GET).add(COMMAND_RETRY_NOW).add(COMMAND_STOP_RETRY)
                 .build()
             return MediaSession.ConnectionResult.accept(commands, accepted.availablePlayerCommands)
         }
@@ -76,6 +76,8 @@ class MusicService : MediaLibraryService() {
         ): ListenableFuture<SessionResult> {
             when (customCommand.customAction) {
                 ACTION_RETRY_NOW -> { retry.retryNow(); return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS)) }
+                // A pause does not end a retry of a player that was paused already (no change of playWhenReady to see).
+                ACTION_STOP_RETRY -> { retry.cancel("stopped by the user"); return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS)) }
                 SleepTimer.ACTION_START -> sleepTimer.start(args.getString(SleepTimer.ARG_TYPE), args.getInt(SleepTimer.ARG_VALUE))
                 SleepTimer.ACTION_CANCEL -> sleepTimer.cancel()
                 SleepTimer.ACTION_GET -> Unit
@@ -353,6 +355,8 @@ class MusicService : MediaLibraryService() {
 
         const val ACTION_RETRY_NOW = "com.wing.folderplayer.retry.NOW"
         val COMMAND_RETRY_NOW = SessionCommand(ACTION_RETRY_NOW, Bundle.EMPTY)
+        const val ACTION_STOP_RETRY = "com.wing.folderplayer.retry.STOP"
+        val COMMAND_STOP_RETRY = SessionCommand(ACTION_STOP_RETRY, Bundle.EMPTY)
 
         /** Running instance, for instrumentation tests only (the shell cannot send AUDIO_BECOMING_NOISY on API 34+). */
         @Volatile internal var current: MusicService? = null

@@ -6,6 +6,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutorService
 
 class SavedQueueTest {
     @get:Rule val tmpDir = TemporaryFolder()
@@ -43,14 +45,42 @@ class SavedQueueTest {
         assertEquals(listOf("default.fpl", "metadata.json"), tmpDir.root.list()!!.sorted())
     }
 
-    @Test fun aDeletedListStaysDeletedAfterAWriteStillPending() {
+    /** Keeps the store's writer busy until the latch returned is released: writes made meanwhile are pending. */
+    private fun holdWriter(): CountDownLatch {
+        val writer = PlaylistStore::class.java.getDeclaredField("writer").apply { isAccessible = true }.get(null) as ExecutorService
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        writer.execute { started.countDown(); release.await() }
+        started.await()
+        return release
+    }
+
+    @Test fun aDeletedListStaysDeletedWhileItsFileIsStillOnDisk() {
         val store = PlaylistStore(tmpDir.root)
         val id = store.createPlaylist("Mine")!!
-        store.appendToPlaylist(id, List(2_000) { item("t$it") })
-        store.deletePlaylist(id)
-        assertNull(store.getPlaylist(id))
         PlaylistStore.flush()
+        val release = holdWriter()
+        store.deletePlaylist(id)
+        try {
+            assertNull(store.getPlaylist(id))
+        } finally {
+            release.countDown()
+        }
+        PlaylistStore.flush()
+        assertNull(store.getPlaylist(id))
         assertEquals(false, File(tmpDir.root, "$id.fpl").exists())
         assertEquals(listOf("Default"), PlaylistStore(tmpDir.root).getAllPlaylists().map { it.name })
+    }
+
+    @Test fun aNewStoreReadsTheChangesStillBeingWritten() {
+        val store = PlaylistStore(tmpDir.root)
+        val release = holdWriter()
+        store.createPlaylist("Mine")
+        var second: PlaylistStore? = null
+        val reader = Thread { second = PlaylistStore(tmpDir.root) }.apply { start() }
+        Thread.sleep(200)
+        release.countDown()
+        reader.join(5_000)
+        assertEquals(setOf("Default", "Mine"), second!!.getAllPlaylists().map { it.name }.toSet())
     }
 }
