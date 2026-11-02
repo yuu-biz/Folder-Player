@@ -290,7 +290,6 @@
     <string name="player_repeat">Ripeti</string>
     <string name="player_timer_mins">min</string>
     <string name="player_timer_songs">brani</string>
-    <string name="player_timer_reset">Azzera</string>
     <string name="player_album_discovery">Informazioni album</string>
     <string name="player_artist_discovery">Informazioni artista</string>
     <string name="player_no_info">Nessuna informazione disponibile.</string>
@@ -466,4 +465,8 @@
     <string name="browser_delete_source_text_network">«%1$s» viene tolta dall\'elenco delle sorgenti e la password salvata viene eliminata. I file sul server non vengono eliminati.</string>
     <string name="player_timer_stop_after">Stop tra</string>
     <string name="settings_about_copyright">Copyright © 2026 Wyvern2000. All rights reserved.</string>
+    <string name="player_timer_start">Avvia</string>
+    <string name="player_timer_off">Disattiva il timer</string>
+    <string name="player_timer_finish_song">Allo scadere, finisci il brano in corso</string>
+    <string name="player_timer_fade">Abbassa il volume negli ultimi 30 secondi</string>
 </resources>

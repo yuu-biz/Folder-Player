@@ -290,7 +290,6 @@
     <string name="player_repeat">Répéter</string>
     <string name="player_timer_mins">min</string>
     <string name="player_timer_songs">morceaux</string>
-    <string name="player_timer_reset">Réinitialiser</string>
     <string name="player_album_discovery">Infos sur l\'album</string>
     <string name="player_artist_discovery">Infos sur l\'artiste</string>
     <string name="player_no_info">Aucune information disponible.</string>
@@ -466,4 +465,8 @@
     <string name="browser_delete_source_text_network">« %1$s » est retirée de la liste des sources et son mot de passe enregistré est supprimé. Les fichiers du serveur ne sont pas supprimés.</string>
     <string name="player_timer_stop_after">Arrêt dans</string>
     <string name="settings_about_copyright">Copyright © 2026 Wyvern2000. All rights reserved.</string>
+    <string name="player_timer_start">Démarrer</string>
+    <string name="player_timer_off">Arrêter la minuterie</string>
+    <string name="player_timer_finish_song">À l\'heure, finir le morceau en cours</string>
+    <string name="player_timer_fade">Baisser le son sur les 30 dernières secondes</string>
 </resources>

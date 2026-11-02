@@ -328,9 +328,11 @@ fun LandscapeLeftControlPanel(
 
              Row(
                  modifier = Modifier.fillMaxWidth(),
-                 horizontalArrangement = Arrangement.SpaceBetween
+                 horizontalArrangement = Arrangement.SpaceBetween,
+                 verticalAlignment = Alignment.CenterVertically
              ) {
                  ScrubTime(scrub, sliderPosition, uiState.currentPosition, uiState.duration, MaterialTheme.typography.labelSmall, ::formatTimeLs)
+                 SleepTimerChip(uiState, viewModel)
                  Text(formatTimeLs(uiState.duration), color = Color.White.copy(alpha = 0.75f), style = MaterialTheme.typography.labelSmall)
              }
         }

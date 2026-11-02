@@ -79,8 +79,7 @@ fun PlaylistSheetContent(
             if (showTimerDialog) {
                 TimerDialog(
                     uiState = uiState,
-                    onStart = { type, value -> viewModel.startSleepTimer(type, value) },
-                    onReset = { viewModel.resetSleepTimer() },
+                    viewModel = viewModel,
                     onDismiss = { showTimerDialog = false }
                 )
             }
@@ -298,107 +297,166 @@ fun DeletePlaylistDialog(playlist: Playlist, viewModel: PlayerViewModel, onDismi
     )
 }
 
+/**
+ * Sets or turns off the sleep timer: minutes (presets, or the slider in steps of 5) or songs, and the options. While
+ * a timer runs it shows what is left and can turn it off; the values and options are not changed then.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TimerDialog(
     uiState: PlayerUiState,
-    onStart: (TimerType, Int) -> Unit,
-    onReset: () -> Unit,
+    viewModel: PlayerViewModel,
     onDismiss: () -> Unit
 ) {
+    val active = uiState.sleepTimerActive
     var selectedMins by remember { mutableStateOf(if (uiState.sleepTimerType == TimerType.TIME) uiState.sleepTimerValue.toFloat() else 0f) }
     var selectedSongs by remember { mutableStateOf(if (uiState.sleepTimerType == TimerType.SONGS) uiState.sleepTimerValue.toFloat() else 0f) }
     var lastInteractedType by remember { mutableStateOf(uiState.sleepTimerType) }
-
-    // If active, show current countdown from uiState. If not, show what sliders represent.
-    val displayLabel = if (uiState.sleepTimerActive) timerLabel(uiState.sleepTimerType, uiState.sleepTimerValue) else {
-        timerLabel(lastInteractedType, if (lastInteractedType == TimerType.TIME) selectedMins.toInt() else selectedSongs.toInt())
+    var finishSong by remember { mutableStateOf(uiState.sleepTimerFinishSong) }
+    var fade by remember { mutableStateOf(uiState.sleepTimerFade) }
+    val selectedValue = if (lastInteractedType == TimerType.TIME) selectedMins.toInt() else selectedSongs.toInt()
+    fun pickMinutes(minutes: Float) {
+        selectedMins = minutes
+        if (minutes > 0) { selectedSongs = 0f; lastInteractedType = TimerType.TIME }
     }
+
+    val displayLabel = if (active) timerLabel(uiState.sleepTimerType, uiState.sleepTimerValue) else timerLabel(lastInteractedType, selectedValue)
+    // Tick marks of 24 / 50 steps would only be noise on a slider this short.
+    val sliderColors = SliderDefaults.colors(activeTickColor = Color.Transparent, inactiveTickColor = Color.Transparent)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = null,
+        title = { Text(stringResource(R.string.player_sleep_timer)) },
         text = {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Row(verticalAlignment = Alignment.Bottom) {
-                    val statusColor = if (uiState.sleepTimerActive) MaterialTheme.colorScheme.primary else Color.White
                     Text(
                         stringResource(R.string.player_timer_stop_after),
                         style = MaterialTheme.typography.titleMedium,
-                        color = if (uiState.sleepTimerActive) statusColor else Color.White.copy(alpha = 0.6f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(end = 6.dp, bottom = 6.dp)
                     )
                     Text(
                         displayLabel,
                         style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.Bold,
-                        color = statusColor
+                        color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.testTag("timer_label"),
                     )
                 }
-                
-                Spacer(modifier = Modifier.height(32.dp))
-                
+                if (active) {
+                    TextButton(onClick = { viewModel.resetSleepTimer(); onDismiss() }, modifier = Modifier.testTag("timer_off")) {
+                        Text(stringResource(R.string.player_timer_off), color = MaterialTheme.colorScheme.error)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    for (preset in TIMER_PRESET_MINUTES) {
+                        FilterChip(
+                            selected = !active && lastInteractedType == TimerType.TIME && selectedMins.toInt() == preset,
+                            enabled = !active,
+                            onClick = { pickMinutes(preset.toFloat()) },
+                            label = { Text(timerLabel(TimerType.TIME, preset)) },
+                            modifier = Modifier.testTag("timer_preset_$preset"),
+                        )
+                    }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Slider(
                         value = selectedMins,
-                        enabled = !uiState.sleepTimerActive,
-                        onValueChange = { 
-                            selectedMins = it
-                            if (it > 0) {
-                                selectedSongs = 0f
-                                lastInteractedType = TimerType.TIME 
-                            }
-                        },
-                        valueRange = 0f..99f,
+                        enabled = !active,
+                        onValueChange = { pickMinutes(it) },
+                        valueRange = 0f..TIMER_MAX_MINUTES.toFloat(),
+                        steps = TIMER_MAX_MINUTES / 5 - 1,
+                        colors = sliderColors,
                         modifier = Modifier.weight(1f)
                     )
-                    Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_timer_mins), modifier = Modifier.width(44.dp).padding(start = 8.dp), style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.player_timer_mins), modifier = Modifier.width(44.dp).padding(start = 8.dp), style = MaterialTheme.typography.bodySmall)
                 }
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Slider(
                         value = selectedSongs,
-                        enabled = !uiState.sleepTimerActive,
-                        onValueChange = { 
+                        enabled = !active,
+                        onValueChange = {
                             selectedSongs = it
-                            if (it > 0) {
-                                selectedMins = 0f
-                                lastInteractedType = TimerType.SONGS 
-                            }
+                            if (it > 0) { selectedMins = 0f; lastInteractedType = TimerType.SONGS }
                         },
-                        valueRange = 0f..50f,
+                        valueRange = 0f..TIMER_MAX_SONGS.toFloat(),
+                        steps = TIMER_MAX_SONGS - 1,
+                        colors = sliderColors,
                         modifier = Modifier.weight(1f)
                     )
-                    Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_timer_songs), modifier = Modifier.width(44.dp).padding(start = 8.dp), style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.player_timer_songs), modifier = Modifier.width(44.dp).padding(start = 8.dp), style = MaterialTheme.typography.bodySmall)
                 }
+
+                TimerOption(stringResource(R.string.player_timer_finish_song), finishSong, enabled = !active, tag = "timer_finish_song") { finishSong = it }
+                TimerOption(stringResource(R.string.player_timer_fade), fade, enabled = !active, tag = "timer_fade") { fade = it }
             }
         },
         confirmButton = {
-            TextButton(onClick = { 
-                if (uiState.sleepTimerActive) {
-                    onDismiss()
-                } else {
-                    val value = if (lastInteractedType == TimerType.TIME) selectedMins.toInt() else selectedSongs.toInt()
-                    onStart(lastInteractedType, value)
-                    onDismiss()
-                }
-            }) { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.common_ok)) }
+            if (active) {
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_ok)) }
+            } else {
+                TextButton(
+                    onClick = { viewModel.startSleepTimer(lastInteractedType, selectedValue, finishSong, fade); onDismiss() },
+                    enabled = selectedValue > 0,
+                    modifier = Modifier.testTag("timer_start"),
+                ) { Text(stringResource(R.string.player_timer_start)) }
+            }
         },
         dismissButton = {
-            TextButton(onClick = { 
-                onReset()
-                selectedMins = 0f
-                selectedSongs = 0f
-                onDismiss()
-            }) { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_timer_reset)) }
+            if (!active) TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
         },
-        containerColor = Color(0xFF1E1E1E),
-        textContentColor = Color.White
     )
+}
+
+@Composable
+private fun TimerOption(label: String, checked: Boolean, enabled: Boolean, tag: String, onChange: (Boolean) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().clickable(enabled = enabled) { onChange(!checked) }.padding(vertical = 4.dp).testTag(tag),
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
+    }
+}
+
+private val TIMER_PRESET_MINUTES = listOf(15, 30, 45, 60, 90)
+private const val TIMER_MAX_MINUTES = 120
+private const val TIMER_MAX_SONGS = 50
+
+/** What is left of a running sleep timer, for the full player; a tap opens [TimerDialog]. Nothing while none runs. */
+@Composable
+fun SleepTimerChip(uiState: PlayerUiState, viewModel: PlayerViewModel, modifier: Modifier = Modifier) {
+    if (!uiState.sleepTimerActive) return
+    var show by remember { mutableStateOf(false) }
+    if (show) TimerDialog(uiState, viewModel, onDismiss = { show = false })
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+            .clickable { show = true }
+            .background(Color.White.copy(alpha = 0.12f))
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+            .testTag("player_timer_chip"),
+    ) {
+        Icon(
+            Icons.Default.AccessAlarm,
+            contentDescription = stringResource(R.string.player_sleep_timer),
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(14.dp),
+        )
+        Text(
+            timerLabel(uiState.sleepTimerType, uiState.sleepTimerValue),
+            color = Color.White.copy(alpha = 0.85f),
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(start = 4.dp),
+        )
+    }
 }
 
 /** The button beside the sleep timer that opens [PlaybackOptionsDialog]; lit while the speed is not 1× or left / right are swapped. */

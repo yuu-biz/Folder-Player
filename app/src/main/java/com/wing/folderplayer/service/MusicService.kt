@@ -78,7 +78,10 @@ class MusicService : MediaLibraryService() {
                 ACTION_RETRY_NOW -> { retry.retryNow(); return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS)) }
                 // A pause does not end a retry of a player that was paused already (no change of playWhenReady to see).
                 ACTION_STOP_RETRY -> { retry.cancel("stopped by the user"); return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS)) }
-                SleepTimer.ACTION_START -> sleepTimer.start(args.getString(SleepTimer.ARG_TYPE), args.getInt(SleepTimer.ARG_VALUE))
+                SleepTimer.ACTION_START -> sleepTimer.start(
+                    args.getString(SleepTimer.ARG_TYPE), args.getInt(SleepTimer.ARG_VALUE),
+                    SleepTimer.Options(args.getBoolean(SleepTimer.ARG_FINISH_SONG), args.getBoolean(SleepTimer.ARG_FADE)),
+                )
                 SleepTimer.ACTION_CANCEL -> sleepTimer.cancel()
                 SleepTimer.ACTION_GET -> Unit
                 else -> return super.onCustomCommand(session, controller, customCommand, args)
@@ -264,7 +267,10 @@ class MusicService : MediaLibraryService() {
             .setSessionActivity(pendingIntent)
             .setBitmapLoader(SourceBitmapLoader(DataSourceBitmapLoader(this)))
             .build()
-        sleepTimer = SleepTimer(player, Handler(Looper.getMainLooper()), { state -> mediaSession.setSessionExtras(state) }).also { it.attach() }
+        sleepTimer = SleepTimer(
+            player, SleepTimer.handlerAlarm(Handler(Looper.getMainLooper())), SleepTimer.PrefsStore(applicationContext),
+            { state -> mediaSession.setSessionExtras(state) },
+        ).also { it.attach() }
 
         setMediaNotificationProvider(object : DefaultMediaNotificationProvider(this) {
             // A MediaItem only has a display title when tag titles are used and the file has no title tag.
