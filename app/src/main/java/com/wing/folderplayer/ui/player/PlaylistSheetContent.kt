@@ -159,7 +159,7 @@ fun PlaylistSheetContent(
                         DropdownMenuItem(
                             text = {
                                 Text(
-                                    "+ NEW LIST",
+                                    stringResource(R.string.player_new_list),
                                     color = MaterialTheme.colorScheme.primary,
                                     style = MaterialTheme.typography.labelLarge
                                 )
@@ -325,10 +325,10 @@ fun TimerDialog(
                 Row(verticalAlignment = Alignment.Bottom) {
                     val statusColor = if (uiState.sleepTimerActive) MaterialTheme.colorScheme.primary else Color.White
                     Text(
-                        "Stop after ",
+                        stringResource(R.string.player_timer_stop_after),
                         style = MaterialTheme.typography.titleMedium,
                         color = if (uiState.sleepTimerActive) statusColor else Color.White.copy(alpha = 0.6f),
-                        modifier = Modifier.padding(bottom = 6.dp)
+                        modifier = Modifier.padding(end = 6.dp, bottom = 6.dp)
                     )
                     Text(
                         displayLabel,

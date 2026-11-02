@@ -110,7 +110,6 @@ data class PlayerUiState(
     val sleepTimerActive: Boolean = false,
     val sleepTimerValue: Int = 0,
     val sleepTimerType: TimerType = TimerType.TIME,
-    val sleepTimerLabel: String = "0 min",
 
     /** Last playback error shown to the user (e.g. "server cannot seek"). */
     val playbackError: String? = null,
@@ -626,7 +625,7 @@ class PlayerViewModel : ViewModel() {
         if (!state.sleepTimerActive || state.sleepTimerType != TimerType.TIME) return
         val remainingMins = sleepTimerMinutesLeft()
         if (remainingMins != state.sleepTimerValue) {
-            _uiState.value = _uiState.value.copy(sleepTimerValue = remainingMins, sleepTimerLabel = "$remainingMins min")
+            _uiState.value = _uiState.value.copy(sleepTimerValue = remainingMins)
         }
     }
 
@@ -640,7 +639,7 @@ class PlayerViewModel : ViewModel() {
         val active = state.getBoolean(t.KEY_ACTIVE)
         sleepTimerDeadlineMs = state.getLong(t.KEY_DEADLINE)
         if (!active) {
-            _uiState.value = _uiState.value.copy(sleepTimerActive = false, sleepTimerValue = 0, sleepTimerLabel = "0 min")
+            _uiState.value = _uiState.value.copy(sleepTimerActive = false, sleepTimerValue = 0)
             return
         }
         val type = if (state.getString(t.KEY_TYPE) == t.TYPE_SONGS) TimerType.SONGS else TimerType.TIME
@@ -649,7 +648,6 @@ class PlayerViewModel : ViewModel() {
             sleepTimerActive = true,
             sleepTimerType = type,
             sleepTimerValue = value,
-            sleepTimerLabel = if (type == TimerType.TIME) "$value min" else "$value songs",
         )
     }
 
@@ -668,12 +666,10 @@ class PlayerViewModel : ViewModel() {
             return
         }
 
-        val label = if (type == TimerType.TIME) "$value min" else "$value songs"
         _uiState.value = _uiState.value.copy(
             sleepTimerActive = true,
             sleepTimerType = type,
             sleepTimerValue = value,
-            sleepTimerLabel = label
         )
         if (type == TimerType.TIME) sleepTimerDeadlineMs = android.os.SystemClock.elapsedRealtime() + value * 60_000L
         val t = com.wing.folderplayer.service.SleepTimer
@@ -687,7 +683,6 @@ class PlayerViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(
             sleepTimerActive = false,
             sleepTimerValue = 0,
-            sleepTimerLabel = "0 min"
         )
         sleepTimerDeadlineMs = 0L
         sendSleepTimerCommand(com.wing.folderplayer.service.SleepTimer.COMMAND_CANCEL, android.os.Bundle.EMPTY)

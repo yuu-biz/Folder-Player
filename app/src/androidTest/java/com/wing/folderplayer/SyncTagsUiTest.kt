@@ -32,6 +32,10 @@ class SyncTagsUiTest : UiTestBase() {
     private fun <T> onUi(block: () -> T): T { var r: Any? = null; compose.runOnUiThread { r = block() }; @Suppress("UNCHECKED_CAST") return r as T }
     private val local = SourceRegistry.LOCAL_INTERNAL_ID
 
+    /** The fixed text of [id] before its first argument, which a shown message starts with whatever the counts or error. */
+    private fun lead(id: Int, vararg args: Any): String = str(id, *args).substringBefore(args.first().toString())
+    private fun shows(lead: String) = browser.uiState.value.message?.startsWith(lead) == true
+
     /** Opens the browser's ⋮ menu on the source list and starts "Sync favorites". */
     private fun syncFromMenu() {
         toBrowser()
@@ -57,7 +61,7 @@ class SyncTagsUiTest : UiTestBase() {
 
         // 1) First sync (from the menu) creates the remote file in the documented format.
         syncFromMenu()
-        until(30_000, "first sync") { browser.uiState.value.message?.contains("synced") == true }
+        until(30_000, "first sync") { shows(lead(R.string.sync_done, 0, 0)) }
         val remote1 = FavoritesCodec.decode(fs.readText(syncPath))
         assertEquals(1, remote1.version)
         assertEquals(listOf("/Music/fixture/Album-B"), remote1.items.map { it.path })
@@ -68,14 +72,14 @@ class SyncTagsUiTest : UiTestBase() {
         val other = FavoriteItem(type = FavoriteItem.TYPE_SONG, sourceId = local, path = "/Music/fixture/Album-A/02 track.mp3", name = "02 track.mp3", timestamp = System.currentTimeMillis())
         fs.write(syncPath, FavoritesCodec.encode(FavoritesData(1, remote1.items + other)).toByteArray(), overwrite = true)
         onUi { browser.syncFavorites() }
-        until(30_000, "merge sync") { browser.uiState.value.message?.contains("synced") == true }
+        until(30_000, "merge sync") { shows(lead(R.string.sync_done, 0, 0)) }
         assertEquals(setOf("/Music/fixture/Album-B", "/Music/fixture/Album-A/02 track.mp3"), browser.uiState.value.favorites.map { it.path }.toSet())
         onUi { browser.clearMessage() }
 
         // 3) Broken remote JSON is reported and left untouched.
         fs.write(syncPath, "{ this is not json".toByteArray(), overwrite = true)
         onUi { browser.syncFavorites() }
-        until(30_000, "broken remote reported") { browser.uiState.value.message?.contains("broken") == true }
+        until(30_000, "broken remote reported") { shows(lead(R.string.sync_remote_broken, "@")) }
         assertEquals("{ this is not json", fs.readText(syncPath))
         assertEquals(2, browser.uiState.value.favorites.size)
         onUi { browser.clearMessage() }
@@ -94,7 +98,7 @@ class SyncTagsUiTest : UiTestBase() {
         val ro = SourceConfig(name = "dav-sync-ro", type = SourceType.WEBDAV, url = u, username = "bob", syncPath = syncPath).also { SourceRegistry.upsert(it, "bobpass") }
         SourceRegistry.remove(dav.id)
         onUi { browser.syncFavorites() }
-        until(30_000, "read-only reported") { browser.uiState.value.message?.contains("read-only") == true }
+        until(30_000, "read-only reported") { shows(lead(R.string.sync_remote_read_only, "@", 0)) }
         assertEquals(3, browser.uiState.value.favorites.size)
         assertEquals(2, FavoritesCodec.decode(SourceRegistry.fileSystem(ro.id).readText(syncPath)).items.size)
         SourceRegistry.remove(ro.id)

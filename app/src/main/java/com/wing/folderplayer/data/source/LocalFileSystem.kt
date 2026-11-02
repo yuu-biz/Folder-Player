@@ -159,7 +159,7 @@ class LocalFileSystem(override val config: SourceConfig, private val context: an
                 tmp.delete()
             }
         } catch (e: java.io.IOException) {
-            throw SourceException.PermissionDenied("cannot write $path (use a SAF folder for write access)", e)
+            throw SourceException.PermissionDenied("cannot write $path", e)
         }
     }
 

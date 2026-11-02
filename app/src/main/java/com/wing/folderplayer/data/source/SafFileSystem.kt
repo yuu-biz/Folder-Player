@@ -38,7 +38,7 @@ class SafFileSystem(override val config: SourceConfig, context: Context) : Sourc
         val cursor = try {
             resolver.query(uri, PROJECTION, null, null, null)
         } catch (e: SecurityException) {
-            throw SourceException.PermissionDenied("SAF permission missing or revoked; pick the folder again", e)
+            throw SourceException.PermissionDenied("no access to this folder any more; pick it again", e)
         } catch (e: IllegalArgumentException) {
             throw SourceException.NotFound("document not found", e)
         } ?: throw SourceException.PermissionDenied("provider returned no cursor")
@@ -63,7 +63,7 @@ class SafFileSystem(override val config: SourceConfig, context: Context) : Sourc
     }
 
     override fun list(path: String): List<MusicFile> {
-        if (!hasPersistedPermission()) throw SourceException.PermissionDenied("SAF permission missing or revoked; pick the folder again")
+        if (!hasPersistedPermission()) throw SourceException.PermissionDenied("no access to this folder any more; pick it again")
         val dir = SourcePath.normalize(path)
         val rows = queryChildren(resolve(dir))
         return rows.map { r ->
@@ -90,7 +90,7 @@ class SafFileSystem(override val config: SourceConfig, context: Context) : Sourc
         return try {
             resolver.openFileDescriptor(uri, "r") ?: throw SourceException.NotFound(path)
         } catch (e: SecurityException) {
-            throw SourceException.PermissionDenied("SAF permission missing or revoked", e)
+            throw SourceException.PermissionDenied("no access to this folder any more", e)
         } catch (e: FileNotFoundException) {
             idCache.remove(SourcePath.normalize(path))
             throw SourceException.NotFound(path, e)
@@ -169,13 +169,13 @@ class SafFileSystem(override val config: SourceConfig, context: Context) : Sourc
             try {
                 DocumentsContract.createDocument(resolver, docUri(parentId), mime, SourcePath.name(p))
             } catch (e: SecurityException) {
-                throw SourceException.PermissionDenied("no write permission for this SAF folder", e)
+                throw SourceException.PermissionDenied("no write permission for this folder", e)
             } ?: throw SourceException.PermissionDenied("provider refused to create ${SourcePath.name(p)}")
         }
         try {
             resolver.openOutputStream(target, "wt")?.use { it.write(data) } ?: throw SourceException.PermissionDenied("cannot open for writing")
         } catch (e: SecurityException) {
-            throw SourceException.PermissionDenied("no write permission for this SAF folder", e)
+            throw SourceException.PermissionDenied("no write permission for this folder", e)
         }
         idCache.remove(p)
     }
@@ -207,7 +207,7 @@ class SafFileSystem(override val config: SourceConfig, context: Context) : Sourc
             }
             return true
         } catch (e: SecurityException) {
-            throw SourceException.PermissionDenied("no write permission for this SAF folder", e)
+            throw SourceException.PermissionDenied("no write permission for this folder", e)
         } catch (e: UnsupportedOperationException) {
             return false
         } finally {
