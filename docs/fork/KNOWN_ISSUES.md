@@ -33,6 +33,8 @@ What a user can run into, in one place. The sections below give the history of e
   length (a stream without one is paused at its end without a fade). After the process ended, a minutes timer comes
   back while its deadline (wall clock) is ahead, a songs timer only within an hour of its last change. The minutes left
   shown in the app are updated while playing. Finish-song, fade and the restore are checked by JVM tests only.
+- **Equalizer**: the entry in the playback options opens the phone's own panel and is left out when the phone has
+  none; effect apps are told the player's audio session when playback starts. Not checked on a device.
 - **Restore** (since 1.9.0): the next start brings back the queue as it was (a folder, a CUE sheet, the songs list, search
   results, favourites, a shuffle across folders, songs added with "Play next" / "Add to queue"), paused at the same
   song and position, with shuffle on or off as it was (Media3 draws a new shuffle order; repeat is not kept). The queue is

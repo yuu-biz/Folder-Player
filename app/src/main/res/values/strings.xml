@@ -468,4 +468,7 @@
     <string name="player_timer_off">Turn off the timer</string>
     <string name="player_timer_finish_song">At the time, let the song finish</string>
     <string name="player_timer_fade">Fade out over the last 30 seconds</string>
+    <string name="player_equalizer">Equalizer</string>
+    <string name="player_equalizer_hint">Opens the phone\'s own equalizer</string>
+    <string name="player_equalizer_none">This phone has no equalizer screen.</string>
 </resources>

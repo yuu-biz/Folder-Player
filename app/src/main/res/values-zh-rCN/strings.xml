@@ -439,4 +439,7 @@
     <string name="player_timer_off">关闭定时</string>
     <string name="player_timer_finish_song">时间到后，播完当前歌曲再停止</string>
     <string name="player_timer_fade">最后 30 秒逐渐调低音量</string>
+    <string name="player_equalizer">均衡器</string>
+    <string name="player_equalizer_hint">打开手机自带的均衡器</string>
+    <string name="player_equalizer_none">此手机没有均衡器界面。</string>
 </resources>

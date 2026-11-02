@@ -439,4 +439,7 @@
     <string name="player_timer_off">關閉定時</string>
     <string name="player_timer_finish_song">時間到後，播完目前的歌曲再停止</string>
     <string name="player_timer_fade">最後 30 秒逐漸調低音量</string>
+    <string name="player_equalizer">等化器</string>
+    <string name="player_equalizer_hint">開啟手機內建的等化器</string>
+    <string name="player_equalizer_none">此手機沒有等化器畫面。</string>
 </resources>
