@@ -59,4 +59,17 @@ class QueueEntriesTest {
             assertEquals("$from->$to", expected, queue.moved(move!!.first, move.second))
         }
     }
+
+    @Test fun anUndoneRemovalPutsTheSongBackAtItsPlaceInTheListAndInTheQueue() {
+        // "x" and "y" are not queued (they cannot play now).
+        val list = listOf("a", "x", "b", "d", "c", "y")
+        val queued = setOf("a", "b", "c", "d")
+        for (removed in list.indices.filter { list[it] in queued }) {
+            val after = list.toMutableList().apply { removeAt(removed) }
+            val entries = QueueEntries(after.indices.filter { after[it] in queued }.toIntArray(), after.size)
+            val queue = after.filter { it in queued }.toMutableList()
+            queue.add(entries.queueIndexForInsert(removed), list[removed])
+            assertEquals("entry $removed", list.filter { it in queued }, queue)
+        }
+    }
 }

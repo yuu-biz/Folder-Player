@@ -133,106 +133,122 @@ fun PlaylistTrackList(uiState: PlayerUiState, viewModel: PlayerViewModel, onPlay
     val reorderLabel = stringResource(R.string.playlist_reorder)
     val moveUpLabel = stringResource(R.string.common_move_up)
     val moveDownLabel = stringResource(R.string.common_move_down)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val snackbar = remember { SnackbarHostState() }
 
-    LazyColumn(
-        state = listState,
-        modifier = modifier.fillMaxSize().testTag("playlist_list"),
-        contentPadding = PaddingValues(bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        itemsIndexed(rows, key = { _, row -> row.id }) { index, row ->
-            val item = row.item
-            val isCurrent = item.matchesMediaId(uiState.currentMediaId)
-            val dragging = draggingId == row.id
+    // Only the last removal can be undone: an older one is no longer at the index it was taken from.
+    fun removeAt(i: Int) {
+        val removed = viewModel.removeFromActivePlaylist(i) ?: return
+        snackbar.currentSnackbarData?.dismiss()
+        scope.launch {
+            val title = removed.item.title.ifBlank { com.wing.folderplayer.data.source.SourcePath.name(removed.item.path) }
+            val result = snackbar.showSnackbar(context.getString(R.string.playlist_removed, title), actionLabel = context.getString(R.string.common_undo))
+            if (result == SnackbarResult.ActionPerformed) viewModel.undoRemove(removed)
+        }
+    }
 
-            val dismissState = rememberDismissState(
-                confirmValueChange = {
-                    if (it == DismissValue.DismissedToStart) {
-                        val i = rows.indexOfFirst { r -> r.id == row.id }
-                        if (i >= 0) viewModel.removeFromActivePlaylist(i)
-                        true
-                    } else false
-                }
-            )
+    Box(modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize().testTag("playlist_list"),
+            contentPadding = PaddingValues(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            itemsIndexed(rows, key = { _, row -> row.id }) { index, row ->
+                val item = row.item
+                val isCurrent = item.matchesMediaId(uiState.currentMediaId)
+                val dragging = draggingId == row.id
 
-            Box(
-                (if (dragging) Modifier.zIndex(1f) else Modifier.animateItemPlacement())
-                    .graphicsLayer {
-                        translationY = if (dragging) dragOffset else 0f
-                        shadowElevation = if (dragging) 8.dp.toPx() else 0f
+                val dismissState = rememberDismissState(
+                    confirmValueChange = {
+                        if (it == DismissValue.DismissedToStart) {
+                            val i = rows.indexOfFirst { r -> r.id == row.id }
+                            if (i >= 0) removeAt(i)
+                            true
+                        } else false
                     }
-                    .semantics {
-                        customActions = listOfNotNull(
-                            if (index > 0) CustomAccessibilityAction(moveUpLabel) { viewModel.moveInActivePlaylist(index, index - 1); true } else null,
-                            if (index < rows.size - 1) CustomAccessibilityAction(moveDownLabel) { viewModel.moveInActivePlaylist(index, index + 1); true } else null,
-                        )
-                    }
-            ) {
-                SwipeToDismiss(
-                    state = dismissState,
-                    directions = if (draggingId == null) setOf(DismissDirection.EndToStart) else emptySet(),
-                    background = {
-                        val color = if (dismissState.dismissDirection == DismissDirection.EndToStart) Color.Red.copy(alpha = 0.3f) else Color.Transparent
-                        Box(Modifier.fillMaxSize().background(color))
-                    },
-                    dismissContent = {
-                        Surface(color = if (dragging) Color(0xFF2A2A2A) else Color.Transparent, modifier = Modifier.fillMaxWidth()) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        val i = rows.indexOfFirst { r -> r.id == row.id }
-                                        if (i >= 0) viewModel.playPlaylistSong(listId, i)
-                                        onPlayed()
+                )
+
+                Box(
+                    (if (dragging) Modifier.zIndex(1f) else Modifier.animateItemPlacement())
+                        .graphicsLayer {
+                            translationY = if (dragging) dragOffset else 0f
+                            shadowElevation = if (dragging) 8.dp.toPx() else 0f
+                        }
+                        .semantics {
+                            customActions = listOfNotNull(
+                                if (index > 0) CustomAccessibilityAction(moveUpLabel) { viewModel.moveInActivePlaylist(index, index - 1); true } else null,
+                                if (index < rows.size - 1) CustomAccessibilityAction(moveDownLabel) { viewModel.moveInActivePlaylist(index, index + 1); true } else null,
+                            )
+                        }
+                ) {
+                    SwipeToDismiss(
+                        state = dismissState,
+                        directions = if (draggingId == null) setOf(DismissDirection.EndToStart) else emptySet(),
+                        background = {
+                            val color = if (dismissState.dismissDirection == DismissDirection.EndToStart) Color.Red.copy(alpha = 0.3f) else Color.Transparent
+                            Box(Modifier.fillMaxSize().background(color))
+                        },
+                        dismissContent = {
+                            Surface(color = if (dragging) Color(0xFF2A2A2A) else Color.Transparent, modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            val i = rows.indexOfFirst { r -> r.id == row.id }
+                                            if (i >= 0) viewModel.playPlaylistSong(listId, i)
+                                            onPlayed()
+                                        }
+                                        // Inside the click: a long press followed by a drag (or a release) is not a tap.
+                                        .reorderGesture(longPress = true, onStart = { startDrag(row.id) }, onDrag = ::dragBy, onEnd = ::endDrag)
+                                        .padding(vertical = 4.dp)
+                                        .testTag("playlist_row_${item.title}"),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(modifier = Modifier.width(40.dp), contentAlignment = Alignment.Center) {
+                                        if (isCurrent) {
+                                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                        } else {
+                                            Text(text = (index + 1).toString(), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.3f))
+                                        }
                                     }
-                                    // Inside the click: a long press followed by a drag (or a release) is not a tap.
-                                    .reorderGesture(longPress = true, onStart = { startDrag(row.id) }, onDrag = ::dragBy, onEnd = ::endDrag)
-                                    .padding(vertical = 4.dp)
-                                    .testTag("playlist_row_${item.title}"),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(modifier = Modifier.width(40.dp), contentAlignment = Alignment.Center) {
-                                    if (isCurrent) {
-                                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                                    } else {
-                                        Text(text = (index + 1).toString(), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.3f))
-                                    }
-                                }
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = item.title,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = if (isCurrent) MaterialTheme.colorScheme.primary else Color.White,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    val artist = item.artist ?: ""
-                                    if (artist.isNotEmpty()) {
+                                    Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = artist,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else Color.White.copy(alpha = 0.5f),
+                                            text = item.title,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = if (isCurrent) MaterialTheme.colorScheme.primary else Color.White,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
+                                        val artist = item.artist ?: ""
+                                        if (artist.isNotEmpty()) {
+                                            Text(
+                                                text = artist,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else Color.White.copy(alpha = 0.5f),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
                                     }
-                                }
-                                // Handle: drag at once, no long press needed.
-                                Box(
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .reorderGesture(longPress = false, onStart = { startDrag(row.id) }, onDrag = ::dragBy, onEnd = ::endDrag)
-                                        .semantics { contentDescription = reorderLabel }
-                                        .testTag("playlist_handle_${item.title}"),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.DragHandle, contentDescription = null, tint = Color.White.copy(alpha = if (dragging) 0.9f else 0.4f))
+                                    // Handle: drag at once, no long press needed.
+                                    Box(
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .reorderGesture(longPress = false, onStart = { startDrag(row.id) }, onDrag = ::dragBy, onEnd = ::endDrag)
+                                            .semantics { contentDescription = reorderLabel }
+                                            .testTag("playlist_handle_${item.title}"),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.DragHandle, contentDescription = null, tint = Color.White.copy(alpha = if (dragging) 0.9f else 0.4f))
+                                    }
                                 }
                             }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
     }
 }

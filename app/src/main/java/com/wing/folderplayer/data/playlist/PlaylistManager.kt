@@ -171,6 +171,11 @@ class PlaylistStore(private val playlistsDir: File) {
         }
     }
 
+    fun insertIntoPlaylist(id: String, index: Int, item: PlaylistItem) {
+        val p = getPlaylist(id) ?: return
+        savePlaylist(p.copy(items = p.items.toMutableList().apply { add(index.coerceIn(0, size), item) }))
+    }
+
     /** Moves the item at [from] to [to] (indices before the move), e.g. after a drag in the playlist. */
     fun moveInPlaylist(id: String, from: Int, to: Int) {
         val p = getPlaylist(id) ?: return

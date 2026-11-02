@@ -472,4 +472,6 @@
     <string name="queue_clear_title">Svuotare la coda?</string>
     <string name="queue_clear_text">Resta solo il brano in riproduzione. Le tue playlist non cambiano.</string>
     <string name="playlist_cap_reached">Al massimo %1$d playlist. Eliminane una per crearne una nuova.</string>
+    <string name="playlist_removed">Rimosso: %1$s</string>
+    <string name="common_undo">Annulla</string>
 </resources>

@@ -1752,12 +1752,32 @@ class PlayerViewModel : ViewModel() {
         }
     }
 
-    fun removeFromActivePlaylist(index: Int) {
+    /** An entry a swipe took out of playlist [listId] at [index], with its queue item when it left the queue too. */
+    class RemovedEntry(val listId: String, val index: Int, val item: PlaylistItem, val queued: MediaItem?)
+
+    /** Removes entry [index] of the shown playlist; the result can put it back ([undoRemove]). */
+    fun removeFromActivePlaylist(index: Int): RemovedEntry? {
         val currentId = _uiState.value.activePlaylistId
-        val items = playlistManager?.getPlaylist(currentId)?.items ?: return
+        val items = playlistManager?.getPlaylist(currentId)?.items ?: return null
+        val item = items.getOrNull(index) ?: return null
         // Removed from the queue as well only when the queue was built from this list (not merely because it is shown).
-        if (index in items.indices) queueEntriesOf(currentId, items)?.queueIndexOf(index)?.let { player?.removeMediaItem(it) }
+        val queued = queueEntriesOf(currentId, items)?.queueIndexOf(index)
+        val removed = queued?.let { q -> player?.getMediaItemAt(q)?.also { player?.removeMediaItem(q) } }
         playlistManager?.removeFromPlaylist(currentId, index)
+        refreshPlaylists()
+        return RemovedEntry(currentId, index, item, removed)
+    }
+
+    /**
+     * Puts a removed entry back at its place in its playlist, and in the queue while the queue is still that list. A
+     * song that was playing does not play again.
+     */
+    fun undoRemove(removed: RemovedEntry) {
+        val manager = playlistManager ?: return
+        val items = manager.getPlaylist(removed.listId)?.items ?: return
+        val at = removed.index.coerceIn(0, items.size)
+        removed.queued?.let { queued -> queueEntriesOf(removed.listId, items)?.let { player?.addMediaItem(it.queueIndexForInsert(at), queued) } }
+        manager.insertIntoPlaylist(removed.listId, at, removed.item)
         refreshPlaylists()
     }
 
