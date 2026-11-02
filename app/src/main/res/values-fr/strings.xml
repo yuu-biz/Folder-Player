@@ -469,4 +469,7 @@
     <string name="player_timer_off">Arrêter la minuterie</string>
     <string name="player_timer_finish_song">À l\'heure, finir le morceau en cours</string>
     <string name="player_timer_fade">Baisser le son sur les 30 dernières secondes</string>
+    <string name="player_equalizer">Égaliseur</string>
+    <string name="player_equalizer_hint">Ouvre l\'égaliseur du téléphone</string>
+    <string name="player_equalizer_none">Ce téléphone n\'a pas d\'écran d\'égaliseur.</string>
 </resources>

@@ -20,6 +20,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import androidx.media3.common.Player
+import android.media.audiofx.AudioEffect
+import kotlinx.coroutines.launch
 import com.wing.folderplayer.R
 import com.wing.folderplayer.data.playlist.Playlist
 
@@ -463,12 +465,32 @@ fun SleepTimerChip(uiState: PlayerUiState, viewModel: PlayerViewModel, modifier:
 @Composable
 fun PlaybackOptionsButton(uiState: PlayerUiState, viewModel: PlayerViewModel) {
     var show by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    val equalizer = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) {}
+    // Many phones have no panel; it is then left out (the manifest lets this app see it).
+    @Suppress("DEPRECATION")
+    val hasEqualizer = remember { context.packageManager.resolveActivity(android.content.Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL), 0) != null }
     if (show) {
         PlaybackOptionsDialog(
             speed = uiState.playbackSpeed,
             swapChannels = uiState.swapChannels,
             onSpeed = viewModel::setPlaybackSpeed,
             onSwapChannels = viewModel::setSwapChannels,
+            onEqualizer = if (!hasEqualizer) null else ({
+                scope.launch {
+                    val session = viewModel.audioSessionId() ?: return@launch
+                    val panel = android.content.Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL)
+                        .putExtra(AudioEffect.EXTRA_AUDIO_SESSION, session)
+                        .putExtra(AudioEffect.EXTRA_PACKAGE_NAME, context.packageName)
+                        .putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
+                    try {
+                        equalizer.launch(panel)
+                    } catch (e: android.content.ActivityNotFoundException) {
+                        android.widget.Toast.makeText(context, R.string.player_equalizer_none, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }),
             onDismiss = { show = false },
         )
     }
@@ -483,7 +505,7 @@ fun PlaybackOptionsButton(uiState: PlayerUiState, viewModel: PlayerViewModel) {
     }
 }
 
-/** Playback speed (0.5× – 2×, the pitch kept) and left / right swapped; both apply at once and are kept. */
+/** Playback speed (0.5× – 2×, the pitch kept) and left / right swapped, both applied at once and kept; and a way to the phone's equaliser. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaybackOptionsDialog(
@@ -492,6 +514,8 @@ fun PlaybackOptionsDialog(
     onSpeed: (Float) -> Unit,
     onSwapChannels: (Boolean) -> Unit,
     onDismiss: () -> Unit,
+    /** Opens the phone's equaliser panel; null when the phone has none. */
+    onEqualizer: (() -> Unit)? = null,
 ) {
     // The slider moves in steps of 0.05; the player follows when the finger lifts (each change rebuilds its audio).
     var shown by remember(speed) { mutableStateOf(speed) }
@@ -539,6 +563,19 @@ fun PlaybackOptionsDialog(
                         )
                     }
                     Switch(checked = swapChannels, onCheckedChange = null)
+                }
+                if (onEqualizer != null) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable { onEqualizer() }.testTag("player_equalizer"),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(stringResource(R.string.player_equalizer), style = MaterialTheme.typography.bodyLarge)
+                            Text(stringResource(R.string.player_equalizer_hint), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+                        }
+                        Icon(Icons.Default.GraphicEq, contentDescription = null)
+                    }
                 }
             }
         },
