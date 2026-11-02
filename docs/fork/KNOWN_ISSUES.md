@@ -46,6 +46,11 @@ What a user can run into, in one place. The sections below give the history of e
   playing, which goes on; the queue becomes "Default" holding it, so a playlist of the user's that it was played from
   keeps its songs. A song swiped out of a playlist can be put back with "Undo" (the last one only; a song that was
   playing does not play again). Not checked on a device (JVM tests only).
+- **Files from other apps**: an audio file opened with this app from a file manager plays alone in the queue, with the
+  title, artist and cover that Media3 reads from its tags (no lyrics file, no folder cover). Android lets the app read it
+  only while the other app's grant lasts, so it is kept in no playlist and the next start restores the session from
+  before it. Only formats Android decodes play (the FFmpeg formats need a source). Guess: leaving the other app for
+  good may end the grant and a later seek fails. Not checked on a device.
 - **Speed and left / right** (1.8.0): kept for the next start; the pitch stays the same (Media3's time stretching, which
   can sound rough at 0.5× and 2×). A DLNA cast plays at normal speed and unswapped (the renderer plays the file).
 - **Cover swipe** (1.8.0): only on the cover of the full player (portrait and landscape), not on the mini player, whose
