@@ -11,7 +11,7 @@ import javax.xml.parsers.DocumentBuilderFactory
 /**
  * Every translation (values-<locale>/strings.xml) has exactly the strings and plurals of the English base, with the
  * same format placeholders. New locales are picked up from the res directory, and a string added only to English
- * fails here for every locale until it is translated (see scripts/i18n/gen_translations.py).
+ * fails here for every locale until it is added to that locale's strings.xml.
  */
 class StringResourcesParityTest {
     private class Res(val strings: Map<String, String>, val plurals: Map<String, Map<String, String>>)
@@ -87,8 +87,8 @@ class StringResourcesParityTest {
         assertEquals(base.plurals.keys, ja.plurals.keys)
         // Japanese has a single plural form.
         ja.plurals.forEach { (k, items) -> assertEquals("quantities of $k", setOf("other"), items.keys) }
-        // Strings that are the same in every language (product name, "OK").
-        val sameAsEnglish = setOf("common_ok", "settings_about_version")
+        // Strings with no Japanese words (product name, "OK", the copyright line, a "done / total" size pair).
+        val sameAsEnglish = setOf("common_ok", "settings_about_version", "settings_about_copyright", "viewer_progress_of")
         val kana = Regex("[\\u3040-\\u30FF\\u4E00-\\u9FFF]")
         val untranslated = ja.strings.filter { (k, v) -> k !in sameAsEnglish && !kana.containsMatchIn(v) }.keys
         assertEquals("ja strings without Japanese text", emptySet<String>(), untranslated)

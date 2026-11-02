@@ -689,8 +689,7 @@ private fun AboutPage() {
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(stringResource(R.string.settings_about_fork), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("Copyright © 2026 Wyvern2000.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("All rights reserved.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.settings_about_copyright), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (isDebug) Text(
                     stringResource(R.string.settings_debug_on),
                     style = MaterialTheme.typography.labelSmall,

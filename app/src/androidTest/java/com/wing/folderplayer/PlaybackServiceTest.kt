@@ -94,7 +94,8 @@ class PlaybackServiceTest : ServiceTestBase() {
         // On Android 11+ shared-storage .cue/.lrc of other apps are unreadable through the File API: the app says so.
         if (Fx.sdk >= 30) {
             main { vm.playCueSheet(SourceRef(local, "/Music/fixture/Cue/image.cue")) }
-            waitFor(10_000, "SAF hint") { state.playbackError?.contains("SAF") == true }
+            val hint = Fx.ctx.getString(R.string.player_error_local_needs_saf)
+            waitFor(10_000, "pick-a-folder hint") { state.playbackError == hint }
         }
         Fx.require("webdav_url")
         val dav = ids["dav"]!!
