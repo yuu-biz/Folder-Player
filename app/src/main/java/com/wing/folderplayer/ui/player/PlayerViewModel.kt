@@ -110,6 +110,9 @@ data class PlayerUiState(
     val sleepTimerActive: Boolean = false,
     val sleepTimerValue: Int = 0,
     val sleepTimerType: TimerType = TimerType.TIME,
+    // The timer options, remembered by the service for the next start.
+    val sleepTimerFinishSong: Boolean = false,
+    val sleepTimerFade: Boolean = false,
 
     /** Last playback error shown to the user (e.g. "server cannot seek"). */
     val playbackError: String? = null,
@@ -666,6 +669,7 @@ class PlayerViewModel : ViewModel() {
         if (!state.containsKey(t.KEY_ACTIVE)) return
         val active = state.getBoolean(t.KEY_ACTIVE)
         sleepTimerDeadlineMs = state.getLong(t.KEY_DEADLINE)
+        _uiState.value = _uiState.value.copy(sleepTimerFinishSong = state.getBoolean(t.KEY_FINISH_SONG), sleepTimerFade = state.getBoolean(t.KEY_FADE))
         if (!active) {
             _uiState.value = _uiState.value.copy(sleepTimerActive = false, sleepTimerValue = 0)
             return
@@ -687,8 +691,22 @@ class PlayerViewModel : ViewModel() {
         }
     }
 
+    /** The player's audio session in MusicService (for the phone's equaliser panel), or null without a connection. */
+    suspend fun audioSessionId(): Int? {
+        val controller = awaitPlayer() as? MediaController ?: return null
+        val result = runCatching { controller.sendCustomCommand(MusicService.COMMAND_AUDIO_SESSION, android.os.Bundle.EMPTY).await() }.getOrNull()
+        return result?.takeIf { it.resultCode == androidx.media3.session.SessionResult.RESULT_SUCCESS }
+            ?.extras?.getInt(MusicService.KEY_AUDIO_SESSION, android.media.AudioManager.AUDIO_SESSION_ID_GENERATE)
+            ?.takeIf { it != android.media.AudioManager.AUDIO_SESSION_ID_GENERATE }
+    }
+
     /** The timer runs in MusicService, so it ends playback also when no screen is left. */
-    fun startSleepTimer(type: TimerType, value: Int) {
+    fun startSleepTimer(
+        type: TimerType,
+        value: Int,
+        finishSong: Boolean = _uiState.value.sleepTimerFinishSong,
+        fade: Boolean = _uiState.value.sleepTimerFade,
+    ) {
         if (value <= 0) {
             resetSleepTimer()
             return
@@ -698,12 +716,16 @@ class PlayerViewModel : ViewModel() {
             sleepTimerActive = true,
             sleepTimerType = type,
             sleepTimerValue = value,
+            sleepTimerFinishSong = finishSong,
+            sleepTimerFade = fade,
         )
         if (type == TimerType.TIME) sleepTimerDeadlineMs = android.os.SystemClock.elapsedRealtime() + value * 60_000L
         val t = com.wing.folderplayer.service.SleepTimer
         sendSleepTimerCommand(t.COMMAND_START, android.os.Bundle().apply {
             putString(t.ARG_TYPE, if (type == TimerType.TIME) t.TYPE_TIME else t.TYPE_SONGS)
             putInt(t.ARG_VALUE, value)
+            putBoolean(t.ARG_FINISH_SONG, finishSong)
+            putBoolean(t.ARG_FADE, fade)
         })
     }
 
@@ -949,6 +971,8 @@ class PlayerViewModel : ViewModel() {
 
     private fun checkAndPlayNextFolder() {
         if (!_uiState.value.autoNextFolder) return
+        // Paused at the end: the sleep timer stopped after the last song of the queue.
+        if (player?.playWhenReady == false) return
         // A play request still loading decides what plays next (this also runs once per end-of-queue event, twice).
         if (playJob?.isActive == true) return
         val generation = ++playRequestGeneration

@@ -290,7 +290,6 @@
     <string name="player_repeat">重複</string>
     <string name="player_timer_mins">分鐘</string>
     <string name="player_timer_songs">首</string>
-    <string name="player_timer_reset">重設</string>
     <string name="player_album_discovery">專輯資訊</string>
     <string name="player_artist_discovery">藝人資訊</string>
     <string name="player_no_info">沒有資訊。</string>
@@ -443,5 +442,16 @@
     <string name="queue_clear_text">只保留正在播放的歌曲。你建立的播放清單不會改變。</string>
     <string name="playlist_cap_reached">最多可建立 %1$d 個播放清單。刪除一個後才能新增。</string>
     <string name="playlist_removed">已移除：%1$s</string>
+    <string name="player_timer_start">開始</string>
+    <string name="player_timer_off">關閉定時</string>
+    <string name="player_timer_finish_song">時間到後，播完目前的歌曲再停止</string>
+    <string name="player_timer_fade">最後 30 秒逐漸調低音量</string>
+    <string name="player_equalizer">等化器</string>
+    <string name="player_equalizer_hint">開啟手機內建的等化器</string>
+    <string name="player_equalizer_none">此手機沒有等化器畫面。</string>
+    <string name="browser_replace_remote_title">覆蓋遠端收藏？</string>
+    <string name="browser_replace_remote_text">將以本裝置的收藏覆蓋「%1$s」的收藏檔案（%2$s）。只存在於該檔案中的收藏（例如在其他裝置上新增的）將會遺失。</string>
+    <string name="browser_replace_remote_confirm">覆蓋</string>
+    <string name="bookmark_removed">已從書籤中移除「%1$s」</string>
     <string name="common_undo">復原</string>
 </resources>
