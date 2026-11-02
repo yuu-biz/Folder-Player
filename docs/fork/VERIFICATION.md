@@ -140,6 +140,13 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.40 Song change on the cover (1.10.1, 2026-11-02)
+
+The owner found that a swipe to the next song of the same album hardly showed a change (same cover). Small UI
+change, no device run (the owner allows that for small fixes). `compileDebugKotlin`, `compileDebugAndroidTestKotlin`
+pass; `lintDebug` 0 errors, 61 warnings (as before); `testDebugUnitTest` 365 tests, 0 failures, 33 skipped. Not
+checked: the motion and the "4 / 12" mark as seen on a phone, and the swipe UI test (`player_cover_swipe`) on a device.
+
 ### 5.39 Sleep timer, queue save / clear, undo, equalizer, files from other apps (1.10.0, 2026-11-02)
 
 The owner asked for the recommended items of the backlog review in one release. Built on two branches in parallel and
