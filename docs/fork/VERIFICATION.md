@@ -140,6 +140,24 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.38 Playback options, skip by seconds, queue restore, retry status, path row, wording (1.9.0, 2026-11-02)
+
+The owner chose these from the backlog review (docs/implementation/backlog-2026-11-02.md is local). No emulator run:
+the owner asked to keep device tests to a minimum (they load the machine), and Docker Desktop's WSL integration was
+detached. A read-only review of the commits found two bugs (Stop did nothing during a retry of a paused player; a tap
+on a CUE track in a playlist started at the first item) and four likely ones; fixed in the last code commit.
+
+| Check | Result |
+|---|---|
+| `SourceCallTest` (WebDAV listing cancelled after 300 ms) | before the fix the caller's catch got `InterruptedIOException` (the error that was shown over the next screen), FAILED; after: a cancellation, PASS |
+| `SavedQueueTest` (delete while the file is still being deleted, a new store reading queued writes) | on the store of `223bcfe` 2 of 6 FAILED; on the fix 6/6 |
+| `QueueEntriesTest`, `PlaybackOptionsTest`, `RetryNoticeTest`, `PlaybackLogicTest` | 5/5, 4/4, 2/2, 12/12 (new behaviour) |
+| JVM, final pass | `testDebugUnitTest` 350 tests, 0 failures, 33 skipped (the protocol tests, no fixture servers; the SMB code is unchanged since 1.8.1, 5.37); `lintDebug` 0 errors, 61 warnings (as before); `compileDebugAndroidTestKotlin` passes (androidTest not run) |
+
+Not checked: everything on a device. In particular the cold-start restore of a queue, the skip buttons' fit at 360 dp
+and the cover double tap with the swipe, the notification's Previous through the session, the retry row against a real
+outage, the path row, and the new texts in place.
+
 ### 5.37 SMB connection kept through cancelled requests, silent connections noticed (1.8.1, 2026-11-02)
 
 The owner reported NAS folders that now and then stay loading or fail (after the app was in the background, or going

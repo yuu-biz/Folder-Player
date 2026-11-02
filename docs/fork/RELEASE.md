@@ -135,3 +135,6 @@ playback log): `v1.8.0` is versionName `1.8.0`, versionCode `1080099`, which ins
 
 1.8.1 (NAS folders that stayed loading: SMB connection kept through cancelled requests, silent connections noticed in
 3 s): `v1.8.1` is versionName `1.8.1`, versionCode `1080199`, which installs over 1.8.0.
+
+1.9.0 (previous-button and resume options, skip by seconds, queue restore, retry status, path row, plainer wording):
+`v1.9.0` is versionName `1.9.0`, versionCode `1090099`, which installs over 1.8.1.
