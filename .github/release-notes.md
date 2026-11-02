@@ -1,18 +1,24 @@
 Folder Player Fork {VERSION} — an unofficial personal fork of
 [Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000. It is not affiliated with the original
-project. This release follows 1.8.0.
+project. This release follows 1.8.1.
 
-## What's new in 1.8.1
+## What's new in 1.9.0
 
-- **NAS folders that stayed loading**: a folder on an SMB share (NAS) could stay loading for about half a minute or
-  fail, most often after going from a NAS folder back to the favourites and into another folder, or after the app was
-  in the background. Leaving a folder while its covers or song lengths were still being read, or a seek in the player,
-  closed the connection that everything else was using, and the next folder then waited about 30 s for an answer
-  that never came. The connection now stays open for the others. A connection that went silent while the app was not
-  using it (Wi-Fi power save, a phone that slept) is noticed within 3 s instead of 30 s.
-- **Playback log**: it now also records each connection to an SMB share (and how long it took) and each connection
-  that was closed, with the reason. If a NAS folder still stays loading, share the log (Settings → Playback →
-  Playback log).
+- **The queue comes back after a restart**: the songs added with "Play next" or "Add to queue", and lists played
+  from search results, favourites or the songs list, come back as they were (same song and position, paused).
+- **Skip back and forward**: buttons beside previous and next in the player, and a double tap on the left or right
+  half of the cover. 10 s by default; 5, 10, 15 or 30 s in Settings → Playback.
+- **Two new options in Settings → Playback**, both off by default: "Previous button" can restart the song when it
+  is past 3 s, and long files (10 min or more) can resume where you left them. The notification and lock screen now
+  follow the same "Previous" setting as the app.
+- **Reconnecting shows in the player**: while the app retries a NAS or server that stopped answering, the player
+  shows a countdown with "Retry now" and "Stop", and "Reconnected" when it works again.
+- **Where you are in a folder**: a path row under the top bar shows the source and every folder down to this one;
+  tap a folder in it to go back up there.
+- **Delete asks first**: deleting a playlist or a source now asks before it happens.
+- **Clearer wording** in every language, and "SAF" is gone: the add menu says "Pick a folder…"
+  (「フォルダを選んで追加」).
+- **Fixed**: leaving a folder that was still loading could show "Load failed" on the screen you went to.
 
 ## Install
 
