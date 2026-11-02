@@ -126,11 +126,12 @@ class PlaylistStore(private val playlistsDir: File) {
         saveMetadata()
     }
 
-    fun createPlaylist(name: String): String? {
+    /** A new playlist [name] holding [items]; null when there are already as many as allowed. */
+    fun createPlaylist(name: String, items: List<PlaylistItem> = emptyList()): String? {
         if (playlistMetadata.size >= 11) return null
-        val id = "list_${System.currentTimeMillis()}"
-        playlistMetadata[id] = name
-        savePlaylist(Playlist(id, name, emptyList()))
+        // Unique also for two lists made within the same millisecond.
+        val id = generateSequence(System.currentTimeMillis()) { it + 1 }.map { "list_$it" }.first { it !in playlistMetadata }
+        savePlaylist(Playlist(id, name, items))
         return id
     }
 

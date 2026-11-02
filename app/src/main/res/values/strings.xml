@@ -465,4 +465,9 @@
     <string name="browser_delete_source_text_network">“%1$s” is removed from the source list, and its saved password is deleted. The files on the server are not deleted.</string>
     <string name="player_timer_stop_after">Stop after</string>
     <string name="settings_about_copyright">Copyright © 2026 Wyvern2000. All rights reserved.</string>
+    <string name="queue_save_as_playlist">Save queue as playlist</string>
+    <string name="queue_saved_as_playlist">Saved as playlist: %1$s</string>
+    <string name="queue_clear">Clear queue</string>
+    <string name="queue_clear_title">Clear the queue?</string>
+    <string name="queue_clear_text">Only the song playing stays. Playlists you made are not changed.</string>
 </resources>

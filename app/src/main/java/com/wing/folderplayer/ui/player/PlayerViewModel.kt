@@ -1821,16 +1821,51 @@ class PlayerViewModel : ViewModel() {
                 // it becomes "Default" as it is now, so that it can be restored.
                 (0 until p.mediaItemCount).mapNotNull { playlistItemOf(p.getMediaItemAt(it)) }
             }
-            playlistManager?.savePlaylist(Playlist("default", "Default", updated))
-            queuePlaylistId = "default"
-            if (listId != "default" || _uiState.value.activePlaylistId != "default") {
-                playbackPreferences?.saveActivePlaylistId("default")
-                _uiState.value = _uiState.value.copy(activePlaylistId = "default", activePlaylistName = "Default")
-            }
-            refreshPlaylists()
-            updatePlaybackState()
+            keepQueueAsDefault(updated, listId)
             onAdded(items.size)
         }
+    }
+
+    /**
+     * The queue changed and is now "Default" holding [items] (saved for the next start); "Default" is shown when the
+     * queue was another list ([wasListId]) or another list was shown.
+     */
+    private fun keepQueueAsDefault(items: List<PlaylistItem>, wasListId: String?) {
+        playlistManager?.savePlaylist(Playlist("default", "Default", items))
+        queuePlaylistId = "default"
+        if (wasListId != "default" || _uiState.value.activePlaylistId != "default") {
+            playbackPreferences?.saveActivePlaylistId("default")
+            _uiState.value = _uiState.value.copy(activePlaylistId = "default", activePlaylistName = "Default")
+        }
+        refreshPlaylists()
+        updatePlaybackState()
+    }
+
+    /**
+     * Saves the queue as a new playlist [name], in queue order (not the shuffle order); the queue stays as it is. False
+     * when no playlist can be added (the cap).
+     */
+    fun saveQueueAsPlaylist(name: String): Boolean {
+        val p = player ?: return false
+        val items = (0 until p.mediaItemCount).mapNotNull { playlistItemOf(p.getMediaItemAt(it)) }
+        playlistManager?.createPlaylist(name, items) ?: return false
+        refreshPlaylists()
+        return true
+    }
+
+    /**
+     * Empties the queue but for the song playing, which goes on. As after "Add to queue", the queue becomes "Default"
+     * holding that song: a playlist of the user's that the queue was built from keeps its songs.
+     */
+    fun clearQueue() {
+        val p = player ?: return
+        val current = p.currentMediaItemIndex
+        if (current !in 0 until p.mediaItemCount) return
+        val listId = queuePlaylistId
+        // The end first: the index of the song playing stays valid.
+        p.removeMediaItems(current + 1, p.mediaItemCount)
+        p.removeMediaItems(0, current)
+        keepQueueAsDefault(listOfNotNull(playlistItemOf(p.getMediaItemAt(0))), listId)
     }
 
     /** The playlist entry of a queue item (null: not a source file); a CUE track is its sheet and start, as [playCueSheet] keeps it. */

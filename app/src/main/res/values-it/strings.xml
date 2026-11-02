@@ -466,4 +466,9 @@
     <string name="browser_delete_source_text_network">«%1$s» viene tolta dall\'elenco delle sorgenti e la password salvata viene eliminata. I file sul server non vengono eliminati.</string>
     <string name="player_timer_stop_after">Stop tra</string>
     <string name="settings_about_copyright">Copyright © 2026 Wyvern2000. All rights reserved.</string>
+    <string name="queue_save_as_playlist">Salva la coda come playlist</string>
+    <string name="queue_saved_as_playlist">Salvata come playlist: %1$s</string>
+    <string name="queue_clear">Svuota la coda</string>
+    <string name="queue_clear_title">Svuotare la coda?</string>
+    <string name="queue_clear_text">Resta solo il brano in riproduzione. Le tue playlist non cambiano.</string>
 </resources>

@@ -653,14 +653,14 @@ private fun PortraitPlayerLayout(
                     ) {
                         // Playlist Selector Dropdown
                         var expanded by remember { mutableStateOf(false) }
-                        var showCreateDialog by remember { mutableStateOf(false) }
+                        var menuDialog by remember { mutableStateOf<PlaylistMenuDialog?>(null) }
                         var playlistToRename by remember { mutableStateOf<String?>(null) }
                         var playlistToDelete by remember { mutableStateOf<com.wing.folderplayer.data.playlist.Playlist?>(null) }
                         var renameName by remember { mutableStateOf("") }
-                        var createName by remember { mutableStateOf("") }
                         var showTimerDialog by remember { mutableStateOf(false) }
 
                         playlistToDelete?.let { DeletePlaylistDialog(it, viewModel) { playlistToDelete = null } }
+                        menuDialog?.let { PlaylistMenuDialogHost(it, viewModel) { menuDialog = null } }
 
                         if (showTimerDialog) {
                             TimerDialog(
@@ -718,45 +718,11 @@ private fun PortraitPlayerLayout(
                                         }
                                     )
                                 }
-                                if (uiState.allPlaylists.size < 11) {
-                                    Divider(color = Color.White.copy(alpha = 0.1f))
-                                    DropdownMenuItem(
-                                        text = { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_new_list), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge) },
-                                        onClick = {
-                                            showCreateDialog = true
-                                            expanded = false
-                                        }
-                                    )
-                                }
+                                PlaylistMenuActions(uiState) { menuDialog = it; expanded = false }
                             }
                         }
 
                         // Dialogs
-                        if (showCreateDialog) {
-                            AlertDialog(
-                                onDismissRequest = { showCreateDialog = false },
-                                title = { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_create_playlist)) },
-                                text = {
-                                    OutlinedTextField(
-                                        value = createName,
-                                        onValueChange = { createName = it },
-                                        label = { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_playlist_name)) },
-                                        singleLine = true
-                                    )
-                                },
-                                confirmButton = {
-                                    Button(onClick = {
-                                        if (createName.isNotBlank()) {
-                                            viewModel.createPlaylist(createName)
-                                            createName = ""
-                                            showCreateDialog = false
-                                        }
-                                    }) { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_create)) }
-                                },
-                                dismissButton = { TextButton(onClick = { showCreateDialog = false }) { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.common_cancel)) } }
-                            )
-                        }
-
                         if (playlistToRename != null) {
                             AlertDialog(
                                 onDismissRequest = { playlistToRename = null },
