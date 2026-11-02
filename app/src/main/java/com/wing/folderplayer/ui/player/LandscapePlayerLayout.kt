@@ -219,7 +219,7 @@ fun LandscapeLeftControlPanel(
         // 2. Info - Compact
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fullPlayerContent(transition)) {
             TrackText(uiState.currentTitle, direction) { title ->
-                TextCompressed(
+                MarqueeText(
                     text = displayTitle(title),
                     style = MaterialTheme.typography.titleLarge,
                     color = Color.White,
@@ -227,7 +227,7 @@ fun LandscapeLeftControlPanel(
                 )
             }
             if (uiState.currentFolderName.isNotEmpty()) {
-                TextCompressed(
+                MarqueeText(
                     text = uiState.currentFolderName,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
