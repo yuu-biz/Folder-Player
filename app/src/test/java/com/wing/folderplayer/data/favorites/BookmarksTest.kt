@@ -33,6 +33,22 @@ class BookmarksTest {
         assertEquals(listOf("Album"), r.items.value.map { it.name })
     }
 
+    @Test fun undoPutsARemovedBookmarkBackInItsPlaceWithItsName() {
+        val r = repo()
+        r.add(root, "NAS"); r.add(album, "Album"); r.add(SourceRef("nas-1", "/Live"), "Live")
+        r.rename(r.items.value[1].id, "Jazz")
+        val removed = r.items.value[1]
+        val at = r.remove(album)
+        assertEquals(1, at)
+        assertEquals(-1, r.remove(album))
+        r.restore(removed, at)
+        assertEquals(listOf("NAS", "Jazz", "Live"), r.items.value.map { it.name })
+        assertEquals(removed, r.items.value[1])
+        r.restore(removed, 0)
+        assertEquals("already back: not twice", 3, r.items.value.size)
+        assertEquals(listOf("NAS", "Jazz", "Live"), repo().items.value.map { it.name })
+    }
+
     @Test fun pathsAreNormalisedSoTheSameFolderIsOneBookmark() {
         val r = repo()
         r.add(SourceRef("s", "/a/b/"), "b"); r.add(SourceRef("s", "/a//b"), "b2"); r.add(SourceRef("s", "/a/./b"), "b3")

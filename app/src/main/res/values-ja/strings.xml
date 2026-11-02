@@ -445,4 +445,6 @@
     <string name="browser_replace_remote_title">リモートのお気に入りを上書きしますか？</string>
     <string name="browser_replace_remote_text">「%1$s」のお気に入りファイル（%2$s）を、この端末のお気に入りで上書きします。そのファイルにしかないお気に入り（ほかの端末で追加したものなど）は消えます。</string>
     <string name="browser_replace_remote_confirm">上書き</string>
+    <string name="bookmark_removed">「%1$s」をブックマークから削除しました</string>
+    <string name="common_undo">元に戻す</string>
 </resources>
