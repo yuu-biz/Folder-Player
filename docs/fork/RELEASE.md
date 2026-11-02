@@ -142,3 +142,7 @@ playback log): `v1.8.0` is versionName `1.8.0`, versionCode `1080099`, which ins
 1.10.0 (sleep timer options, queue save / clear, undo, repeat kept, equalizer, files from other apps, scrolling titles):
 `v1.10.0` is versionName `1.10.0`, versionCode `1100099`, which installs over 1.9.0.
 
+1.10.1 (the song change easier to see on the cover: the swiped cover is thrown out, every song change moves it, the
+song's number shows for a moment): `v1.10.1` is versionName `1.10.1`, versionCode `1100199`, which installs over 1.10.0.
+
+

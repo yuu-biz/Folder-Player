@@ -1,23 +1,13 @@
 Folder Player Fork {VERSION} — an unofficial personal fork of
 [Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000. It is not affiliated with the original
-project. This release follows 1.9.0.
+project. This release follows 1.10.0.
 
-## What's new in 1.10.0
+## What's new in 1.10.1
 
-- **Sleep timer**: presets (15 to 90 min), two new options (let the song finish at the time; fade out over the last
-  30 seconds), the time left shown in the player (tap it to change the timer), and the timer is kept when Android
-  closes the app. A "songs" timer now counts a song repeated by "repeat one" and carries on into the next folder.
-- **Queue**: "Save queue as playlist" and "Clear queue" in the playlist menu. Clearing keeps the song playing, and
-  your own playlists are not changed.
-- **Undo**: removing a song from a playlist with a swipe, or removing a bookmark, shows "Undo" for a few seconds.
-- **Repeat is kept** for the next start, like shuffle.
-- **Equalizer**: the playback options (beside the sleep timer) open the phone's own equalizer, when the phone has
-  one. Equalizer apps can now attach to the player.
-- **Open from other apps**: an audio file opened from a file manager plays in the player. It is not kept in the queue
-  for the next start.
-- **Long titles scroll** sideways instead of being squeezed.
-- **Fewer accidents**: a tap beside the source editor no longer closes it and loses what was typed; "Replace remote
-  favorites with local" asks first; at the limit of 10 playlists the menu says why no new one can be made.
+- **Easier to see the song change** in the full player, also between songs of one album that share a cover:
+  - a swipe that skips throws the cover out to its side, and the next one comes in from the other side;
+  - every song change moves the cover in from the side, not only a change of picture;
+  - the song's number in the queue ("4 / 12") shows at the foot of the cover for a moment.
 
 ## Install
 
