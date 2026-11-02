@@ -466,4 +466,9 @@
     <string name="browser_delete_source_text_network">« %1$s » est retirée de la liste des sources et son mot de passe enregistré est supprimé. Les fichiers du serveur ne sont pas supprimés.</string>
     <string name="player_timer_stop_after">Arrêt dans</string>
     <string name="settings_about_copyright">Copyright © 2026 Wyvern2000. All rights reserved.</string>
+    <string name="queue_save_as_playlist">Enregistrer la file d\'attente comme playlist</string>
+    <string name="queue_saved_as_playlist">Enregistrée comme playlist : %1$s</string>
+    <string name="queue_clear">Vider la file d\'attente</string>
+    <string name="queue_clear_title">Vider la file d\'attente ?</string>
+    <string name="queue_clear_text">Seul le morceau en cours reste. Vos playlists ne changent pas.</string>
 </resources>

@@ -67,14 +67,14 @@ fun PlaylistSheetContent(
         ) {
             // Playlist Selector Dropdown
             var expanded by remember { mutableStateOf(false) }
-            var showCreateDialog by remember { mutableStateOf(false) }
+            var menuDialog by remember { mutableStateOf<PlaylistMenuDialog?>(null) }
             var playlistToRename by remember { mutableStateOf<String?>(null) }
             var playlistToDelete by remember { mutableStateOf<Playlist?>(null) }
             var renameName by remember { mutableStateOf("") }
-            var createName by remember { mutableStateOf("") }
             var showTimerDialog by remember { mutableStateOf(false) }
 
             playlistToDelete?.let { DeletePlaylistDialog(it, viewModel) { playlistToDelete = null } }
+            menuDialog?.let { PlaylistMenuDialogHost(it, viewModel) { menuDialog = null } }
 
             if (showTimerDialog) {
                 TimerDialog(
@@ -154,53 +154,11 @@ fun PlaylistSheetContent(
                             }
                         )
                     }
-                    if (uiState.allPlaylists.size < 11) {
-                        Divider(color = Color.White.copy(alpha = 0.1f))
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    stringResource(R.string.player_new_list),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    style = MaterialTheme.typography.labelLarge
-                                )
-                            },
-                            onClick = {
-                                showCreateDialog = true
-                                expanded = false
-                            }
-                        )
-                    }
+                    PlaylistMenuActions(uiState) { menuDialog = it; expanded = false }
                 }
             }
 
             // Dialogs
-            if (showCreateDialog) {
-                AlertDialog(
-                    onDismissRequest = { showCreateDialog = false },
-                    title = { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_create_playlist)) },
-                    text = {
-                        OutlinedTextField(
-                            value = createName,
-                            onValueChange = { createName = it },
-                            label = { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_playlist_name)) },
-                            singleLine = true
-                        )
-                    },
-                    confirmButton = {
-                        Button(onClick = {
-                            if (createName.isNotBlank()) {
-                                viewModel.createPlaylist(createName)
-                                createName = ""
-                                showCreateDialog = false
-                            }
-                        }) { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.player_create)) }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showCreateDialog = false }) { Text(androidx.compose.ui.res.stringResource(com.wing.folderplayer.R.string.common_cancel)) }
-                    }
-                )
-            }
-
             if (playlistToRename != null) {
                 AlertDialog(
                     onDismissRequest = { playlistToRename = null },
@@ -498,3 +456,83 @@ fun speedLabel(speed: Float): String =
     java.math.BigDecimal(speed.toDouble()).setScale(2, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString().let {
         if ('.' in it) "$it×" else "$it.0×"
     }
+
+/** A dialog opened from the playlist menu; it is shown after the menu has closed. */
+enum class PlaylistMenuDialog { NEW_LIST, SAVE_QUEUE, CLEAR_QUEUE }
+
+/** The end of the playlist menu (full player and playlist sheet): a new list, and the queue saved as a list or cleared. */
+@Composable
+fun PlaylistMenuActions(uiState: PlayerUiState, onPick: (PlaylistMenuDialog) -> Unit) {
+    val canCreate = uiState.allPlaylists.size < 11
+    if (!canCreate && uiState.playlist.isEmpty()) return
+    Divider(color = Color.White.copy(alpha = 0.1f))
+    if (canCreate) {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.player_new_list), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge) },
+            onClick = { onPick(PlaylistMenuDialog.NEW_LIST) },
+        )
+    }
+    if (uiState.playlist.isEmpty()) return
+    if (canCreate) {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.queue_save_as_playlist), color = Color.White) },
+            onClick = { onPick(PlaylistMenuDialog.SAVE_QUEUE) },
+            modifier = Modifier.testTag("queue_save_as_playlist"),
+        )
+    }
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.queue_clear), color = Color.White.copy(alpha = if (uiState.playlist.size > 1) 1f else 0.4f)) },
+        onClick = { onPick(PlaylistMenuDialog.CLEAR_QUEUE) },
+        enabled = uiState.playlist.size > 1,
+        modifier = Modifier.testTag("queue_clear"),
+    )
+}
+
+@Composable
+fun PlaylistMenuDialogHost(dialog: PlaylistMenuDialog, viewModel: PlayerViewModel, onDismiss: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    when (dialog) {
+        PlaylistMenuDialog.NEW_LIST -> PlaylistNameDialog(stringResource(R.string.player_create_playlist), stringResource(R.string.player_create), onDismiss) {
+            viewModel.createPlaylist(it)
+        }
+        PlaylistMenuDialog.SAVE_QUEUE -> PlaylistNameDialog(stringResource(R.string.queue_save_as_playlist), stringResource(R.string.common_save), onDismiss) {
+            if (viewModel.saveQueueAsPlaylist(it)) {
+                android.widget.Toast.makeText(context, context.getString(R.string.queue_saved_as_playlist, it), android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+        PlaylistMenuDialog.CLEAR_QUEUE -> AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(stringResource(R.string.queue_clear_title)) },
+            text = { Text(stringResource(R.string.queue_clear_text)) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.clearQueue(); onDismiss() }, modifier = Modifier.testTag("queue_clear_confirm")) {
+                    Text(stringResource(R.string.queue_clear))
+                }
+            },
+            dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
+        )
+    }
+}
+
+/** Asks for the name of a new playlist; [onName] gets it (not blank) and the dialog closes. */
+@Composable
+private fun PlaylistNameDialog(title: String, confirm: String, onDismiss: () -> Unit, onName: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text(stringResource(R.string.player_playlist_name)) },
+                singleLine = true,
+                modifier = Modifier.testTag("playlist_name_field"),
+            )
+        },
+        confirmButton = {
+            Button(onClick = { if (name.isNotBlank()) { onName(name); onDismiss() } }) { Text(confirm) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
+    )
+}

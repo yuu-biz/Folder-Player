@@ -436,4 +436,9 @@
     <string name="browser_delete_source_text_network">將從來源清單中移除「%1$s」，並刪除已儲存的密碼。伺服器上的檔案不會被刪除。</string>
     <string name="player_timer_stop_after">剩餘</string>
     <string name="settings_about_copyright">Copyright © 2026 Wyvern2000. All rights reserved.</string>
+    <string name="queue_save_as_playlist">將播放佇列存為播放清單</string>
+    <string name="queue_saved_as_playlist">已存為播放清單：%1$s</string>
+    <string name="queue_clear">清空播放佇列</string>
+    <string name="queue_clear_title">清空播放佇列？</string>
+    <string name="queue_clear_text">只保留正在播放的歌曲。你建立的播放清單不會改變。</string>
 </resources>

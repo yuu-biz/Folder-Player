@@ -40,6 +40,10 @@ What a user can run into, in one place. The sections below give the history of e
 - **Queue** (1.8.0): with shuffle on, the player places added songs among the shuffled ones, so "Play next" is not always
   next. A CUE sheet cannot be added (play it). A folder adds its own songs, not those of the folders below it. Adding
   to a queue that is not exactly one list (a playlist with entries that cannot play) makes "Default" that queue.
+  "Save queue as playlist" and "Clear queue" (playlist menu) work on the queue, not on the list shown. Saving keeps
+  the queue order, not the shuffle order, and leaves out entries that could not be queued. Clearing keeps only the song
+  playing, which goes on; the queue becomes "Default" holding it, so a playlist of the user's that it was played from
+  keeps its songs. Not checked on a device (JVM tests of the playlist store only).
 - **Speed and left / right** (1.8.0): kept for the next start; the pitch stays the same (Media3's time stretching, which
   can sound rough at 0.5× and 2×). A DLNA cast plays at normal speed and unswapped (the renderer plays the file).
 - **Cover swipe** (1.8.0): only on the cover of the full player (portrait and landscape), not on the mini player, whose

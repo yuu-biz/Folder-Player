@@ -436,4 +436,9 @@
     <string name="browser_delete_source_text_network">「%1$s」をソース一覧から削除し、保存したパスワードも削除します。サーバー上のファイルは削除されません。</string>
     <string name="player_timer_stop_after">停止まで</string>
     <string name="settings_about_copyright">Copyright © 2026 Wyvern2000. All rights reserved.</string>
+    <string name="queue_save_as_playlist">キューをプレイリストとして保存</string>
+    <string name="queue_saved_as_playlist">プレイリスト「%1$s」として保存しました</string>
+    <string name="queue_clear">キューを空にする</string>
+    <string name="queue_clear_title">キューを空にしますか？</string>
+    <string name="queue_clear_text">再生中の曲だけが残ります。自分で作ったプレイリストはそのままです。</string>
 </resources>
