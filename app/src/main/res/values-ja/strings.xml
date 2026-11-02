@@ -441,4 +441,5 @@
     <string name="queue_clear">キューを空にする</string>
     <string name="queue_clear_title">キューを空にしますか？</string>
     <string name="queue_clear_text">再生中の曲だけが残ります。自分で作ったプレイリストはそのままです。</string>
+    <string name="playlist_cap_reached">プレイリストは %1$d 個まで作れます。新しく作るには、どれかを削除してください。</string>
 </resources>
