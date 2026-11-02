@@ -23,6 +23,9 @@ class QueueEntries(private val entryOf: IntArray, private val entryCount: Int) {
         else -> entryOf[at - 1] + 1
     }
 
+    /** The queue position of an entry put into the list at [entry]: after the queued entries before it. */
+    fun queueIndexForInsert(entry: Int): Int = entryOf.count { it < entry }
+
     /** The queue move (from, to) for the entry moving from [from] to [to] in the list; null when that entry is not queued. */
     fun queueMove(from: Int, to: Int): Pair<Int, Int>? {
         val queueFrom = queueIndexOf(from) ?: return null

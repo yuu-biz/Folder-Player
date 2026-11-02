@@ -442,4 +442,6 @@
     <string name="queue_clear_title">清空播放佇列？</string>
     <string name="queue_clear_text">只保留正在播放的歌曲。你建立的播放清單不會改變。</string>
     <string name="playlist_cap_reached">最多可建立 %1$d 個播放清單。刪除一個後才能新增。</string>
+    <string name="playlist_removed">已移除：%1$s</string>
+    <string name="common_undo">復原</string>
 </resources>

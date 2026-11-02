@@ -472,4 +472,6 @@
     <string name="queue_clear_title">Vider la file d\'attente ?</string>
     <string name="queue_clear_text">Seul le morceau en cours reste. Vos playlists ne changent pas.</string>
     <string name="playlist_cap_reached">%1$d playlists au maximum. Supprimez-en une pour en créer une nouvelle.</string>
+    <string name="playlist_removed">Retiré : %1$s</string>
+    <string name="common_undo">Annuler</string>
 </resources>
