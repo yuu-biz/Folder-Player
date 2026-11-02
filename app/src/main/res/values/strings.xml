@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!-- app_name is provided per build by resValue in app/build.gradle.kts -->
 
     <!-- common -->
@@ -470,7 +470,7 @@
     <string name="queue_clear">Clear queue</string>
     <string name="queue_clear_title">Clear the queue?</string>
     <string name="queue_clear_text">Only the song playing stays. Playlists you made are not changed.</string>
-    <string name="playlist_cap_reached">You can have up to %1$d playlists. Delete one to make a new one.</string>
+    <string name="playlist_cap_reached" tools:ignore="PluralsCandidate">You can have up to %1$d playlists. Delete one to make a new one.</string>
     <string name="playlist_removed">Removed: %1$s</string>
     <string name="common_undo">Undo</string>
 </resources>
