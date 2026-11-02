@@ -266,7 +266,9 @@ fun SourceEditorDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
-        }
+        },
+        // A stray tap beside the dialog must not throw away what was typed; Back and Cancel still close it.
+        properties = androidx.compose.ui.window.DialogProperties(dismissOnClickOutside = false),
     )
 }
 
