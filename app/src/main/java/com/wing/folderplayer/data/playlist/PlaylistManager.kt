@@ -128,7 +128,7 @@ class PlaylistStore(private val playlistsDir: File) {
 
     /** A new playlist [name] holding [items]; null when there are already as many as allowed. */
     fun createPlaylist(name: String, items: List<PlaylistItem> = emptyList()): String? {
-        if (playlistMetadata.size >= 11) return null
+        if (playlistMetadata.keys.count { it != "default" } >= MAX_PLAYLISTS) return null
         // Unique also for two lists made within the same millisecond.
         val id = generateSequence(System.currentTimeMillis()) { it + 1 }.map { "list_$it" }.first { it !in playlistMetadata }
         savePlaylist(Playlist(id, name, items))
@@ -203,6 +203,8 @@ class PlaylistStore(private val playlistsDir: File) {
 
     companion object {
         const val VERSION = 2
+        /** Playlists the user can make, beside "Default". */
+        const val MAX_PLAYLISTS = 10
 
         // One for every instance: the migration's store and the player's write the same files.
         private val writer = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "playlist-writer").apply { isDaemon = true } }

@@ -470,4 +470,5 @@
     <string name="queue_clear">Clear queue</string>
     <string name="queue_clear_title">Clear the queue?</string>
     <string name="queue_clear_text">Only the song playing stays. Playlists you made are not changed.</string>
+    <string name="playlist_cap_reached">You can have up to %1$d playlists. Delete one to make a new one.</string>
 </resources>

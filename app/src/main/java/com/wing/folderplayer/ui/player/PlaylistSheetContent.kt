@@ -463,23 +463,32 @@ enum class PlaylistMenuDialog { NEW_LIST, SAVE_QUEUE, CLEAR_QUEUE }
 /** The end of the playlist menu (full player and playlist sheet): a new list, and the queue saved as a list or cleared. */
 @Composable
 fun PlaylistMenuActions(uiState: PlayerUiState, onPick: (PlaylistMenuDialog) -> Unit) {
-    val canCreate = uiState.allPlaylists.size < 11
-    if (!canCreate && uiState.playlist.isEmpty()) return
+    // At the cap both ways to a new list stay in the menu, greyed, with the reason below them.
+    val canCreate = uiState.allPlaylists.count { it.id != "default" } < com.wing.folderplayer.data.playlist.PlaylistStore.MAX_PLAYLISTS
+    val off = Color.White.copy(alpha = 0.4f)
     Divider(color = Color.White.copy(alpha = 0.1f))
-    if (canCreate) {
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.player_new_list), color = if (canCreate) MaterialTheme.colorScheme.primary else off, style = MaterialTheme.typography.labelLarge) },
+        onClick = { onPick(PlaylistMenuDialog.NEW_LIST) },
+        enabled = canCreate,
+    )
+    if (uiState.playlist.isNotEmpty()) {
         DropdownMenuItem(
-            text = { Text(stringResource(R.string.player_new_list), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge) },
-            onClick = { onPick(PlaylistMenuDialog.NEW_LIST) },
-        )
-    }
-    if (uiState.playlist.isEmpty()) return
-    if (canCreate) {
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.queue_save_as_playlist), color = Color.White) },
+            text = { Text(stringResource(R.string.queue_save_as_playlist), color = if (canCreate) Color.White else off) },
             onClick = { onPick(PlaylistMenuDialog.SAVE_QUEUE) },
+            enabled = canCreate,
             modifier = Modifier.testTag("queue_save_as_playlist"),
         )
     }
+    if (!canCreate) {
+        Text(
+            stringResource(R.string.playlist_cap_reached, com.wing.folderplayer.data.playlist.PlaylistStore.MAX_PLAYLISTS),
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.White.copy(alpha = 0.6f),
+            modifier = Modifier.widthIn(max = 280.dp).padding(horizontal = 12.dp, vertical = 4.dp).testTag("playlist_cap_reached"),
+        )
+    }
+    if (uiState.playlist.isEmpty()) return
     DropdownMenuItem(
         text = { Text(stringResource(R.string.queue_clear), color = Color.White.copy(alpha = if (uiState.playlist.size > 1) 1f else 0.4f)) },
         onClick = { onPick(PlaylistMenuDialog.CLEAR_QUEUE) },
@@ -496,9 +505,9 @@ fun PlaylistMenuDialogHost(dialog: PlaylistMenuDialog, viewModel: PlayerViewMode
             viewModel.createPlaylist(it)
         }
         PlaylistMenuDialog.SAVE_QUEUE -> PlaylistNameDialog(stringResource(R.string.queue_save_as_playlist), stringResource(R.string.common_save), onDismiss) {
-            if (viewModel.saveQueueAsPlaylist(it)) {
-                android.widget.Toast.makeText(context, context.getString(R.string.queue_saved_as_playlist, it), android.widget.Toast.LENGTH_SHORT).show()
-            }
+            val text = if (viewModel.saveQueueAsPlaylist(it)) context.getString(R.string.queue_saved_as_playlist, it)
+                else context.getString(R.string.playlist_cap_reached, com.wing.folderplayer.data.playlist.PlaylistStore.MAX_PLAYLISTS)
+            android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
         }
         PlaylistMenuDialog.CLEAR_QUEUE -> AlertDialog(
             onDismissRequest = onDismiss,
