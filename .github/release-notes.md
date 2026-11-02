@@ -1,24 +1,23 @@
 Folder Player Fork {VERSION} — an unofficial personal fork of
 [Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000. It is not affiliated with the original
-project. This release follows 1.8.1.
+project. This release follows 1.9.0.
 
-## What's new in 1.9.0
+## What's new in 1.10.0
 
-- **The queue comes back after a restart**: the songs added with "Play next" or "Add to queue", and lists played
-  from search results, favourites or the songs list, come back as they were (same song and position, paused).
-- **Skip back and forward**: buttons beside previous and next in the player, and a double tap on the left or right
-  half of the cover. 10 s by default; 5, 10, 15 or 30 s in Settings → Playback.
-- **Two new options in Settings → Playback**, both off by default: "Previous button" can restart the song when it
-  is past 3 s, and long files (10 min or more) can resume where you left them. The notification and lock screen now
-  follow the same "Previous" setting as the app.
-- **Reconnecting shows in the player**: while the app retries a NAS or server that stopped answering, the player
-  shows a countdown with "Retry now" and "Stop", and "Reconnected" when it works again.
-- **Where you are in a folder**: a path row under the top bar shows the source and every folder down to this one;
-  tap a folder in it to go back up there.
-- **Delete asks first**: deleting a playlist or a source now asks before it happens.
-- **Clearer wording** in every language, and "SAF" is gone: the add menu says "Pick a folder…"
-  (「フォルダを選んで追加」).
-- **Fixed**: leaving a folder that was still loading could show "Load failed" on the screen you went to.
+- **Sleep timer**: presets (15 to 90 min), two new options (let the song finish at the time; fade out over the last
+  30 seconds), the time left shown in the player (tap it to change the timer), and the timer is kept when Android
+  closes the app. A "songs" timer now counts a song repeated by "repeat one" and carries on into the next folder.
+- **Queue**: "Save queue as playlist" and "Clear queue" in the playlist menu. Clearing keeps the song playing, and
+  your own playlists are not changed.
+- **Undo**: removing a song from a playlist with a swipe, or removing a bookmark, shows "Undo" for a few seconds.
+- **Repeat is kept** for the next start, like shuffle.
+- **Equalizer**: the playback options (beside the sleep timer) open the phone's own equalizer, when the phone has
+  one. Equalizer apps can now attach to the player.
+- **Open from other apps**: an audio file opened from a file manager plays in the player. It is not kept in the queue
+  for the next start.
+- **Long titles scroll** sideways instead of being squeezed.
+- **Fewer accidents**: a tap beside the source editor no longer closes it and loses what was typed; "Replace remote
+  favorites with local" asks first; at the limit of 10 playlists the menu says why no new one can be made.
 
 ## Install
 
