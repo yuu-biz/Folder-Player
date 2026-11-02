@@ -12,6 +12,7 @@ import java.lang.reflect.Proxy
 class SleepTimerTest {
     private var now = 0L
     private var wallBase = 1_700_000_000_000L
+    private var boot = 7
     private var alarmAt: Long? = null
     private var alarmAction: Runnable? = null
     private val store = object : SleepTimer.Store {
@@ -49,6 +50,7 @@ class SleepTimerTest {
         onChange = {},
         clock = { now },
         wallClock = { wallBase + now },
+        bootCount = { boot },
     ).also { it.attach() }
 
     /** Moves the clock, running the alarm whenever it is due on the way. */
@@ -182,5 +184,28 @@ class SleepTimerTest {
         wallBase += SleepTimer.RESTORE_SONGS_MS
         timer()
         assertNull("too old: a timer of last night", store.saved.timer)
+    }
+
+    @Test fun songsTimerHourCountsFromItsLastChangeNotFromEachRestart() {
+        timer().start(SleepTimer.TYPE_SONGS, 2, SleepTimer.Options())
+        repeat(2) {
+            wallBase += 25 * 60_000L
+            timer()
+        }
+        assertEquals("50 minutes after the start", 2, store.saved.timer?.songsLeft)
+        wallBase += 25 * 60_000L
+        timer()
+        assertNull("75 minutes after the start, however often the service started", store.saved.timer)
+    }
+
+    @Test fun timerOfAnEarlierBootIsNotBroughtBack() {
+        timer().minutes(30)
+        wallBase += 60_000L
+        now = 0
+        alarmAt = null
+        boot++
+        timer()
+        assertNull(store.saved.timer)
+        assertNull(alarmAt)
     }
 }

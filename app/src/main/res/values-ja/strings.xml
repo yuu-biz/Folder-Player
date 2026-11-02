@@ -444,7 +444,7 @@
     <string name="playlist_removed">リストから外しました：%1$s</string>
     <string name="player_timer_start">開始</string>
     <string name="player_timer_off">タイマーを止める</string>
-    <string name="player_timer_finish_song">時間になったら、曲の終わりで止める</string>
+    <string name="player_timer_finish_song">時間になったら、曲の最後まで再生してから止める</string>
     <string name="player_timer_fade">最後の30秒で少しずつ音を小さくする</string>
     <string name="player_equalizer">イコライザー</string>
     <string name="player_equalizer_hint">端末のイコライザーを開きます</string>

@@ -567,7 +567,8 @@ fun PlaylistMenuActions(uiState: PlayerUiState, onPick: (PlaylistMenuDialog) -> 
         onClick = { onPick(PlaylistMenuDialog.NEW_LIST) },
         enabled = canCreate,
     )
-    if (uiState.playlist.isNotEmpty()) {
+    // A file of another app is in no playlist: a queue of it alone has nothing to save.
+    if (uiState.playlist.any { com.wing.folderplayer.data.source.SourceUris.isSourceUri(it.mediaId) }) {
         DropdownMenuItem(
             text = { Text(stringResource(R.string.queue_save_as_playlist), color = if (canCreate) Color.White else off) },
             onClick = { onPick(PlaylistMenuDialog.SAVE_QUEUE) },

@@ -511,10 +511,14 @@ fun BrowserScreen(
                                 onBookmarkClick = { viewModel.openBookmark(it) },
                                 onBookmarkRemove = { b ->
                                     val at = viewModel.removeBookmark(b)
-                                    if (at >= 0) snackbarScope.launch {
-                                        val name = b.name.ifEmpty { SourcePath.name(b.path) }
-                                        val r = snackbar.showSnackbar(com.wing.folderplayer.utils.Strings.get(R.string.bookmark_removed, name), actionLabel = undoLabel, duration = SnackbarDuration.Long)
-                                        if (r == SnackbarResult.ActionPerformed) viewModel.restoreBookmark(b, at)
+                                    if (at >= 0) {
+                                        // Only the last removal can be undone (the snackbars of earlier ones would wait in turn).
+                                        snackbar.currentSnackbarData?.dismiss()
+                                        snackbarScope.launch {
+                                            val name = b.name.ifEmpty { SourcePath.name(b.path) }
+                                            val r = snackbar.showSnackbar(com.wing.folderplayer.utils.Strings.get(R.string.bookmark_removed, name), actionLabel = undoLabel, duration = SnackbarDuration.Long)
+                                            if (r == SnackbarResult.ActionPerformed) viewModel.restoreBookmark(b, at)
+                                        }
                                     }
                                 },
                                 onBookmarkRename = { b, name -> viewModel.renameBookmark(b, name) },

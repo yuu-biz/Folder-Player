@@ -281,6 +281,7 @@ class MusicService : MediaLibraryService() {
         sleepTimer = SleepTimer(
             player, SleepTimer.handlerAlarm(Handler(Looper.getMainLooper())), SleepTimer.PrefsStore(applicationContext),
             { state -> mediaSession.setSessionExtras(state) },
+            bootCount = { android.provider.Settings.Global.getInt(contentResolver, android.provider.Settings.Global.BOOT_COUNT, 0) },
         ).also { it.attach() }
 
         setMediaNotificationProvider(object : DefaultMediaNotificationProvider(this) {

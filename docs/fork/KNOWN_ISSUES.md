@@ -31,14 +31,18 @@ What a user can run into, in one place. The sections below give the history of e
   the next folder, and when its last song is the last of the folder the next folder is not started. "Next folder" is
   run by the app's screen, so this was not checked with the screen gone. The fade at the end of a song needs the song's
   length (a stream without one is paused at its end without a fade). After the process ended, a minutes timer comes
-  back while its deadline (wall clock) is ahead, a songs timer only within an hour of its last change. The minutes left
-  shown in the app are updated while playing. Finish-song, fade and the restore are checked by JVM tests only.
+  back while its deadline (wall clock) is ahead, a songs timer only within an hour of its last change (the hour does not
+  start again when the app starts); neither comes back after the phone restarted. Ending the session (the mini player
+  swiped away) ends the timer; the system ending the service of a paused playback does not. A deadline that comes while
+  "next folder" lists the next folder keeps that folder from starting. The minutes left shown in the app are updated
+  while playing. Finish-song, fade and the restore are checked by JVM tests only.
 - **Equalizer**: the entry in the playback options opens the phone's own panel and is left out when the phone has
   none; effect apps are told the player's audio session when playback starts. Not checked on a device.
 - **Restore** (since 1.9.0): the next start brings back the queue as it was (a folder, a CUE sheet, the songs list, search
   results, favourites, a shuffle across folders, songs added with "Play next" / "Add to queue"), paused at the same
   song and position, with shuffle and repeat as they were (Media3 draws a new shuffle order). Showing another playlist
-  in the playlist menu turns shuffle, repeat and next folder off, and that is what the next start keeps. The queue is
+  in the playlist menu turns shuffle, repeat and next folder off, and that is what the next start keeps (tapping the
+  list already shown, or deleting a list, leaves them as they are). The queue is
   kept as the playlist it was built from: "Default", or the user's playlist it was played from. Kept that way, a
   folder comes back with the songs it had when it was played (a song added to the folder since is not in the queue),
   and a song whose file is gone stays in the queue and fails when it plays. When that playlist was deleted or no longer
@@ -55,7 +59,8 @@ What a user can run into, in one place. The sections below give the history of e
 - **Files from other apps**: an audio file opened with this app from a file manager plays alone in the queue, with the
   title, artist and cover that Media3 reads from its tags (no lyrics file, no folder cover). Android lets the app read it
   only while the other app's grant lasts, so it is kept in no playlist and the next start restores the session from
-  before it. Only formats Android decodes play (the FFmpeg formats need a source). Guess: leaving the other app for
+  before it. "Play next" and "Add to queue" while it plays replace it, and the queue cannot be saved as a playlist.
+  Only formats Android decodes play (the FFmpeg formats need a source). Guess: leaving the other app for
   good may end the grant and a later seek fails. Not checked on a device.
 - **Speed and left / right** (1.8.0): kept for the next start; the pitch stays the same (Media3's time stretching, which
   can sound rough at 0.5× and 2×). A DLNA cast plays at normal speed and unswapped (the renderer plays the file).
