@@ -25,6 +25,7 @@ class SleepTimerTest {
     private var position = 0L
     private var volume = 1f
     private var pauses = 0
+    private var listener: Player.Listener? = null
     private val player = Proxy.newProxyInstance(Player::class.java.classLoader, arrayOf(Player::class.java)) { _, method, args ->
         when (method.name) {
             "isPlaying", "getPlayWhenReady" -> playing
@@ -34,7 +35,9 @@ class SleepTimerTest {
             "getPlaybackParameters" -> PlaybackParameters.DEFAULT
             "getVolume" -> volume
             "setVolume" -> { volume = args[0] as Float; null }
-            "pause" -> { pauses++; playing = false; null }
+            "addListener" -> { listener = args[0] as Player.Listener; null }
+            // Like ExoPlayer, the listeners hear of it before pause() returns.
+            "pause" -> { pauses++; playing = false; listener?.onIsPlayingChanged(false); null }
             else -> null
         }
     } as Player

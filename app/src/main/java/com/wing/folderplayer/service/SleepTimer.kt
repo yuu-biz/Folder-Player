@@ -1,6 +1,7 @@
 package com.wing.folderplayer.service
 
 import android.content.Context
+import androidx.core.content.edit
 import android.os.Bundle
 import android.os.Handler
 import android.os.SystemClock
@@ -63,7 +64,8 @@ internal class SleepTimer(
     /** The volume was lowered by the fade and must be put back. */
     private var faded = false
 
-    private val wake = Runnable { update() }
+    // The deadline is acted on here only, not from inside the player's callbacks.
+    private val wake = Runnable { if ((countdown as? Countdown.Time)?.let { it.deadline <= clock() } == true) timeIsUp() else update() }
 
     /** Starts listening and brings back a timer saved before the process ended. */
     fun attach() {
@@ -124,7 +126,7 @@ internal class SleepTimer(
     }
 
     /**
-     * Ends a TIME timer that is due, sets the fade, sets the next wake-up. Handler delays stop while the device sleeps
+     * Sets the fade and the next wake-up (at once for a TIME timer that is due). Handler delays stop while the device sleeps
      * (only possible while paused): the deadline is what counts, not when the wake-up runs.
      */
     private fun update() {
@@ -132,7 +134,7 @@ internal class SleepTimer(
             null -> { alarm.set(null, wake); restoreVolume() }
             is Countdown.Time -> {
                 val left = c.deadline - clock()
-                if (left <= 0) { timeIsUp(); return }
+                if (left <= 0) { alarm.set(0L, wake); return }
                 val fading = options.fade && !options.finishSong
                 fade(if (fading) left else null)
                 alarm.set(if (!fading) left else if (left > FADE_MS) left - FADE_MS else minOf(left, FADE_STEP_MS), wake)
@@ -155,8 +157,9 @@ internal class SleepTimer(
 
     private fun finish(why: String) {
         PlaybackLog.record(PlaybackEventKind.SLEEP_TIMER, why)
-        player.pause()
+        // Ended before the pause: the player calls back (onIsPlayingChanged) from inside pause().
         countdown = null
+        player.pause()
         changed()
     }
 
@@ -220,13 +223,13 @@ internal class SleepTimer(
         )
 
         override fun save(saved: Saved) {
-            prefs.edit().apply {
+            prefs.edit {
                 putBoolean("finish_song", saved.options.finishSong)
                 putBoolean("fade", saved.options.fade)
                 val t = saved.timer
                 if (t == null) remove("type").remove("wall_deadline").remove("songs_left").remove("saved_at")
                 else putString("type", t.type).putLong("wall_deadline", t.wallDeadline).putInt("songs_left", t.songsLeft).putLong("saved_at", t.savedAt)
-            }.apply()
+            }
         }
     }
 
