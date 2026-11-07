@@ -145,4 +145,5 @@ playback log): `v1.8.0` is versionName `1.8.0`, versionCode `1080099`, which ins
 1.10.1 (the song change easier to see on the cover: the swiped cover is thrown out, every song change moves it, the
 song's number shows for a moment): `v1.10.1` is versionName `1.10.1`, versionCode `1100199`, which installs over 1.10.0.
 
-
+1.10.2 (fix: pinching out on a picture or a PDF in the file viewer no longer closes the app): `v1.10.2` is versionName
+`1.10.2`, versionCode `1100299`, which installs over 1.10.1.
