@@ -1,13 +1,11 @@
 Folder Player Fork {VERSION} — an unofficial personal fork of
 [Folder Player](https://github.com/wyvern3000/Folder-Player) by wyvern3000. It is not affiliated with the original
-project. This release follows 1.10.0.
+project. This release follows 1.10.1.
 
-## What's new in 1.10.1
+## What's new in 1.10.2
 
-- **Easier to see the song change** in the full player, also between songs of one album that share a cover:
-  - a swipe that skips throws the cover out to its side, and the next one comes in from the other side;
-  - every song change moves the cover in from the side, not only a change of picture;
-  - the song's number in the queue ("4 / 12") shows at the foot of the cover for a moment.
+- **Fixed a crash in the file viewer**: pinching out on a picture (or a PDF) and lifting the fingers closed the app. Zooming now
+  works as before and the picture stays on screen.
 
 ## Install
 

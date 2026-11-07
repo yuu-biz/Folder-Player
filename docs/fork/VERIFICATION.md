@@ -140,6 +140,22 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.41 File viewer pinch crash (1.10.2, 2026-11-08)
+
+The owner reported that opening a picture and pinching out closed the app. Cause: the last finger's lift carries no finger
+position, so `calculateCentroid(useCurrent = true)` is `Offset.Unspecified`, and once the picture was zoomed
+(`scale > 1`) `zoomable` passed it to `ZoomState.transform` (`centroid - center`). The same modifier drives the PDF zoom.
+Sweep: no other `calculateCentroid` / `calculateZoom` / `calculatePan` in `app/src/main`; the other gesture code
+(`PlayerSheet`, `PlayerExtras`, `MiniPlayer`, `ReorderGesture`) uses `drag` / `awaitTouchSlopOrCancellation` and no centroid.
+
+Device run (the WSL Docker integration was detached, so `emu.sh` was unusable; the Windows SDK's API 28 AVD was started
+`-read-only -no-snapshot-save`, API 37 cannot inject input for this Espresso): `ViewerUiTest#a83_pinchOutAndLiftKeepsTheImageZoomed`
+on the 1.10.1 app failed with `java.lang.IllegalStateException: Offset is unspecified at ZoomState.transform(FileViewerDialog.kt:363)`;
+on the fixed app the whole `ViewerUiTest` passes (`OK (4 tests)`). `lintDebug` 0 errors, 61 warnings (as before);
+`testDebugUnitTest` 365 tests, 0 failures, 33 skipped. The fix was reviewed read-only by Codex (gpt-6-astra): no finding
+against it; its note that the test did not check the page was applied (`viewer_title` unchanged). Not checked: the PDF
+pinch on a device, and a real phone.
+
 ### 5.40 Song change on the cover (1.10.1, 2026-11-02)
 
 The owner found that a swipe to the next song of the same album hardly showed a change (same cover). Small UI
