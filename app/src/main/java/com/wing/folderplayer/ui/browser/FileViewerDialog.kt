@@ -72,6 +72,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -399,8 +400,10 @@ private fun Modifier.zoomable(state: ZoomState, onOverflowY: ((Float) -> Unit)? 
             awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             do {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
-                if (event.changes.count { it.pressed } > 1 || state.scale > 1f) {
-                    val overflow = state.transform(event.calculateZoom(), event.calculatePan(), event.calculateCentroid(useCurrent = true))
+                // No centroid while no finger stays down (the last lift, or one finger lifting as another lands): nothing to follow.
+                val centroid = event.calculateCentroid(useCurrent = true)
+                if (centroid.isSpecified && (event.changes.count { it.pressed } > 1 || state.scale > 1f)) {
+                    val overflow = state.transform(event.calculateZoom(), event.calculatePan(), centroid)
                     if (overflow != 0f) onOverflowY?.invoke(overflow / state.scale)
                     event.changes.forEach { if (it.positionChanged()) it.consume() }
                 }
