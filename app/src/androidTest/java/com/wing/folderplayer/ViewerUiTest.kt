@@ -1,6 +1,10 @@
 package com.wing.folderplayer
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.center
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.swipeLeft
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -13,6 +17,7 @@ import com.wing.folderplayer.data.source.SourceType
 import com.wing.folderplayer.ui.browser.BrowserViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -88,6 +93,30 @@ class ViewerUiTest : UiTestBase() {
         until(10_000, "second image") { text("viewer_title") == "folder.png" }
         assertEquals(str(R.string.viewer_image_count, 2, 2), text("viewer_subtitle"))
         assertFalse(exists("viewer_error"))
+        deviceBack()
+        until(5_000, "closed") { closed() }
+    }
+
+    private fun shot(): IntArray {
+        val img = node("viewer_pager").captureToImage()
+        return IntArray(img.width * img.height).also { img.readPixels(it) }
+    }
+
+    /** Pinching out and lifting both fingers zooms in and leaves the picture on screen (the last lift carries no finger position). */
+    @Test fun a83_pinchOutAndLiftKeepsTheImageZoomed() {
+        openAlbumA()
+        click("item_cover.jpg")
+        until(10_000, "image shown") { exists("viewer_image") }
+        until(10_000, "picture decoded") { shot().toSet().size > 8 }
+        val before = shot()
+        node("viewer_pager").performTouchInput {
+            pinch(center + Offset(-20f, 0f), center + Offset(-200f, 0f), center + Offset(20f, 0f), center + Offset(200f, 0f))
+        }
+        compose.waitForIdle()
+        val after = shot()
+        assertFalse("zoomed in (the picture changed)", before.contentEquals(after))
+        assertEquals("cover.jpg", text("viewer_title"))
+        assertTrue(exists("viewer_image") && !exists("viewer_error"))
         deviceBack()
         until(5_000, "closed") { closed() }
     }
