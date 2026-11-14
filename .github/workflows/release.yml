@@ -161,6 +161,7 @@ jobs:
           path: |
             app/build/reports
             app/build/test-results
+          retention-days: 14
 
       - name: Build and sign
         env:
@@ -203,6 +204,8 @@ jobs:
           path: |
             FolderPlayerFork-*.apk
             SHA256SUMS.txt
+          # A tag's APK is also on its release; the artifact is for "Run workflow" checks and need not stay long.
+          retention-days: 30
 
       # Notes, APK and checksums go up together into a draft. It stays a draft (visible only to the repository's
       # collaborators) unless FP_PUBLISH_RELEASES is "true".
