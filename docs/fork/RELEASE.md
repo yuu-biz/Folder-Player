@@ -21,9 +21,11 @@ time, do not match the current history. The upstream commits up to `069fd1b` kep
    of the signing certificate read from the APK itself. A tag with a pre-release label (`v0.5.1-rc1`) is marked as
    a pre-release, also once published.
 
-The notes come from `.github/release-notes.md`. They hold only what is new in that version: replace its "What's new in"
-section for each release (do not keep the earlier versions' sections; each release has its own notes, and the full lists
-are linked under "More": `FEATURES.md`, `KNOWN_ISSUES.md`). The SHA-256 lines are appended by the workflow.
+The notes come from `.github/release-notes.md`: the list of changes of that version first (one bullet per change, for
+the person using the app; no heading, no earlier versions), then `---` and the licence footer, then the signing
+certificate line. Replace only the list for each release; keep the footer, and update its FFmpeg version or licence
+list when they change. The workflow fills `{CERT_SHA256}` and the links and appends the APK's SHA-256 in a code block.
+What the fork is, how to install it and the links to `FEATURES.md` / `KNOWN_ISSUES.md` are in the README.
 
 The draft stays unpublished — visible only to collaborators of the repository — unless the repository variable
 `FP_PUBLISH_RELEASES` is `true` (Settings → Secrets and variables → Actions → Variables, or
