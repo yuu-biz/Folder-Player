@@ -26,6 +26,10 @@ What a user can run into, in one place. The sections below give the history of e
 - **Playback control from other apps**: `MusicService` is exported so that the system UI, Bluetooth and car
   controls can use it, and accepts any controller. Another installed app can start / stop playback and replace the queue.
   An allow-list of known controller packages is a hardening candidate after 1.0.0.
+- **WebDAV User-Agent**: every WebDAV request sends the browser-like User-Agent with `MCloudApp/10.7.0` that came with
+  upstream's first commit (`WebDavFileSystem.USER_AGENT`; upstream set it on the player's HTTP source only, the fork
+  uses it for all WebDAV requests). Which server needs it is not documented; it names another app, so it is to be
+  replaced by the app's own User-Agent in a later version, after checking a WebDAV server behind Alist.
 - **Sleep timer**: it pauses the phone's player only: a DLNA cast plays on the renderer and is neither paused nor faded.
   A songs timer counts a track repeated by "repeat one" and the end of the queue; with "next folder" on it goes on in
   the next folder, and when its last song is the last of the folder the next folder is not started. "Next folder" is

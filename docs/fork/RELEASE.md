@@ -1,5 +1,9 @@
 # Releases
 
+The history of this fork was rewritten in 2026-11 (author names and addresses, a few device details in the docs) and
+moved to a new repository. Commit and tag SHAs written in these docs before then, and links to Actions runs of that
+time, do not match the current history. The upstream commits up to `069fd1b` kept their SHAs.
+
 `.github/workflows/release.yml` runs when a tag `v*` is pushed. In order, and stopping at the first failure:
 
 1. checks the tag format and that all four signing secrets exist (no secrets → the run fails; there is no
