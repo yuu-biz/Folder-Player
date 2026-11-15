@@ -1382,7 +1382,7 @@ class PlayerViewModel : ViewModel() {
         playJob = viewModelScope.launch(exceptionHandler) {
             try {
                 awaitPlayer()
-                playFolderInternal(folder, startPath, 0L, playWhenReady = true, generation)
+                playFolderInternal(folder, startPath, 0L, playWhenReady = true, generation, startRequired = true)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1685,6 +1685,7 @@ class PlayerViewModel : ViewModel() {
         playWhenReady: Boolean,
         generation: Int,
         nextFolder: Boolean = false,
+        startRequired: Boolean = false,
     ) {
         val sortPref = sourcePreferences?.getDirectorySort(folder) ?: sourcePreferences?.getDefaultSort()
 
@@ -1697,6 +1698,10 @@ class PlayerViewModel : ViewModel() {
         if (!isCurrent(generation)) return
         // Paused while the folders were listed (the sleep timer's deadline, the user): playback stays where it ended.
         if (nextFolder && player?.playWhenReady == false) return
+        // A song asked for by name (history, a search result) that is gone: say so, rather than play another one of the folder.
+        if (startRequired && startPath != null && items.none { it.mediaId == SourceUris.toUri(folder.sourceId, startPath) }) {
+            throw com.wing.folderplayer.data.source.SourceException.NotFound()
+        }
         if (items.isEmpty()) {
             // Shuffle at a root / artist folder, next folder, or a restore can land on a folder with no songs of its own.
             // What plays, the queue, the "Default" playlist and the saved state stay as they are; only the
