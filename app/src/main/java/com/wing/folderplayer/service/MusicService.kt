@@ -58,6 +58,7 @@ class MusicService : MediaLibraryService() {
     private lateinit var sleepTimer: SleepTimer
     private lateinit var diagnostics: com.wing.folderplayer.playback.PlaybackDiagnostics
     private lateinit var resume: ResumeTracker
+    private lateinit var history: com.wing.folderplayer.playback.HistoryTracker
 
     /** Sleep timer commands (START / CANCEL / GET), "retry now" / "stop retrying" and the audio session id (for the equaliser) from the app's screens, on top of the default commands. */
     private inner class SessionCallback : MediaLibrarySession.Callback {
@@ -273,6 +274,7 @@ class MusicService : MediaLibraryService() {
         retry = NetworkRetryController(player, keepAwake = ::keepAwakeForRetry).also { it.attach() }
         exporter = PlaybackExportManager(applicationContext, player).also { it.attach() }
         resume = ResumeTracker(player, prefs::getResumeLongFiles, ResumePositions.of(applicationContext)).also { it.attach() }
+        history = com.wing.folderplayer.playback.HistoryTracker(player, com.wing.folderplayer.data.history.HistoryRepository.get(applicationContext)::record).also { it.attach() }
 
         mediaSession = MediaLibrarySession.Builder(this, SessionPlayer(player, prefs), SessionCallback())
             .setSessionActivity(pendingIntent)
@@ -381,6 +383,7 @@ class MusicService : MediaLibraryService() {
         retry.detach()
         keepAwakeForRetry(false)
         resume.detach()
+        history.detach()
         exporter?.detach()
         PlaybackLog.record(PlaybackEventKind.SERVICE_STOP, where())
         mediaSession.run {
