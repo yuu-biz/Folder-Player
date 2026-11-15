@@ -49,6 +49,10 @@ class SourcePreferences(context: Context) {
     fun getGridDensity(): Int = prefs.getInt("grid_density", 3)
     fun saveGridDensity(columns: Int) = prefs.edit { putInt("grid_density", columns.coerceIn(2, 5)) }
 
+    /** Row height of the file list: the name of a `ListDensity` of the browser; null: none chosen. */
+    fun getListDensity(): String? = prefs.getString("list_density", null)
+    fun saveListDensity(name: String) = prefs.edit { putString("list_density", name) }
+
     fun getDefaultSort(): SortOption {
         val field = prefs.getString("default_sort_field", "NAME") ?: "NAME"
         val asc = prefs.getBoolean("default_sort_asc", true)

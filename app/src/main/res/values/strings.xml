@@ -157,6 +157,10 @@
     <string name="settings_notch_fullscreen">Fullscreen</string>
     <string name="settings_notch_black_bar">Black bar</string>
     <string name="settings_grid_density">Grid columns</string>
+    <string name="settings_list_density">List row height</string>
+    <string name="settings_list_density_standard">Standard</string>
+    <string name="settings_list_density_compact">Compact</string>
+    <string name="settings_list_density_dense">Dense</string>
     <string name="settings_language">Language</string>
     <string name="settings_font">Font</string>
     <string name="settings_font_ready">Downloaded</string>

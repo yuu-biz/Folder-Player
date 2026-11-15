@@ -54,6 +54,7 @@ import com.wing.folderplayer.playback.PlaybackLog
 import com.wing.folderplayer.playback.PlaybackLogFormat
 import com.wing.folderplayer.data.waveform.WaveformSettings
 import com.wing.folderplayer.ui.browser.BrowserViewModel
+import com.wing.folderplayer.ui.browser.ListDensity
 import com.wing.folderplayer.ui.player.PlayerViewModel
 import com.wing.folderplayer.ui.theme.AppFont
 import com.wing.folderplayer.ui.theme.FontManager
@@ -419,6 +420,15 @@ private fun LibraryPage(openSub: (SettingsSub) -> Unit, browserViewModel: Browse
             (2..5).map { it to it.toString() },
             browserState.gridDensity, "grid",
         ) { browserViewModel.setGridDensity(it) }
+        SettingsChoice(
+            stringResource(R.string.settings_list_density),
+            listOf(
+                ListDensity.STANDARD to stringResource(R.string.settings_list_density_standard),
+                ListDensity.COMPACT to stringResource(R.string.settings_list_density_compact),
+                ListDensity.DENSE to stringResource(R.string.settings_list_density_dense),
+            ),
+            browserState.listDensity, "listdensity",
+        ) { browserViewModel.setListDensity(it) }
 
         SettingsGroupTitle(stringResource(R.string.settings_group_network))
         val types = THUMB_TYPES

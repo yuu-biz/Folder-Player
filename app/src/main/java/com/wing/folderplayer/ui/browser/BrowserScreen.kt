@@ -568,6 +568,7 @@ fun BrowserScreen(
                                 showSourcePath = uiState.search.active || uiState.showingFavorites,
                                 songRows = uiState.showingSongs && !uiState.search.active,
                                 sortField = uiState.sortField,
+                                density = uiState.listDensity,
                                 onFileClick = onClick,
                                 onFileLongClick = onLong,
                                 modifier = Modifier.drawWithContent {
@@ -1399,6 +1400,7 @@ fun FileList(
     songRows: Boolean = false,
     /** Sort key: size or date is then shown beside the format, so a list sorted by it says why. */
     sortField: String = "NAME",
+    density: ListDensity = ListDensity.STANDARD,
     onFileClick: (MusicFile) -> Unit,
     onFileLongClick: (MusicFile) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -1407,6 +1409,7 @@ fun FileList(
     val dateFormatter = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
     val nowPlayingLabel = stringResource(R.string.browser_now_playing)
     val detailsLabel = stringResource(R.string.browser_row_details)
+    val row = density.row
 
     LazyColumn(state = listState, modifier = modifier.testTag("file_list")) {
         items(files, key = { it.sourceId + it.path }) { file ->
@@ -1414,100 +1417,140 @@ fun FileList(
             val parentOfPlaying = remember(file.path, currentlyPlaying) { isParentOfPlaying(file, currentlyPlaying) }
             val isUnsupported = !file.isDirectory && !MediaTypes.isAudio(file.name) && !MediaTypes.isCue(file.name) && !ViewerTypes.isViewable(file.name)
 
-            Column {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    // Reading order: name first, then the kind of file (or where it is), then the length at the end.
-                    // Size and modification time are in the actions sheet (long press), not in every row.
-                    ListItem(
-                        headlineContent = {
-                            Text(
-                                if (songRows) com.wing.folderplayer.data.metadata.SongList.title(file) else file.name,
-                                color = when {
-                                    playing -> MaterialTheme.colorScheme.primary
-                                    parentOfPlaying -> MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
-                                    isUnsupported -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                                    else -> Color.Unspecified
-                                },
-                                // Two lines: a long name stays readable at 320 dp and with a large font; the end is cut last.
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                fontWeight = if (playing || parentOfPlaying) androidx.compose.ui.text.font.FontWeight.Bold else null
-                            )
-                        },
-                        supportingContent = when {
-                            songRows -> ({
-                                // Artist and album when the tags have them, the folder otherwise.
-                                val line = listOfNotNull(file.tags?.artist?.takeIf { it.isNotBlank() }, file.tags?.album?.takeIf { it.isNotBlank() })
-                                    .joinToString(" • ").ifEmpty { SourcePath.parent(file.path) ?: "/" }
-                                Text(line, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("info_${file.name}"))
-                            })
-                            showSourcePath -> ({
-                                Text(SourcePath.parent(file.path) ?: "/", maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.testTag("info_${file.name}"))
-                            })
-                            !file.isDirectory && file.extension.isNotEmpty() -> ({
-                                val sortValue = when {
-                                    isUnsupported -> null
-                                    sortField == "SIZE" && file.size > 0 -> formatSize(file.size)
-                                    sortField == "DATE" && file.lastModified > 0 -> dateFormatter.format(Date(file.lastModified))
-                                    sortField == "CREATED" && file.createdOrModified > 0 -> dateFormatter.format(Date(file.createdOrModified))
-                                    else -> null
-                                }
-                                Text(
-                                    listOfNotNull(file.extension.uppercase(), sortValue).joinToString(" • "),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    color = if (isUnsupported) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f) else Color.Unspecified,
-                                    modifier = Modifier.testTag("info_${file.name}")
-                                )
-                            })
-                            else -> null
-                        },
-                        trailingContent = if (MediaTypes.isAudio(file.name)) ({
-                            // Track length, read only while the row is on screen (and kept); shown when known, nothing before
-                            // (no placeholder). Refresh (revision) looks again, e.g. after network lengths were switched on.
-                            val length by produceState<Long?>(file.durationMs.takeIf { songRows }, file.sourceId, file.path, file.size, file.lastModified, LocalThumbnailRevision.current) {
-                                if (songRows && file.durationMs != null) return@produceState
-                                value = runCatching { duration(file) }.getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it else null }
-                            }
-                            length?.let {
-                                Text(
-                                    com.wing.folderplayer.data.metadata.DurationFormat.format(it),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    modifier = Modifier.testTag("duration_${file.name}")
-                                )
-                            }
-                        }) else null,
-                        leadingContent = {
-                            if (file.isDirectory && !playing) {
-                                FolderThumb(file, thumbnail, Modifier.size(40.dp), 24.dp)
-                            } else if (ViewerTypes.kind(file.name) == ViewerKind.IMAGE) {
-                                ImageThumb(file, imageThumbnail, Modifier.size(40.dp), 24.dp, 14.dp)
-                            } else {
-                                val icon = if (playing) Icons.Default.PlayCircleFilled else fileIcon(file)
-                                val tint = when {
-                                    playing || parentOfPlaying -> MaterialTheme.colorScheme.primary
-                                    isUnsupported -> LocalContentColor.current.copy(alpha = 0.3f)
-                                    else -> LocalContentColor.current
-                                }
-                                Icon(icon, contentDescription = null, tint = tint)
-                            }
-                        },
-                        modifier = Modifier
-                            .combinedClickable(
-                                enabled = !isUnsupported,
-                                role = Role.Button,
-                                onLongClickLabel = detailsLabel,
-                                onClick = { onFileClick(file) },
-                                onLongClick = { onFileLongClick(file) }
-                            )
-                            .then(if (playing) Modifier.semantics { stateDescription = nowPlayingLabel } else Modifier)
-                            .testTag("item_${file.name}")
+            // Reading order: name first, then the kind of file (or where it is), then the length at the end.
+            // Size and modification time are in the actions sheet (long press), not in every row.
+            val headline: @Composable () -> Unit = {
+                Text(
+                    if (songRows) com.wing.folderplayer.data.metadata.SongList.title(file) else file.name,
+                    color = when {
+                        playing -> MaterialTheme.colorScheme.primary
+                        parentOfPlaying -> MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        isUnsupported -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        else -> Color.Unspecified
+                    },
+                    // Two lines: a long name stays readable at 320 dp and with a large font; the end is cut last.
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    fontWeight = if (playing || parentOfPlaying) androidx.compose.ui.text.font.FontWeight.Bold else null
+                )
+            }
+            val supporting: (@Composable () -> Unit)? = when {
+                songRows -> ({
+                    // Artist and album when the tags have them, the folder otherwise.
+                    val line = listOfNotNull(file.tags?.artist?.takeIf { it.isNotBlank() }, file.tags?.album?.takeIf { it.isNotBlank() })
+                        .joinToString(" • ").ifEmpty { SourcePath.parent(file.path) ?: "/" }
+                    Text(line, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("info_${file.name}"))
+                })
+                showSourcePath -> ({
+                    Text(SourcePath.parent(file.path) ?: "/", maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.testTag("info_${file.name}"))
+                })
+                !file.isDirectory && file.extension.isNotEmpty() -> ({
+                    val sortValue = when {
+                        isUnsupported -> null
+                        sortField == "SIZE" && file.size > 0 -> formatSize(file.size)
+                        sortField == "DATE" && file.lastModified > 0 -> dateFormatter.format(Date(file.lastModified))
+                        sortField == "CREATED" && file.createdOrModified > 0 -> dateFormatter.format(Date(file.createdOrModified))
+                        else -> null
+                    }
+                    Text(
+                        listOfNotNull(file.extension.uppercase(), sortValue).joinToString(" • "),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = if (isUnsupported) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f) else Color.Unspecified,
+                        modifier = Modifier.testTag("info_${file.name}")
+                    )
+                })
+                else -> null
+            }
+            val trailing: (@Composable () -> Unit)? = if (MediaTypes.isAudio(file.name)) ({
+                // Track length, read only while the row is on screen (and kept); shown when known, nothing before
+                // (no placeholder). Refresh (revision) looks again, e.g. after network lengths were switched on.
+                val length by produceState<Long?>(file.durationMs.takeIf { songRows }, file.sourceId, file.path, file.size, file.lastModified, LocalThumbnailRevision.current) {
+                    if (songRows && file.durationMs != null) return@produceState
+                    value = runCatching { duration(file) }.getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it else null }
+                }
+                length?.let {
+                    Text(
+                        com.wing.folderplayer.data.metadata.DurationFormat.format(it),
+                        style = row.trailing(MaterialTheme.typography),
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.testTag("duration_${file.name}")
                     )
                 }
+            }) else null
+            val leading: @Composable () -> Unit = {
+                if (file.isDirectory && !playing) {
+                    FolderThumb(file, thumbnail, Modifier.size(row.thumb), row.thumbIcon)
+                } else if (ViewerTypes.kind(file.name) == ViewerKind.IMAGE) {
+                    ImageThumb(file, imageThumbnail, Modifier.size(row.thumb), row.thumbIcon, row.badge)
+                } else {
+                    val icon = if (playing) Icons.Default.PlayCircleFilled else fileIcon(file)
+                    val tint = when {
+                        playing || parentOfPlaying -> MaterialTheme.colorScheme.primary
+                        isUnsupported -> LocalContentColor.current.copy(alpha = 0.3f)
+                        else -> LocalContentColor.current
+                    }
+                    Icon(icon, contentDescription = null, tint = tint)
+                }
+            }
+            val rowModifier = Modifier
+                .combinedClickable(
+                    enabled = !isUnsupported,
+                    role = Role.Button,
+                    onLongClickLabel = detailsLabel,
+                    onClick = { onFileClick(file) },
+                    onLongClick = { onFileLongClick(file) }
+                )
+                .then(if (playing) Modifier.semantics { stateDescription = nowPlayingLabel } else Modifier)
+                .testTag("item_${file.name}")
+
+            Column {
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    if (density == ListDensity.STANDARD) {
+                        ListItem(headlineContent = headline, supportingContent = supporting, trailingContent = trailing, leadingContent = leading, modifier = rowModifier)
+                    } else CompactListRow(row, headline, supporting, trailing, leading, rowModifier)
+                }
                 Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+            }
+        }
+    }
+}
+
+/**
+ * A row of [FileList] lower than [ListItem] can be (its minimum heights and padding are fixed): the same slots, given the
+ * colours and text styles [ListItem] gives them (Material3 1.1), in the sizes of [metrics].
+ */
+@Composable
+private fun CompactListRow(
+    metrics: RowMetrics,
+    headline: @Composable () -> Unit,
+    supporting: (@Composable () -> Unit)?,
+    trailing: (@Composable () -> Unit)?,
+    leading: @Composable () -> Unit,
+    modifier: Modifier,
+) {
+    val colors = MaterialTheme.colorScheme
+    val type = MaterialTheme.typography
+    CompositionLocalProvider(LocalContentColor provides colors.onSurface) {
+        Row(
+            modifier.background(colors.surface).padding(horizontal = metrics.horizontal, vertical = metrics.vertical).semantics(mergeDescendants = true) {},
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CompositionLocalProvider(LocalContentColor provides colors.onSurfaceVariant) {
+                Box(Modifier.padding(end = metrics.gap)) { leading() }
+            }
+            Column(Modifier.weight(1f)) {
+                ProvideTextStyle(metrics.headline(type), headline)
+                if (supporting != null) {
+                    CompositionLocalProvider(LocalContentColor provides colors.onSurfaceVariant) { ProvideTextStyle(metrics.supporting(type), supporting) }
+                }
+            }
+            if (trailing != null) {
+                Box(Modifier.padding(start = metrics.gap)) {
+                    CompositionLocalProvider(LocalContentColor provides colors.onSurfaceVariant) { ProvideTextStyle(metrics.trailing(type), trailing) }
+                }
             }
         }
     }

@@ -146,6 +146,10 @@
     <string name="settings_notch_fullscreen">全画面</string>
     <string name="settings_notch_black_bar">黒帯</string>
     <string name="settings_grid_density">グリッドの列数</string>
+    <string name="settings_list_density">リストの行の高さ</string>
+    <string name="settings_list_density_standard">標準</string>
+    <string name="settings_list_density_compact">コンパクト</string>
+    <string name="settings_list_density_dense">最小</string>
     <string name="settings_language">言語</string>
     <string name="settings_font">フォント</string>
     <string name="settings_font_ready">ダウンロード済み</string>

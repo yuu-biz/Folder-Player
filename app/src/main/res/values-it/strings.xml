@@ -146,6 +146,10 @@
     <string name="settings_notch_fullscreen">Schermo intero</string>
     <string name="settings_notch_black_bar">Barra nera</string>
     <string name="settings_grid_density">Colonne della griglia</string>
+    <string name="settings_list_density">Altezza delle righe dell\'elenco</string>
+    <string name="settings_list_density_standard">Standard</string>
+    <string name="settings_list_density_compact">Compatta</string>
+    <string name="settings_list_density_dense">Densa</string>
     <string name="settings_language">Lingua</string>
     <string name="settings_font">Carattere</string>
     <string name="settings_font_ready">Scaricato</string>

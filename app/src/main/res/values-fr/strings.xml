@@ -146,6 +146,10 @@
     <string name="settings_notch_fullscreen">Plein écran</string>
     <string name="settings_notch_black_bar">Barre noire</string>
     <string name="settings_grid_density">Colonnes de la grille</string>
+    <string name="settings_list_density">Hauteur des lignes de la liste</string>
+    <string name="settings_list_density_standard">Standard</string>
+    <string name="settings_list_density_compact">Compacte</string>
+    <string name="settings_list_density_dense">Dense</string>
     <string name="settings_language">Langue</string>
     <string name="settings_font">Police</string>
     <string name="settings_font_ready">Téléchargée</string>

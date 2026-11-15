@@ -94,6 +94,7 @@ data class BrowserUiState(
     val availableSources: List<SourceConfig> = emptyList(),
     val viewMode: String = "LIST",
     val gridDensity: Int = 3,
+    val listDensity: ListDensity = ListDensity.STANDARD,
     // Scroll memory
     val scrollToIndex: Int = 0,
     val scrollToOffset: Int = 0,
@@ -221,7 +222,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             var finished = durations.scan.value.finished
             durations.scan.collect { p -> if (p.finished != finished) { finished = p.finished; resortByLength() } }
         }
-        _uiState.value = _uiState.value.copy(gridDensity = sourcePreferences.getGridDensity())
+        _uiState.value = _uiState.value.copy(gridDensity = sourcePreferences.getGridDensity(), listDensity = ListDensity.of(sourcePreferences.getListDensity()))
 
         val last = sourcePreferences.getLastBrowsed()
         if (last != null && SourceRegistry.get(last.sourceId) != null) {
@@ -534,6 +535,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun setGridDensity(columns: Int) {
         sourcePreferences.saveGridDensity(columns)
         _uiState.value = _uiState.value.copy(gridDensity = columns.coerceIn(2, 5))
+    }
+
+    fun setListDensity(density: ListDensity) {
+        sourcePreferences.saveListDensity(density.name)
+        _uiState.value = _uiState.value.copy(listDensity = density)
     }
 
     /**

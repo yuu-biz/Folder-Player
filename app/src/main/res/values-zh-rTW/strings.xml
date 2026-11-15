@@ -146,6 +146,10 @@
     <string name="settings_notch_fullscreen">全螢幕</string>
     <string name="settings_notch_black_bar">黑邊</string>
     <string name="settings_grid_density">格狀欄數</string>
+    <string name="settings_list_density">清單列高</string>
+    <string name="settings_list_density_standard">標準</string>
+    <string name="settings_list_density_compact">緊湊</string>
+    <string name="settings_list_density_dense">最小</string>
     <string name="settings_language">語言</string>
     <string name="settings_font">字型</string>
     <string name="settings_font_ready">已下載</string>
