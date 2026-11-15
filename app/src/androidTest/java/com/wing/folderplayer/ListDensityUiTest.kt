@@ -2,6 +2,7 @@ package com.wing.folderplayer
 
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.lifecycle.ViewModelProvider
@@ -30,6 +31,8 @@ class ListDensityUiTest : UiTestBase() {
     private val browser: BrowserViewModel get() = onUi { ViewModelProvider(compose.activity)[BrowserViewModel::class.java] }
 
     private fun <T> onUi(block: () -> T): T { var r: Any? = null; compose.runOnUiThread { r = block() }; @Suppress("UNCHECKED_CAST") return r as T }
+
+    private fun displayed(tag: String) = runCatching { compose.onNodeWithTag(tag, useUnmergedTree = true).assertIsDisplayed(); true }.getOrDefault(false)
 
     private fun shell(cmd: String) = Fx.shell(cmd).also { Fx.log("shell $cmd -> ${it.trim()}") }
 
@@ -114,7 +117,8 @@ class ListDensityUiTest : UiTestBase() {
         assertTrue("folders, songs and the CUE sheet stay: $shown", shown.containsAll(listOf("Sub", "Pictures", "image.cue") + tracks))
         assertTrue("image, nfo and text go: $shown", shown.none { it in listOf("cover.jpg", "Info.nfo", "notes.txt") })
         compose.onNodeWithTag("file_list").performScrollToIndex(0)
-        until(5_000, "image row gone") { !exists("item_cover.jpg") }
+        // Compose 1.5 keeps the removed row in the unmerged test tree (a reused slot), so the row is checked as displayed.
+        until(5_000, "image row gone") { !displayed("item_cover.jpg") }
         assertTrue(exists("item_Sub"))
         reveal("item_image.cue")
         assertTrue(exists("item_image.cue"))
