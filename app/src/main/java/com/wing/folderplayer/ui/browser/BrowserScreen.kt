@@ -1594,7 +1594,8 @@ private fun CompactListRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             CompositionLocalProvider(LocalContentColor provides colors.onSurfaceVariant) {
-                Box(Modifier.padding(end = metrics.gap)) { leading() }
+                // As wide as a tile whatever it holds (a 24 dp file icon too), so that every name starts at the same place.
+                Box(Modifier.padding(end = metrics.gap).width(metrics.thumb), contentAlignment = Alignment.Center) { leading() }
             }
             Column(Modifier.weight(1f)) {
                 ProvideTextStyle(metrics.headline(type), headline)
