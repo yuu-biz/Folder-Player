@@ -60,7 +60,7 @@ abstract class UiTestBase {
         tag.startsWith("lang_") -> "display" to "language"
         tag.startsWith("font_") -> "display" to "font"
         listOf("cover_", "bg_", "title_", "orientation_", "notch_").any { tag.startsWith(it) } -> "display" to null
-        listOf("sort_", "sortdir_", "defview_", "grid_").any { tag.startsWith(it) } -> "library" to null
+        listOf("sort_", "sortdir_", "defview_", "grid_", "listdensity_").any { tag.startsWith(it) } -> "library" to null
         tag.startsWith("thumbs_") -> "library" to "thumbnails"
         tag.startsWith("cache") || tag.startsWith("netstat") -> "library" to "imagecache"
         tag == "clear_image_cache" || tag.startsWith("perm_") -> "storage" to null
