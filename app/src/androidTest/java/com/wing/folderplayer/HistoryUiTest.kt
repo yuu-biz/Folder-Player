@@ -8,6 +8,7 @@ import com.wing.folderplayer.data.history.HistoryEntry
 import com.wing.folderplayer.data.history.HistoryRepository
 import com.wing.folderplayer.data.source.SourceRegistry
 import com.wing.folderplayer.ui.browser.BrowserViewModel
+import com.wing.folderplayer.ui.player.PlayerViewModel
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -24,6 +25,7 @@ class HistoryUiTest : UiTestBase() {
     private val local = SourceRegistry.LOCAL_INTERNAL_ID
     private val history get() = HistoryRepository.get(Fx.ctx)
     private val browser: BrowserViewModel get() = onUi { ViewModelProvider(compose.activity)[BrowserViewModel::class.java] }
+    private val player: PlayerViewModel get() = onUi { ViewModelProvider(compose.activity)[PlayerViewModel::class.java] }
 
     private fun <T> onUi(block: () -> T): T { var r: Any? = null; compose.runOnUiThread { r = block() }; @Suppress("UNCHECKED_CAST") return r as T }
 
@@ -70,5 +72,19 @@ class HistoryUiTest : UiTestBase() {
         pressBack()
         until(5_000, "back on the source list") { exists("entry_history") }
         assertTrue(text("entry_history_count").contains("0"))
+    }
+
+    @Test fun aSongThatIsGoneSaysSoInsteadOfPlayingAnotherOne() {
+        onUi { history.record(song.copy(path = "${Fx.FX}/Album-B/gone.flac", name = "gone.flac")) }
+        toBrowser()
+        onUi { browser.exitSource() }
+        until(5_000, "source list") { exists("entry_history") }
+        click("entry_history")
+        until(5_000, "history list") { exists("item_gone.flac") }
+        val before = player.uiState.value.currentMediaId
+        click("item_gone.flac")
+        until(15_000, "not found") { player.uiState.value.playbackError != null }
+        assertEquals(Fx.ctx.getString(R.string.err_not_found), player.uiState.value.playbackError)
+        assertEquals("no other song of the folder starts", before, player.uiState.value.currentMediaId)
     }
 }
