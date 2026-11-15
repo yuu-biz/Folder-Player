@@ -1,4 +1,6 @@
-- Fixed a crash in the file viewer. Pinching out on a picture (or a PDF) and lifting the fingers closed the app. Zooming now works as before and the picture stays on screen.
+- Added a list row height setting in Settings › Library. Compact and Dense fit more rows on a screen (about 11 and 13 instead of 8) and keep everything a row shows. Standard stays the default.
+- Added a button beside the filter of a folder that shows only music for a while. Pictures, text files, PDFs and the like are hidden; folders, songs and CUE sheets stay. It is off again after a restart.
+- Added a playback history under the favourites on the start page. It lists the songs played for 10 seconds or to their end, newest first, with the time and the folder (up to 300 songs). A tap plays the song in its folder, a long press removes it, and the ⋮ menu clears the list. A song that was renamed, moved or deleted shows "not found" instead of playing another song.
 
 ---
 

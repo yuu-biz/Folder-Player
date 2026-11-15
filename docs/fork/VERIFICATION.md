@@ -140,6 +140,23 @@ The only device run recorded between `38b06da` and `bf18888` is `SyncTagsUiTest`
 - Navigation redesign on more phones: the user checked 0.6.0-dev5 on one phone (no major problems); TalkBack reading
   order and other devices are not checked (see 5.5, 5.8, 5.9).
 
+### 5.42 List row height, music only, playback history (1.11.0, 2026-11-15)
+
+The owner asked for more on one screen as options (smaller rows, hiding files that are not music) without losing any
+information a row shows, then for a playback history. Standard rows stay the default and use the M3 `ListItem` as before;
+Compact and Dense use `CompactListRow` (M3 1.1 `ListItem` has fixed minimum heights). Rows on one API 28 screen: Standard 8,
+Compact 11, Dense 13; in Dense every name starts at the same x (the leading slot is one tile wide).
+
+Device runs (the Windows SDK API 28 AVD, `-read-only -no-snapshot-save`; `emu.sh` was unusable, Docker in WSL detached):
+`ListDensityUiTest` `OK (2 tests)`, `HistoryUiTest` `OK (2 tests)`. A removed lazy row stays in the unmerged test tree in
+Compose 1.5, so a hidden row is checked as not displayed. By hand on the same AVD: a song played 4 s is not recorded, 14 s is;
+the CUE sheet `image.cue` is recorded with its artist and a tap on its row plays the first track.
+`HistoryUiTest#aSongThatIsGoneSaysSoInsteadOfPlayingAnotherOne` on the app without the fix timed out waiting for the error (the
+folder's first song played instead); with `playFolderInternal(startRequired = true)` it passes.
+`testDebugUnitTest` 378 tests, 0 failures, 33 skipped (fixture suites); `lintDebug` 0 errors, 61 warnings.
+Not checked: the sort suites (`CreatedSortTest`, `LengthSortUiTest`, `SongsUiTest`, `FavoritesSortUiTest`) after the music-only
+button narrowed the sort row (checked by eye only), Cast / DLNA (not recorded by design), a real phone.
+
 ### 5.41 File viewer pinch crash (1.10.2, 2026-11-08)
 
 The owner reported that opening a picture and pinching out closed the app. Cause: the last finger's lift carries no finger

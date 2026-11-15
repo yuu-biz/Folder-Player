@@ -153,3 +153,6 @@ song's number shows for a moment): `v1.10.1` is versionName `1.10.1`, versionCod
 
 1.10.2 (fix: pinching out on a picture or a PDF in the file viewer no longer closes the app): `v1.10.2` is versionName
 `1.10.2`, versionCode `1100299`, which installs over 1.10.1.
+
+1.11.0 (list row height, show only music in a folder, playback history): `v1.11.0` is versionName `1.11.0`, versionCode
+`1110099`, which installs over 1.10.2.
