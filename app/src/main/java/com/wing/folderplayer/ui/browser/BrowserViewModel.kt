@@ -17,6 +17,8 @@ import com.wing.folderplayer.data.favorites.SyncAnchor
 import com.wing.folderplayer.data.favorites.SyncResult
 import com.wing.folderplayer.data.prefs.SourcePreferences
 import com.wing.folderplayer.data.search.NameFilter
+import com.wing.folderplayer.data.search.folderEntries
+import com.wing.folderplayer.data.search.isMusicName
 import com.wing.folderplayer.data.search.SearchProgress
 import com.wing.folderplayer.data.search.SearchRepository
 import com.wing.folderplayer.R
@@ -54,6 +56,8 @@ data class CacheEntry(
     val scrollOffset: Int = 0,
     /** The filter the list was narrowed by when [scrollIndex] was saved (the position is of that list). */
     val scrollFilter: String = "",
+    /** Whether music-only was on then (see [BrowserUiState.musicOnly]); the position is of that list too. */
+    val scrollMusicOnly: Boolean = false,
     val sortField: String,
     val sortAscending: Boolean
 )
@@ -108,6 +112,8 @@ data class BrowserUiState(
     /** The filter of the folder on screen (see [NameFilter]); kept for the way back to the folder, dropped for another one. */
     val filter: String = "",
     val filterOpen: Boolean = false,
+    /** Folders list only folders, songs and CUE sheets ([folderEntries]); kept from folder to folder, not across app restarts. */
+    val musicOnly: Boolean = false,
     /** The file open in the viewer (text, image or PDF beside the songs), or null. */
     val viewer: ViewerRequest? = null,
     /** A rename, move or delete waiting for the user's confirmation (its dialog is shown), or running ([fileOpBusy]). */
@@ -116,9 +122,13 @@ data class BrowserUiState(
     /** Sorted by length: the lengths of this list being read (or read) for the order; null when none were missing. */
     val lengthFill: LengthFill? = null,
 ) {
-    /** [files] narrowed by [filter]: the list on screen (playing a song of it queues the songs shown). */
+    /** [files] narrowed by [filter] (and in a folder by [musicOnly]): the list on screen (playing a song of it queues the songs shown). */
     val visibleFiles: List<MusicFile> by lazy(LazyThreadSafetyMode.NONE) {
-        if (showingSongs) com.wing.folderplayer.data.metadata.SongList.filter(files, filter) else NameFilter.apply(files, filter)
+        when {
+            showingSongs -> com.wing.folderplayer.data.metadata.SongList.filter(files, filter)
+            currentFolder != null -> folderEntries(files, filter, musicOnly)
+            else -> NameFilter.apply(files, filter)
+        }
     }
 
     val showingFavorites: Boolean get() = favoritesKind != null
@@ -381,13 +391,13 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             if (cached != null && (now - cached.timestamp < CACHE_EXPIRY_MS)) {
                 // By length: sorted again with the lengths known now (a scan or the rows may have read more since).
                 val finalFiles = if (field == SORT_LENGTH || cached.sortField != field || cached.sortAscending != asc) withContext(Dispatchers.Default) { applySort(cached.files, field, asc) } else cached.files
-                val restore = isBackNavigation && cached.scrollFilter == newFilter
+                val restore = isBackNavigation && cached.scrollFilter == newFilter && cached.scrollMusicOnly == _uiState.value.musicOnly
                 _uiState.value = _uiState.value.copy(
                     files = finalFiles,
                     isLoading = false,
                     sortField = field,
                     sortAscending = asc,
-                    scrollToIndex = focusIndex(finalFiles, newFilter, focus) ?: if (restore) cached.scrollIndex else 0,
+                    scrollToIndex = focusIndex(finalFiles, newFilter, _uiState.value.musicOnly, focus) ?: if (restore) cached.scrollIndex else 0,
                     scrollToOffset = if (restore && focus == null) cached.scrollOffset else 0,
                     scrollTrigger = _uiState.value.scrollTrigger + 1
                 )
@@ -414,7 +424,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     isLoading = false,
                     sortField = field,
                     sortAscending = asc,
-                    scrollToIndex = focusIndex(files, newFilter, focus) ?: 0,
+                    scrollToIndex = focusIndex(files, newFilter, _uiState.value.musicOnly, focus) ?: 0,
                     scrollToOffset = 0,
                     scrollTrigger = _uiState.value.scrollTrigger + 1
                 )
@@ -431,31 +441,35 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /** Where the list starts so that [focus] is in view with a row or two above it; null: not in the list. */
-    private fun focusIndex(files: List<MusicFile>, filter: String, focus: SourceRef?): Int? {
+    private fun focusIndex(files: List<MusicFile>, filter: String, musicOnly: Boolean, focus: SourceRef?): Int? {
         focus ?: return null
-        val i = NameFilter.apply(files, filter).indexOfFirst { it.sourceId == focus.sourceId && it.path == focus.path }
+        val i = folderEntries(files, filter, musicOnly).indexOfFirst { it.sourceId == focus.sourceId && it.path == focus.path }
         return if (i < 0) null else (i - 2).coerceAtLeast(0)
     }
 
     /**
      * The folder of the track playing, from the player (its folder name): a new step, so Back returns to where the user
-     * was; already there, the list only scrolls to [file] (and the filter goes if it hides it).
+     * was; already there, the list only scrolls to [file] (and the filter goes if it hides it). Music-only goes when it
+     * hides [file] (an image or a text file shown from the search results or the favourites).
      */
     fun revealInFolder(folder: SourceRef, file: SourceRef?) {
         closeSearch()
         val state = _uiState.value
+        val musicOnly = state.musicOnly && (file == null || isMusicName(file.name))
         if (state.currentFolder == folder) {
-            val shown = focusIndex(state.files, state.filter, file)
-            val unfiltered = if (shown == null) focusIndex(state.files, "", file) else null
+            val shown = focusIndex(state.files, state.filter, musicOnly, file)
+            val unfiltered = if (shown == null) focusIndex(state.files, "", musicOnly, file) else null
             val index = shown ?: unfiltered ?: return
             _uiState.value = _uiState.value.copy(
                 filter = if (unfiltered != null) "" else state.filter,
                 filterOpen = if (unfiltered != null) false else state.filterOpen,
+                musicOnly = musicOnly,
                 scrollToIndex = index, scrollToOffset = 0, scrollTrigger = _uiState.value.scrollTrigger + 1,
             )
             return
         }
         if (state.isRoot) startFromSourceList() else rememberCurrentPlace()
+        _uiState.value = _uiState.value.copy(musicOnly = musicOnly)
         loadFolder(folder, filter = "", focus = file)
     }
 
@@ -464,7 +478,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         if (_uiState.value.showingSongs) { songsScroll = index to offset; return }
         val key = _uiState.value.currentFolder?.toUriString() ?: return
         directoryCache[key]?.let { entry ->
-            directoryCache[key] = entry.copy(scrollIndex = index, scrollOffset = offset, scrollFilter = _uiState.value.filter)
+            directoryCache[key] = entry.copy(scrollIndex = index, scrollOffset = offset, scrollFilter = _uiState.value.filter, scrollMusicOnly = _uiState.value.musicOnly)
         }
     }
 
@@ -1096,6 +1110,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun closeFilter() {
         setFilter("")
         _uiState.value = _uiState.value.copy(filterOpen = false)
+    }
+
+    /** Folders list only folders, songs and CUE sheets, or every file again ([BrowserUiState.musicOnly]); the list starts from the top. */
+    fun setMusicOnly(on: Boolean) {
+        if (on == _uiState.value.musicOnly) return
+        _uiState.value = _uiState.value.copy(musicOnly = on, scrollToIndex = 0, scrollToOffset = 0, scrollTrigger = _uiState.value.scrollTrigger + 1)
     }
 
     // ---------------- search ----------------

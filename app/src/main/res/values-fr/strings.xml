@@ -31,6 +31,9 @@
     <string name="browser_filter">Filtrer ce dossier</string>
     <string name="browser_filter_hint">Filtrer par nom (ce dossier seulement)</string>
     <string name="browser_filter_no_match">Rien dans ce dossier ne correspond à « %1$s »</string>
+    <string name="browser_music_only">Afficher uniquement les fichiers musicaux</string>
+    <string name="browser_music_only_empty">Seuls les fichiers musicaux sont affichés, et ce dossier n\'en contient aucun</string>
+    <string name="browser_music_only_show_all">Tout afficher</string>
     <string name="layout_show_player">Afficher le lecteur</string>
     <string name="layout_hide_player">Masquer le lecteur</string>
     <string name="viewer_open">Ouvrir</string>

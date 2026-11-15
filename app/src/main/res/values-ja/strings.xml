@@ -31,6 +31,9 @@
     <string name="browser_filter">このフォルダを絞り込む</string>
     <string name="browser_filter_hint">名前で絞り込み（このフォルダのみ）</string>
     <string name="browser_filter_no_match">このフォルダに「%1$s」に一致する項目はありません</string>
+    <string name="browser_music_only">音楽ファイルだけ表示</string>
+    <string name="browser_music_only_empty">音楽ファイル以外を非表示にしています。このフォルダに音楽ファイルはありません</string>
+    <string name="browser_music_only_show_all">すべて表示</string>
     <string name="layout_show_player">プレーヤーを表示</string>
     <string name="layout_hide_player">プレーヤーを隠す</string>
     <string name="viewer_open">開く</string>

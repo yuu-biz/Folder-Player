@@ -31,6 +31,9 @@
     <string name="browser_filter">Filtra questa cartella</string>
     <string name="browser_filter_hint">Filtra per nome (solo questa cartella)</string>
     <string name="browser_filter_no_match">Nessun elemento di questa cartella corrisponde a “%1$s”</string>
+    <string name="browser_music_only">Mostra solo i file musicali</string>
+    <string name="browser_music_only_empty">Sono mostrati solo i file musicali e questa cartella non ne contiene</string>
+    <string name="browser_music_only_show_all">Mostra tutto</string>
     <string name="layout_show_player">Mostra il lettore</string>
     <string name="layout_hide_player">Nascondi il lettore</string>
     <string name="viewer_open">Apri</string>

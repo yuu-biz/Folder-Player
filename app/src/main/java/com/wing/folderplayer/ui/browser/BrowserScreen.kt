@@ -478,6 +478,16 @@ fun BrowserScreen(
                                     tint = if (uiState.filterOpen) MaterialTheme.colorScheme.primary else LocalContentColor.current,
                                 )
                             }
+                            IconButton(
+                                onClick = { viewModel.setMusicOnly(!uiState.musicOnly) },
+                                modifier = Modifier.semantics { this.selected = uiState.musicOnly }.testTag("btn_music_only")
+                            ) {
+                                Icon(
+                                    Icons.Default.MusicNote,
+                                    contentDescription = stringResource(R.string.browser_music_only),
+                                    tint = if (uiState.musicOnly) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+                                )
+                            }
                             SortHeader(
                                 currentField = uiState.sortField,
                                 ascending = uiState.sortAscending,
@@ -587,7 +597,9 @@ fun BrowserScreen(
                         }
                         // A folder that cannot be read says so (and can be tried again); an empty one says that it is empty.
                         if (!uiState.isRoot && uiState.currentFolder != null && !uiState.isLoading && !uiState.search.active && files.isEmpty()) {
-                            if (uiState.files.isNotEmpty()) {
+                            if (uiState.files.isNotEmpty() && uiState.musicOnly && uiState.filter.isBlank()) {
+                                MusicOnlyEmptyState(onShowAll = { viewModel.setMusicOnly(false) }, modifier = Modifier.align(Alignment.Center))
+                            } else if (uiState.files.isNotEmpty()) {
                                 Text(
                                     stringResource(R.string.browser_filter_no_match, uiState.filter.trim()),
                                     style = MaterialTheme.typography.bodyLarge,
@@ -1718,6 +1730,24 @@ fun PlaylistSelectBottomSheet(
                 }
             }
         }
+    }
+}
+
+/** A folder with files but none that music-only keeps: says so, with the way back to every file. */
+@Composable
+private fun MusicOnlyEmptyState(onShowAll: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 24.dp).testTag("music_only_empty"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            stringResource(R.string.browser_music_only_empty),
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedButton(onClick = onShowAll, modifier = Modifier.testTag("music_only_show_all")) { Text(stringResource(R.string.browser_music_only_show_all)) }
     }
 }
 

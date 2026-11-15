@@ -31,6 +31,9 @@
     <string name="browser_filter">筛选此文件夹</string>
     <string name="browser_filter_hint">按名称筛选（仅此文件夹）</string>
     <string name="browser_filter_no_match">此文件夹中没有与“%1$s”匹配的项目</string>
+    <string name="browser_music_only">仅显示音乐文件</string>
+    <string name="browser_music_only_empty">仅显示音乐文件，此文件夹中没有音乐文件</string>
+    <string name="browser_music_only_show_all">全部显示</string>
     <string name="layout_show_player">显示播放器</string>
     <string name="layout_hide_player">隐藏播放器</string>
     <string name="viewer_open">打开</string>

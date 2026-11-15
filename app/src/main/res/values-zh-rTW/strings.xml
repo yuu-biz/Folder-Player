@@ -31,6 +31,9 @@
     <string name="browser_filter">篩選此資料夾</string>
     <string name="browser_filter_hint">依名稱篩選（僅此資料夾）</string>
     <string name="browser_filter_no_match">此資料夾中沒有符合「%1$s」的項目</string>
+    <string name="browser_music_only">僅顯示音樂檔案</string>
+    <string name="browser_music_only_empty">僅顯示音樂檔案，此資料夾中沒有音樂檔案</string>
+    <string name="browser_music_only_show_all">全部顯示</string>
     <string name="layout_show_player">顯示播放器</string>
     <string name="layout_hide_player">隱藏播放器</string>
     <string name="viewer_open">開啟</string>

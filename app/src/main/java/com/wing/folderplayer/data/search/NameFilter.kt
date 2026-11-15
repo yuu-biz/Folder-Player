@@ -1,6 +1,14 @@
 package com.wing.folderplayer.data.search
 
+import com.wing.folderplayer.data.source.MediaTypes
 import com.wing.folderplayer.data.source.MusicFile
+
+/** A file the browser's music-only view keeps (folders stay too): a song, or a CUE sheet, which plays as songs. */
+fun isMusicName(name: String): Boolean = MediaTypes.isAudio(name) || MediaTypes.isCue(name)
+
+/** The entries of the folder on screen: with [musicOnly] only folders and [isMusicName] files, then those [NameFilter] keeps. */
+fun folderEntries(files: List<MusicFile>, filter: String, musicOnly: Boolean): List<MusicFile> =
+    NameFilter.apply(if (musicOnly) files.filter { it.isDirectory || isMusicName(it.name) } else files, filter)
 
 /**
  * The filter of the browser: narrows the entries of the folder on screen by name (nothing below the folder is listed, unlike

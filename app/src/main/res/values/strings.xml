@@ -38,6 +38,9 @@
     <string name="browser_filter">Filter this folder</string>
     <string name="browser_filter_hint">Filter by name (this folder only)</string>
     <string name="browser_filter_no_match">Nothing in this folder matches “%1$s”</string>
+    <string name="browser_music_only">Show music files only</string>
+    <string name="browser_music_only_empty">Only music files are shown, and this folder has none</string>
+    <string name="browser_music_only_show_all">Show all</string>
     <string name="layout_show_player">Show player</string>
     <string name="layout_hide_player">Hide player</string>
     <string name="viewer_open">Open</string>
