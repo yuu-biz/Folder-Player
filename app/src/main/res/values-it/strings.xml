@@ -349,6 +349,11 @@
         <item quantity="many">%d brani</item>
         <item quantity="other">%d brani</item>
     </plurals>
+    <plurals name="browser_history_count">
+        <item quantity="one">%d brano</item>
+        <item quantity="many">%d brani</item>
+        <item quantity="other">%d brani</item>
+    </plurals>
     <plurals name="source_test_ok">
         <item quantity="one">Connesso. %d elemento nella cartella radice</item>
         <item quantity="many">Connesso. %d elementi nella cartella radice</item>
@@ -390,6 +395,13 @@
     <string name="player_seek_fine">Regolazione fine</string>
     <string name="browser_favorite_songs">Brani preferiti</string>
     <string name="browser_favorite_folders">Cartelle preferite</string>
+    <string name="browser_history">Cronologia di riproduzione</string>
+    <string name="history_remove">Rimuovi dalla cronologia</string>
+    <string name="history_clear">Cancella cronologia</string>
+    <string name="history_clear_title">Cancellare la cronologia di riproduzione?</string>
+    <string name="history_clear_text">Tutti i brani vengono tolti da questo elenco. I file non vengono eliminati.</string>
+    <string name="history_clear_confirm">Cancella</string>
+    <string name="history_empty">Nessun brano ascoltato finora</string>
     <string name="sort_length">Durata</string>
     <string name="sort_title">Titolo</string>
     <string name="sort_artist">Artista</string>

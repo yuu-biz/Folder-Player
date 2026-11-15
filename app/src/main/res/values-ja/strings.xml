@@ -337,6 +337,9 @@
     <plurals name="browser_songs_count">
         <item quantity="other">%d 曲</item>
     </plurals>
+    <plurals name="browser_history_count">
+        <item quantity="other">%d 曲</item>
+    </plurals>
     <plurals name="source_test_ok">
         <item quantity="other">接続しました。ルートに %d 項目あります</item>
     </plurals>
@@ -372,6 +375,13 @@
     <string name="player_seek_fine">微調整</string>
     <string name="browser_favorite_songs">お気に入りの曲</string>
     <string name="browser_favorite_folders">お気に入りのフォルダ</string>
+    <string name="browser_history">再生履歴</string>
+    <string name="history_remove">履歴から削除</string>
+    <string name="history_clear">履歴を消去</string>
+    <string name="history_clear_title">再生履歴を消去しますか？</string>
+    <string name="history_clear_text">この一覧からすべての曲が消えます。ファイル自体は削除されません。</string>
+    <string name="history_clear_confirm">消去</string>
+    <string name="history_empty">再生履歴はありません</string>
     <string name="sort_length">長さ</string>
     <string name="sort_title">タイトル</string>
     <string name="sort_artist">アーティスト</string>

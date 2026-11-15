@@ -337,6 +337,9 @@
     <plurals name="browser_songs_count">
         <item quantity="other">%d 首歌曲</item>
     </plurals>
+    <plurals name="browser_history_count">
+        <item quantity="other">%d 首</item>
+    </plurals>
     <plurals name="source_test_ok">
         <item quantity="other">已連線。根目錄有 %d 項</item>
     </plurals>
@@ -372,6 +375,13 @@
     <string name="player_seek_fine">微調</string>
     <string name="browser_favorite_songs">收藏的歌曲</string>
     <string name="browser_favorite_folders">收藏的資料夾</string>
+    <string name="browser_history">播放紀錄</string>
+    <string name="history_remove">從播放紀錄中移除</string>
+    <string name="history_clear">清除播放紀錄</string>
+    <string name="history_clear_title">清除播放紀錄？</string>
+    <string name="history_clear_text">此清單中的所有歌曲都會被移除。檔案本身不會被刪除。</string>
+    <string name="history_clear_confirm">清除</string>
+    <string name="history_empty">尚無播放紀錄</string>
     <string name="sort_length">長度</string>
     <string name="sort_title">標題</string>
     <string name="sort_artist">演出者</string>

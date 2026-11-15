@@ -349,6 +349,11 @@
         <item quantity="many">%d morceaux</item>
         <item quantity="other">%d morceaux</item>
     </plurals>
+    <plurals name="browser_history_count">
+        <item quantity="one">%d morceau</item>
+        <item quantity="many">%d morceaux</item>
+        <item quantity="other">%d morceaux</item>
+    </plurals>
     <plurals name="source_test_ok">
         <item quantity="one">Connecté. %d élément dans le dossier racine</item>
         <item quantity="many">Connecté. %d éléments dans le dossier racine</item>
@@ -390,6 +395,13 @@
     <string name="player_seek_fine">Réglage fin</string>
     <string name="browser_favorite_songs">Morceaux favoris</string>
     <string name="browser_favorite_folders">Dossiers favoris</string>
+    <string name="browser_history">Historique de lecture</string>
+    <string name="history_remove">Retirer de l\'historique</string>
+    <string name="history_clear">Effacer l\'historique</string>
+    <string name="history_clear_title">Effacer l\'historique de lecture ?</string>
+    <string name="history_clear_text">Tous les morceaux sont retirés de cette liste. Les fichiers eux-mêmes ne sont pas supprimés.</string>
+    <string name="history_clear_confirm">Effacer</string>
+    <string name="history_empty">Aucun morceau écouté pour l\'instant</string>
     <string name="sort_length">Durée</string>
     <string name="sort_title">Titre</string>
     <string name="sort_artist">Artiste</string>

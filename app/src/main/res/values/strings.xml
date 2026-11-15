@@ -357,6 +357,10 @@
         <item quantity="one">%d song</item>
         <item quantity="other">%d songs</item>
     </plurals>
+    <plurals name="browser_history_count">
+        <item quantity="one">%d song</item>
+        <item quantity="other">%d songs</item>
+    </plurals>
     <plurals name="source_test_ok">
         <item quantity="one">Connected. %d item in the root folder</item>
         <item quantity="other">Connected. %d items in the root folder</item>
@@ -395,6 +399,13 @@
     <string name="player_seek_fine">Fine seek</string>
     <string name="browser_favorite_songs">Favorite songs</string>
     <string name="browser_favorite_folders">Favorite folders</string>
+    <string name="browser_history">Playback history</string>
+    <string name="history_remove">Remove from history</string>
+    <string name="history_clear">Clear history</string>
+    <string name="history_clear_title">Clear the playback history?</string>
+    <string name="history_clear_text">Every song is removed from this list. The files themselves are not deleted.</string>
+    <string name="history_clear_confirm">Clear</string>
+    <string name="history_empty">No songs played yet</string>
     <string name="sort_length">Length</string>
     <string name="sort_title">Title</string>
     <string name="sort_artist">Artist</string>

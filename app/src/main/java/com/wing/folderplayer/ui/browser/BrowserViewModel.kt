@@ -15,6 +15,9 @@ import com.wing.folderplayer.data.favorites.FavoritesRepository
 import com.wing.folderplayer.data.favorites.FavoritesSort
 import com.wing.folderplayer.data.favorites.SyncAnchor
 import com.wing.folderplayer.data.favorites.SyncResult
+import com.wing.folderplayer.data.history.History
+import com.wing.folderplayer.data.history.HistoryEntry
+import com.wing.folderplayer.data.history.HistoryRepository
 import com.wing.folderplayer.data.prefs.SourcePreferences
 import com.wing.folderplayer.data.search.NameFilter
 import com.wing.folderplayer.data.search.folderEntries
@@ -82,6 +85,8 @@ data class BrowserUiState(
     val favoritesKind: FavoritesKind? = null,
     /** The songs list on screen (every song the length index knows, see [com.wing.folderplayer.data.metadata.SongList]). */
     val showingSongs: Boolean = false,
+    /** The playback history on screen (newest first, see [HistoryRepository]). */
+    val showingHistory: Boolean = false,
     /** Songs in that list (shown on the source list). */
     val songCount: Int = 0,
     /** The folders that list is narrowed to, with the folders below them (kept, see [SourcePreferences.getSongsFolders]); empty: every song. */
@@ -103,6 +108,8 @@ data class BrowserUiState(
     val selectedFileForPlaylist: MusicFile? = null,
     val search: SearchUiState = SearchUiState(),
     val favorites: List<FavoriteItem> = emptyList(),
+    /** The playback history of this device (those whose source still exists are listed). */
+    val history: List<HistoryEntry> = emptyList(),
     /** Bookmarked folders of this device (those whose source still exists are listed on the source list). */
     val bookmarks: List<Bookmark> = emptyList(),
     val message: String? = null,
@@ -134,7 +141,7 @@ data class BrowserUiState(
 
     val showingFavorites: Boolean get() = favoritesKind != null
     val currentSource: SourceConfig? get() = currentFolder?.let { f -> availableSources.firstOrNull { it.id == f.sourceId } }
-    val isRoot: Boolean get() = currentFolder == null && !showingFavorites && !showingSongs
+    val isRoot: Boolean get() = currentFolder == null && !showingFavorites && !showingSongs && !showingHistory
 
     fun isBookmarked(ref: SourceRef): Boolean = bookmarks.any { it.sourceId == ref.sourceId && it.path == ref.path }
 }
@@ -158,6 +165,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private val durations = com.wing.folderplayer.data.metadata.DurationRepository.get(application)
     val favoritesRepository: FavoritesRepository
     val bookmarksRepository: BookmarksRepository
+    private val historyRepository = HistoryRepository.get(application)
     private val viewerCache = ViewerCache(File(application.cacheDir, "viewer"))
     private val searchRepository = SearchRepository({ ref -> SourceRegistry.fileSystem(ref).list(ref.path) })
     private var loadJob: Job? = null
@@ -167,6 +175,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         object SourceList : Place
         data class Favorites(val kind: FavoritesKind) : Place
         data class Songs(val filter: String = "") : Place
+        object History : Place
         data class Folder(val ref: SourceRef, val filter: String = "") : Place
     }
 
@@ -176,6 +185,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     /** Scroll position of each favourites list, kept for the way back from a favourite. */
     private val favoritesScroll = HashMap<FavoritesKind, Pair<Int, Int>>()
     private var songsScroll = 0 to 0
+    private var historyScroll = 0 to 0
     /** Counts the songs for the source list (declared before init: its collectors start it). */
     private var countJob: Job? = null
     private var searchJob: Job? = null
@@ -204,6 +214,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             favoritesRepository.items.collect { list ->
                 _uiState.value = _uiState.value.copy(favorites = list)
                 _uiState.value.favoritesKind?.let { renderFavorites(it, restoreScroll = false) }
+            }
+        }
+        viewModelScope.launch {
+            historyRepository.items.collect { list ->
+                _uiState.value = _uiState.value.copy(history = list)
+                if (_uiState.value.showingHistory) renderHistory(restoreScroll = false)
             }
         }
         viewModelScope.launch {
@@ -301,6 +317,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private fun currentPlace(): Place = when {
         _uiState.value.favoritesKind != null -> Place.Favorites(_uiState.value.favoritesKind!!)
         _uiState.value.showingSongs -> Place.Songs(_uiState.value.filter)
+        _uiState.value.showingHistory -> Place.History
         else -> _uiState.value.currentFolder?.let { Place.Folder(it, _uiState.value.filter) } ?: Place.SourceList
     }
 
@@ -375,6 +392,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             loadError = null,
             favoritesKind = null,
             showingSongs = false,
+            showingHistory = false,
             lengthFill = null,
             viewMode = sourcePreferences.getViewMode(folder),
             filter = newFilter,
@@ -477,6 +495,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun saveScrollPosition(index: Int, offset: Int) {
         _uiState.value.favoritesKind?.let { favoritesScroll[it] = index to offset; return }
         if (_uiState.value.showingSongs) { songsScroll = index to offset; return }
+        if (_uiState.value.showingHistory) { historyScroll = index to offset; return }
         val key = _uiState.value.currentFolder?.toUriString() ?: return
         directoryCache[key]?.let { entry ->
             directoryCache[key] = entry.copy(scrollIndex = index, scrollOffset = offset, scrollFilter = _uiState.value.filter, scrollMusicOnly = _uiState.value.musicOnly)
@@ -556,12 +575,13 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 Place.SourceList -> showSourceList()
                 is Place.Favorites -> renderFavorites(previous.kind, restoreScroll = true)
                 is Place.Songs -> renderSongs(restoreScroll = true, filter = previous.filter)
+                Place.History -> renderHistory(restoreScroll = true)
                 is Place.Folder -> loadFolder(previous.ref, isBackNavigation = true, filter = previous.filter)
             }
             return
         }
         // No history (the app opened on the folder it was last in): the folder above, the source list above a source root.
-        if (_uiState.value.showingFavorites || _uiState.value.showingSongs) { showSourceList(); return }
+        if (_uiState.value.showingFavorites || _uiState.value.showingSongs || _uiState.value.showingHistory) { showSourceList(); return }
         val folder = _uiState.value.currentFolder ?: return
         val parent = folder.parent
         if (parent == null) showSourceList() else loadFolder(parent, isBackNavigation = true)
@@ -592,7 +612,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         closeSearch()
         sourcePreferences.saveLastBrowsedState(null)
         songsJob?.cancel()
-        _uiState.value = _uiState.value.copy(currentFolder = null, favoritesKind = null, showingSongs = false, lengthFill = null, files = emptyList(), isLoading = false, filter = "", filterOpen = false)
+        _uiState.value = _uiState.value.copy(currentFolder = null, favoritesKind = null, showingSongs = false, showingHistory = false, lengthFill = null, files = emptyList(), isLoading = false, filter = "", filterOpen = false)
     }
 
     fun onFileClicked(
@@ -616,6 +636,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             return
         }
         if (!MediaTypes.isAudio(file.name)) return
+        // A song of the history plays in its own folder, from it on (the folder is the queue, not the history).
+        if (_uiState.value.showingHistory && !_uiState.value.search.active) {
+            onFolderPlay(file.ref.parent ?: SourceRef(file.sourceId, SourcePath.ROOT), file.path)
+            return
+        }
 
         val list = listOnScreen()
         val musicFiles = list.filter { !it.isDirectory && MediaTypes.isAudio(it.name) }
@@ -888,6 +913,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         _uiState.value = _uiState.value.copy(
             favoritesKind = kind,
             showingSongs = false,
+            showingHistory = false,
             currentFolder = null,
             filter = "",
             filterOpen = false,
@@ -917,7 +943,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         loadJob?.cancel()
         lengthJob?.cancel()
         _uiState.value = _uiState.value.copy(
-            showingSongs = true, favoritesKind = null, currentFolder = null, files = emptyList(), lengthFill = null,
+            showingSongs = true, showingHistory = false, favoritesKind = null, currentFolder = null, files = emptyList(), lengthFill = null,
             filter = "", filterOpen = false, isLoading = true, viewMode = "LIST",
         )
         renderSongs(restoreScroll = false, top = true)
@@ -934,7 +960,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             closeSearch()
             loadJob?.cancel()
             lengthJob?.cancel()
-            _uiState.value = _uiState.value.copy(showingSongs = true, favoritesKind = null, currentFolder = null, lengthFill = null, filter = filter.orEmpty(), filterOpen = !filter.isNullOrEmpty())
+            _uiState.value = _uiState.value.copy(showingSongs = true, showingHistory = false, favoritesKind = null, currentFolder = null, lengthFill = null, filter = filter.orEmpty(), filterOpen = !filter.isNullOrEmpty())
         }
         val folders = songsFolders()
         songsJob = viewModelScope.launch(exceptionHandler) {
@@ -951,7 +977,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 else -> null
             }
             _uiState.value = now.copy(
-                showingSongs = true, favoritesKind = null, currentFolder = null, files = songs, isLoading = false, songsFolders = folders,
+                showingSongs = true, showingHistory = false, favoritesKind = null, currentFolder = null, files = songs, isLoading = false, songsFolders = folders,
                 sortField = sort.field, sortAscending = sort.ascending, viewMode = "LIST", lengthFill = null,
                 filter = f, filterOpen = f.isNotEmpty() || now.filterOpen,
                 scrollToIndex = scroll?.first ?: now.scrollToIndex,
@@ -995,6 +1021,43 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     /** Reads the song lengths of the folders the songs list is narrowed to. */
     fun scanSongsFolderLengths() { songsFolders().takeIf { it.isNotEmpty() }?.let { scanLengths(it) } }
+
+    // ---------------- playback history ----------------
+
+    /** The playback history (entered from the source list, or from elsewhere as a new step). */
+    fun showHistory() {
+        val state = _uiState.value
+        if (state.showingHistory) return
+        if (state.isRoot) startFromSourceList() else rememberCurrentPlace()
+        renderHistory(restoreScroll = false, top = true)
+    }
+
+    /** Lists the history (songs of removed sources left out). [restoreScroll]: Back to it; [top]: entered; otherwise it stays where it is (a song was recorded). */
+    private fun renderHistory(restoreScroll: Boolean, top: Boolean = false) {
+        closeSearch()
+        loadJob?.cancel()
+        lengthJob?.cancel()
+        songsJob?.cancel()
+        val sources = SourceRegistry.sources.value.map { it.id }.toSet()
+        val entries = historyRepository.items.value.filter { it.ref != null && it.sourceId in sources }.map(History::asFile)
+        val now = _uiState.value
+        val scroll = when {
+            restoreScroll -> historyScroll
+            top -> 0 to 0
+            else -> null
+        }
+        _uiState.value = now.copy(
+            showingHistory = true, favoritesKind = null, showingSongs = false, currentFolder = null, files = entries, isLoading = false,
+            lengthFill = null, filter = "", filterOpen = false, viewMode = "LIST",
+            scrollToIndex = scroll?.first ?: now.scrollToIndex,
+            scrollToOffset = scroll?.second ?: now.scrollToOffset,
+            scrollTrigger = if (scroll != null) now.scrollTrigger + 1 else now.scrollTrigger,
+        )
+    }
+
+    fun removeFromHistory(file: MusicFile) = historyRepository.remove(file.ref)
+
+    fun clearHistory() = historyRepository.clear()
 
     // ---------------- lengths ----------------
 
